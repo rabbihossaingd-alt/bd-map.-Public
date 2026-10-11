@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="bn">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f5f5f7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<title>BD Map - Bhara o Ride</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anek+Bangla:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+<nav class="nav">
+  <a class="brand" href="#/"><span class="logo"></span>BD Map</a>
+  <div class="links">
+    <a href="#/" data-nav="home"><i data-ic="home"></i><span>হোম</span></a>
+    <a href="#/trip" data-nav="trip"><i data-ic="route"></i><span>ম্যাপ</span></a>
+    <a href="#/buses" data-nav="buses"><i data-ic="bus"></i><span>ঢাকার বাস</span></a>
+    <a href="#/districts" data-nav="districts"><i data-ic="city"></i><span>জেলা</span></a>
+    <a href="#/nearby" data-nav="nearby" class="desk-only"><i data-ic="compass"></i><span>কাছাকাছি</span></a>
+    <a href="#/tour" data-nav="tour"><i data-ic="star"></i><span>ট্যুর</span></a>
+    <a href="#/fares" data-nav="fares" class="desk-only"><i data-ic="tag"></i><span>ভাড়া</span></a>
+  </div>
+</nav>
+<button class="lang-btn" title="Language / ভাষা"></button>
+
+<main>
+  <!-- Home -->
+  <section class="page" id="page-home">
+    <div class="hero">
+      <div class="blob one"></div><div class="blob two"></div><div class="blob three"></div>
+      <p class="eyebrow">৬৪ জেলার যাতায়াত, এক জায়গায়</p>
+      <h1>কোথায় <em>যাবেন?</em></h1>
+      <p class="lead">কোন বাসে যাবেন, ভাড়া কত, কতক্ষণ লাগবে — এক নজরে।</p>
+      <div class="card hero-search" id="home-search"></div>
+      <div class="chips popular" id="recent" hidden></div>
+      <div class="chips popular" id="popular"></div>
+    </div>
+    <div class="wrap" style="padding-top: 8px">
+      <a class="card tour-banner" href="#/tour">
+        <div><b>ট্যুর প্ল্যান করুন</b><span>দল নিয়ে ঘুরতে যাচ্ছেন? খরচ হিসাব করুন, সবার ছবি দিয়ে কার্ড বানান।</span></div>
+        <span class="btn">শুরু করুন <i data-ic="arrow"></i></span>
+      </a>
+      <div class="features stagger">
+        <a class="card feature" href="#/buses" style="--i:0"><i class="ic" data-ic="bus"></i><b>ঢাকার বাস</b><span>কোন বাস কোথায় যায়</span><span class="go">দেখুন <i data-ic="arrow"></i></span></a>
+        <a class="card feature" href="#/districts" style="--i:1"><i class="ic" data-ic="city"></i><b>৬৪ জেলা</b><span>ঢাকা থেকে ভাড়া, বাস ও দর্শনীয় স্থান</span><span class="go">দেখুন <i data-ic="arrow"></i></span></a>
+        <a class="card feature" href="#/nearby" style="--i:2"><i class="ic" data-ic="compass"></i><b>কাছাকাছি</b><span>হাসপাতাল, থানা, এটিএম, পার্ক…</span><span class="go">খুঁজুন <i data-ic="arrow"></i></span></a>
+        <a class="card feature" href="#/fares" style="--i:3"><i class="ic" data-ic="tag"></i><b>ভাড়ার হিসাব</b><span>কিমি প্রতি কত, মোট কত</span><span class="go">হিসাব করুন <i data-ic="arrow"></i></span></a>
+      </div>
+      <div class="stats">
+        <div class="card stat"><b data-count="64">০</b><span>জেলা</span></div>
+        <div class="card stat"><b data-count="routes">০</b><span>ঢাকার বাস রুট</span></div>
+        <div class="card stat"><b data-count="places">০</b><span>চেনা জায়গা</span></div>
+      </div>
+      <div class="label" style="margin-top: 44px">জরুরি নম্বর — চাপ দিলে কল হবে</div>
+      <div class="grid" id="helplines" style="margin-top: 0"></div>
+    </div>
+  </section>
+
+  <!-- Trip / map -->
+  <section class="page" id="page-trip">
+    <div id="map"></div>
+    <div class="map-loading" id="map-loading">ম্যাপ লোড হচ্ছে…</div>
+    <div class="map-tools">
+      <button id="tool-3d" title="3D ভিউ" aria-label="3D ভিউ">3D</button>
+      <button id="tool-me" title="আমি কোথায়" aria-label="আমি কোথায়"><i data-ic="locate"></i></button>
+      <button id="tool-home" title="পুরো বাংলাদেশ" aria-label="পুরো বাংলাদেশ"><i data-ic="globe"></i></button>
+      <button id="tool-in" class="desk-only" title="বড় করুন" aria-label="বড় করুন"><i data-ic="plus"></i></button>
+      <button id="tool-out" class="desk-only" title="ছোট করুন" aria-label="ছোট করুন"><i data-ic="minus"></i></button>
+    </div>
+    <div class="side">
+      <div class="card" id="trip-search"></div>
+      <div class="card sheet" id="sheet" hidden>
+        <div class="head">
+          <div class="grow"><h3 id="trip-km"></h3><p id="trip-time"></p></div>
+          <button class="icon-btn" id="reset" title="মুছুন" aria-label="মুছুন"><i data-ic="close"></i></button>
+        </div>
+        <div id="trip-photo"></div>
+        <div class="seg" id="seg">
+          <button data-pane="bus" class="on"><i data-ic="bus"></i>বাস</button>
+          <button data-pane="ride"><i data-ic="car"></i>রাইড</button>
+        </div>
+        <div id="pane-bus"></div>
+        <div id="pane-ride" hidden></div>
+        <div class="foot">ভাড়া আনুমানিক — সরকারি তালিকার সাথে কিছু কমবেশি হতে পারে · <a href="#/fares">কীভাবে হিসাব হয়</a></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Dhaka buses -->
+  <section class="page" id="page-buses">
+    <div class="wrap">
+      <div class="page-head"><h2>ঢাকার বাস</h2><p>বাসের নাম বা যেকোনো জায়গা লিখুন — কোন বাস যায় দেখাবে।</p></div>
+      <label class="filter"><i data-ic="search"></i><input id="bus-filter" autocomplete="off" placeholder="যেমন: তুরাগ, romna park, ঢাকা মেডিকেল" aria-label="বাস বা জায়গা খুঁজুন"></label>
+      <div class="chips" id="hubs"></div>
+      <div class="label note" id="bus-note" hidden></div>
+      <div class="grid" id="bus-grid"></div>
+    </div>
+  </section>
+
+  <!-- Districts and intercity -->
+  <section class="page" id="page-districts">
+    <div class="wrap">
+      <div class="page-head"><h2>৬৪ জেলা</h2><p>জেলায় চাপ দিন — ঢাকা থেকে ভাড়া, বাস আর দর্শনীয় স্থান দেখুন।</p></div>
+      <label class="filter"><i data-ic="search"></i><input id="district-filter" autocomplete="off" placeholder="জেলার নাম — যেমন: রংপুর, coxbazar" aria-label="জেলা খুঁজুন"></label>
+      <div id="district-list"></div>
+
+      <div class="page-head" style="margin-top: 64px"><h2>জেলা থেকে জেলা</h2><p>যেকোনো দুটি জেলার মধ্যে ভাড়া আর বাস।</p></div>
+      <div class="card picker">
+        <select id="ic-from" aria-label="কোন জেলা থেকে"></select>
+        <button class="icon-btn" id="ic-swap" aria-label="অদলবদল"><i data-ic="swap-h"></i></button>
+        <select id="ic-to" aria-label="কোন জেলায়"></select>
+      </div>
+      <div class="card result" id="ic-result"></div>
+
+      <div class="label" style="margin-top: 44px">বাস কোম্পানি — তারায় চাপ দিয়ে রেটিং দিন</div>
+      <div class="grid" id="op-grid" style="margin-top: 0"></div>
+    </div>
+  </section>
+
+  <!-- Nearby -->
+  <section class="page" id="page-nearby">
+    <div class="wrap">
+      <div class="page-head"><h2>কাছাকাছি</h2><p>একটি জায়গা দিন, তারপর কী খুঁজছেন বেছে নিন।</p></div>
+      <div class="filter" style="position: relative">
+        <i data-ic="pin"></i>
+        <input id="near-input" autocomplete="off" placeholder="কোন জায়গার কাছে — যেমন: রংপুর, mirpur 10" aria-label="কোন জায়গার কাছে">
+        <button class="icon-btn" id="near-locate" title="আমার লোকেশন" aria-label="আমার লোকেশন"><i data-ic="locate"></i></button>
+        <div class="suggest" id="near-suggest" style="left: 0; right: 0" hidden></div>
+      </div>
+      <div class="cats" id="cats"></div>
+      <div class="label note" id="near-note"></div>
+      <div class="chips" id="near-sort" style="margin-top: 16px" hidden>
+        <button class="chip on" data-sort="distance">কাছের আগে</button>
+        <button class="chip" data-sort="rating">রেটিং আগে</button>
+      </div>
+      <div id="near-list"></div>
+    </div>
+  </section>
+
+  <!-- Tour plan -->
+  <section class="page" id="page-tour">
+    <div class="wrap">
+      <div class="page-head"><h2>ট্যুর প্ল্যান</h2><p>কোথায় যাবেন, কতজন, কত দিন — খরচের হিসাব আর শেয়ার করার মতো একটি কার্ড।</p></div>
+      <div class="tour-grid">
+        <div class="card tour-form">
+          <div class="label">কোথা থেকে কোথায়</div>
+          <div class="picker" style="padding: 0">
+            <select id="tour-from" aria-label="কোন জেলা থেকে"></select>
+            <span class="icon-btn" aria-hidden="true"><i data-ic="arrow"></i></span>
+            <select id="tour-to" aria-label="কোন জেলায়"></select>
+          </div>
+          <div class="empty" id="tour-route-note"></div>
+
+          <div class="tour-two">
+            <div><div class="label">কতজন</div><div class="stepper" id="tour-people"></div></div>
+            <div><div class="label">কত রাত</div><div class="stepper" id="tour-nights"></div></div>
+          </div>
+
+          <div class="label">যাতায়াত</div>
+          <div class="tour-two">
+            <div class="seg" id="tour-mode"></div>
+            <div class="seg" id="tour-way"></div>
+          </div>
+          <div id="tour-bus-opts" style="margin-top: 12px"><div class="seg" id="tour-class"></div></div>
+          <label class="money" id="tour-air-opt" hidden><span>বিমান ভাড়া — জনপ্রতি, এক দিকে (৳)</span><input id="tour-air-fare" type="number" min="0" step="100" inputmode="numeric"></label>
+          <div class="empty" id="tour-bus-each"></div>
+          <div class="chips" id="tour-ops"></div>
+
+          <div class="label">হোটেল</div>
+          <div class="seg" id="tour-tier"></div>
+          <div class="tour-two">
+            <label class="money"><span>প্রতি রুম, প্রতি রাত (৳)</span><input id="tour-room-price" type="number" min="0" step="100" inputmode="numeric"></label>
+            <div><div class="label" style="margin-top: 0">রুম</div><div class="stepper" id="tour-rooms"></div></div>
+          </div>
+
+          <div class="tour-two">
+            <label class="money"><span>খাবার — জনপ্রতি, প্রতিদিন (৳)</span><input id="tour-food" type="number" min="0" step="50" inputmode="numeric"></label>
+            <label class="money"><span>অন্যান্য — জনপ্রতি, প্রতিদিন (৳)</span><input id="tour-other" type="number" min="0" step="50" inputmode="numeric"></label>
+          </div>
+        </div>
+
+        <div class="tour-side">
+          <div class="card tour-sum">
+            <div class="label">খরচের হিসাব</div>
+            <div id="tour-rows"></div>
+            <div class="rule total"><span>মোট</span><b id="tour-total"></b></div>
+            <div class="per-head"><span>জনপ্রতি খরচ</span><b id="tour-per-head"></b></div>
+            <div class="foot" style="text-align: left">হোটেল, বিমান, খাবার ও অন্যান্য খরচ আমাদের আনুমানিক ধরা — আসল দাম নয়। নিজের মতো বদলে নিন।</div>
+          </div>
+
+          <div class="card tour-sum">
+            <div class="label">ট্যুর কার্ড</div>
+            <p class="empty" style="padding-top: 0">সবার ছবি দিন (৫টি পর্যন্ত), তারপর কার্ড বানান। ছবি আপনার ডিভাইসেই থাকে — কোথাও আপলোড হয় না।</p>
+            <div class="tour-thumbs" id="tour-photos"></div>
+            <input id="tour-file" type="file" accept="image/*" multiple hidden>
+            <label class="money"><span>ট্যুরের নাম</span><input id="tour-name" type="text" maxlength="40" placeholder="ট্যুরের নাম — যেমন: বন্ধুদের কক্সবাজার ট্যুর"></label>
+            <label class="money"><span>তারিখ</span><input id="tour-date" type="date"></label>
+            <button class="btn" id="tour-make" style="width: 100%; justify-content: center; margin-top: 14px"><i data-ic="star"></i>কার্ড বানান</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="tour-card" id="tour-card" hidden>
+        <canvas id="tour-canvas" width="1080" height="1350"></canvas>
+        <div class="tour-actions">
+          <button class="btn" id="tour-save">ছবি ডাউনলোড</button>
+          <button class="btn quiet" id="tour-share">শেয়ার</button>
+          <button class="btn quiet" id="tour-video">ভিডিও ডাউনলোড</button>
+          <button class="btn quiet" id="tour-replay">আবার চালান</button>
+        </div>
+        <div class="empty" id="tour-video-note" style="text-align: center"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Fares -->
+  <section class="page" id="page-fares">
+    <div class="wrap">
+      <div class="page-head"><h2>ভাড়ার হিসাব</h2><p>দূরত্ব বদলান, সাথে সাথে ভাড়া দেখুন।</p></div>
+      <div class="card calc">
+        <div class="calc-km"><b id="calc-km">১০</b><span>কিমি</span></div>
+        <input type="range" id="calc-range" min="1" max="500" value="10" aria-label="দূরত্ব, কিলোমিটার">
+        <div class="tiles" id="calc-tiles"></div>
+      </div>
+      <div class="rules" id="rules"></div>
+      <div class="foot" id="rules-foot"></div>
+    </div>
+  </section>
+</main>
+
+<div class="modal" id="modal" hidden>
+  <div class="card" role="dialog" aria-modal="true">
+    <div class="head">
+      <div class="grow"><h3 id="m-title"></h3><p id="m-sub"></p></div>
+      <button class="icon-btn" id="m-close" aria-label="বন্ধ করুন"><i data-ic="close"></i></button>
+    </div>
+    <div id="m-body"></div>
+    <div id="m-actions"></div>
+  </div>
+</div>
+
+<div class="lightbox" id="lightbox" hidden>
+  <button class="icon-btn lb-btn" id="lb-close" aria-label="বন্ধ করুন"><i data-ic="close"></i></button>
+  <button class="icon-btn lb-btn" id="lb-prev" aria-label="আগের ছবি"><i data-ic="prev"></i></button>
+  <button class="icon-btn lb-btn" id="lb-next" aria-label="পরের ছবি"><i data-ic="next"></i></button>
+  <div class="lb-stage"><img id="lb-img" alt=""></div>
+  <div class="lb-cap"><b id="lb-name"></b><span id="lb-meta"></span></div>
+</div>
+
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="data/fares.js"></script>
+<script src="data/dhaka-buses.js"></script>
+<script src="data/bangladesh.js"></script>
+<script src="data/places.js"></script>
+<script src="js/i18n.js"></script>
+<script src="js/core.js"></script>
+<script src="js/app.js"></script>
+<script src="js/tour.js"></script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+{
+  "name": "BD Map — ভাড়া ও রাইড",
+  "short_name": "BD Map",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#0a7d5a",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

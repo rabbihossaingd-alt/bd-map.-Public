@@ -1,0 +1,13 @@
+{
+  "name": "bd-map",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Bangladesh map: bus routes, fares, nearby places, shared ratings",
+  "scripts": {
+    "start": "node server.js",
+    "build-places": "node tools/build-places.mjs"
+  },
+  "engines": {
+    "node": ">=22.5"
+  }
+}

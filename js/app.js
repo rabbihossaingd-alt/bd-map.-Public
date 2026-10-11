@@ -1,0 +1,1383 @@
+// ---- App shell: router, shared search box, and one controller per page ----
+
+for (const n of document.querySelectorAll('[data-ic]')) n.innerHTML = svg(n.dataset.ic);
+
+const BD_LNGLAT = [[87.8, 20.3], [92.9, 26.9]];   // Bangladesh, as [lon, lat] corners
+const PAGES = ['home', 'trip', 'buses', 'districts', 'nearby', 'tour', 'fares'];
+const trip = { from: null, to: null };          // each: { lat, lon, label }
+const enter = {};                               // page name -> function run when the page opens
+const searches = [];
+let current = null;
+
+const districtById = id => DISTRICTS.find(d => d.id === id);
+const setStatus = msg => { for (const s of document.querySelectorAll('.status')) s.textContent = msg || ''; };
+
+function stagger(box) {
+  [...box.children].forEach((c, i) => c.style.setProperty('--i', Math.min(i, 14)));
+  box.classList.add('stagger');
+}
+
+// One list row: icon tile, title + sub line, optional price. Tappable when onClick is given.
+function item(icon, title, sub, price, onClick) {
+  const r = el(onClick ? 'button' : 'div', 'item');
+  const t = el('div', 't');
+  t.appendChild(el('b', null, title));
+  if (sub) t.appendChild(el('span', null, sub));
+  r.append(ic(icon), t);
+  if (price) r.appendChild(el('div', 'p', price));
+  if (onClick) r.addEventListener('click', () => onClick(r));
+  return r;
+}
+
+function selectOnly(node) {
+  for (const n of node.parentNode.querySelectorAll('.item.on')) n.classList.remove('on');
+  node.classList.add('on');
+}
+
+function tile(cls, label, value, sub) {
+  const t = el('div', 'tile ' + cls);
+  t.append(el('span', null, label), el('b', null, value));
+  if (sub) t.appendChild(el('span', null, sub));
+  return t;
+}
+
+// Per-km rates keep two decimals (৳২.৭০) unless they are whole taka (৳১২).
+const rateText = rate => '৳' + rate.toLocaleString(NUM_LOCALE, { minimumFractionDigits: rate % 1 ? 2 : 0, maximumFractionDigits: 2 });
+const perKmText = rate => `কিমি প্রতি ${rateText(rate)}`;
+
+// Non-AC fare at the government per-km rate beside the AC estimate (the government does not set AC fares).
+function fareTiles(rule, km) {
+  const fare = busFare(rule, km);
+  const [lo, hi] = FARES.bus.acRange;
+  const tiles = el('div', 'tiles');
+  tiles.append(
+    tile('main', 'নন-এসি · আনুমানিক', taka(fare), perKmText(rule.perKm)),
+    tile('', 'এসি · আনুমানিক', `${taka(fare * lo)}–${num(Math.ceil(fare * hi))}`, 'কোম্পানি ভেদে আলাদা')
+  );
+  return tiles;
+}
+
+// What counters typically charge between Dhaka and a district (unofficial list), when we have it.
+function counterFare(a, b) {
+  const other = a.id === 'dhaka' ? b : b.id === 'dhaka' ? a : null;
+  const f = other && MARKET_FARES[other.id];
+  if (!f) return null;
+  const ac = f.length > 2 ? ` · এসি ${fareRange(f[2], f[3])}` : '';
+  return item('tag', 'কাউন্টারে সাধারণত', `নন-এসি${ac} · অনানুষ্ঠানিক তালিকা`, fareRange(f[0], f[1]));
+}
+
+function operatorChips(a, b) {
+  const list = operatorsBetween(a, b);
+  if (!list.length) return el('div', 'empty', 'এই রুটের বাস কোম্পানির নাম এখনো যোগ হয়নি।');
+  const chips = el('div', 'chips');
+  for (const o of list) {
+    const chip = el('div', 'chip', o.bn);
+    if (!(o.ac && o.nonAc)) chip.appendChild(el('small', null, o.ac ? 'শুধু এসি' : 'নন-এসি'));
+    chips.appendChild(chip);
+  }
+  return chips;
+}
+
+// ---- Modal (one shared dialog: bus routes, district details) ----
+function openModal(title, sub, body, actions = []) {
+  $('m-title').textContent = title;
+  $('m-sub').textContent = sub || '';
+  $('m-body').replaceChildren(...body);
+  $('m-body').scrollTop = 0;
+  $('m-actions').replaceChildren(...actions);
+  $('modal').hidden = false;
+}
+const closeModal = () => { $('modal').hidden = true; };
+$('m-close').addEventListener('click', closeModal);
+$('modal').addEventListener('click', e => { if (e.target === $('modal')) closeModal(); });
+addEventListener('keydown', e => { if (e.key === 'Escape' && $('lightbox').hidden) closeModal(); });
+
+function button(icon, text, onClick, quiet) {
+  const b = el('button', 'btn' + (quiet ? ' quiet' : ''));
+  b.innerHTML = svg(icon);
+  b.appendChild(document.createTextNode(text));
+  b.addEventListener('click', onClick);
+  return b;
+}
+
+const asPlace = it => ({ lat: it.lat, lon: it.lon, label: it.bn || it.title });
+
+// Start a trip to a place: straight to the map, with or without a starting point.
+function goTo(place) {
+  setPlace('to', place);
+  if (!trip.from) go('trip');
+}
+
+// A photo strip for a place. Starts empty and fills in if Wikimedia Commons has pictures taken nearby.
+function photoStrip(place, radius) {
+  const box = el('div', 'photo-box');
+  placePhotos(place, radius).then(photos => {
+    if (!photos.length) return;
+    const strip = el('div', 'photos');
+    photos.forEach((p, i) => {
+      const b = el('button');
+      b.setAttribute('aria-label', p.name);
+      const img = el('img');
+      img.src = p.src;
+      img.alt = p.name;
+      img.loading = 'lazy';
+      img.draggable = false;
+      b.appendChild(img);
+      b.addEventListener('click', () => openLightbox(photos, i));
+      strip.appendChild(b);
+    });
+    dragScroll(strip);
+    const note = photos.some(p => p.named) ? 'ছবি: উইকিমিডিয়া কমন্স' : 'আশপাশে তোলা ছবি · উইকিমিডিয়া কমন্স';
+    box.append(strip, el('div', 'cap', `${note} · ${num(photos.length)} টি — টেনে সরান, চাপ দিলে বড় হবে`));
+  });
+  return box;
+}
+
+// Lets a horizontal strip be dragged with the mouse and scrolled with the wheel (touch already works).
+function dragScroll(strip) {
+  let startX = 0, startLeft = 0, down = false, moved = false;
+  strip.addEventListener('pointerdown', e => {
+    if (e.pointerType !== 'mouse') return;
+    down = true; moved = false; startX = e.clientX; startLeft = strip.scrollLeft;
+  });
+  addEventListener('pointermove', e => {
+    if (!down) return;
+    const dx = e.clientX - startX;
+    if (Math.abs(dx) > 5) { moved = true; strip.classList.add('dragging'); }
+    if (moved) strip.scrollLeft = startLeft - dx;
+  });
+  addEventListener('pointerup', () => { down = false; strip.classList.remove('dragging'); });
+  // A drag must not count as a click on the photo underneath.
+  strip.addEventListener('click', e => { if (moved) { e.stopPropagation(); e.preventDefault(); moved = false; } }, true);
+  strip.addEventListener('wheel', e => {
+    if (strip.scrollWidth <= strip.clientWidth || Math.abs(e.deltaY) < Math.abs(e.deltaX)) return;
+    e.preventDefault();
+    strip.scrollLeft += e.deltaY;
+  }, { passive: false });
+}
+
+// ---- Photo viewer ----
+const lightbox = { photos: [], i: 0 };
+function showPhoto(i) {
+  const n = lightbox.photos.length;
+  lightbox.i = (i + n) % n;
+  const p = lightbox.photos[lightbox.i];
+  $('lb-img').src = p.big;
+  $('lb-img').onerror = () => { $('lb-img').onerror = null; $('lb-img').src = p.src; };
+  $('lb-img').alt = p.name;
+  $('lb-name').textContent = p.name;
+  $('lb-meta').textContent = `${num(lightbox.i + 1)}/${num(n)}${p.license ? ' · ' + p.license : ''} · `;
+  const link = el('a', null, 'উৎস দেখুন');
+  link.href = p.page;
+  link.target = '_blank';
+  link.rel = 'noopener';
+  $('lb-meta').appendChild(link);
+  $('lb-prev').hidden = $('lb-next').hidden = n < 2;
+}
+function openLightbox(photos, i) {
+  lightbox.photos = photos;
+  showPhoto(i);
+  $('lightbox').hidden = false;
+}
+const closeLightbox = () => { $('lightbox').hidden = true; };
+$('lb-close').addEventListener('click', closeLightbox);
+$('lb-prev').addEventListener('click', () => showPhoto(lightbox.i - 1));
+$('lb-next').addEventListener('click', () => showPhoto(lightbox.i + 1));
+$('lightbox').addEventListener('click', e => { if (e.target === $('lightbox') || e.target.classList.contains('lb-stage')) closeLightbox(); });
+addEventListener('keydown', e => {
+  if ($('lightbox').hidden) return;
+  if (e.key === 'Escape') closeLightbox();
+  if (e.key === 'ArrowLeft') showPhoto(lightbox.i - 1);
+  if (e.key === 'ArrowRight') showPhoto(lightbox.i + 1);
+});
+{
+  // Swipe left/right on touch screens.
+  let x0 = null;
+  $('lightbox').addEventListener('touchstart', e => { x0 = e.touches[0].clientX; }, { passive: true });
+  $('lightbox').addEventListener('touchend', e => {
+    if (x0 === null) return;
+    const dx = e.changedTouches[0].clientX - x0;
+    if (Math.abs(dx) > 50) showPhoto(lightbox.i + (dx < 0 ? 1 : -1));
+    x0 = null;
+  });
+}
+
+// ---- Router ----
+function route() {
+  let name = location.hash.replace(/^#\/?/, '') || 'home';
+  if (name === 'intercity') name = 'districts';   // old link
+  current = PAGES.includes(name) ? name : 'home';
+  for (const p of PAGES) $('page-' + p).classList.toggle('on', p === current);
+  for (const a of document.querySelectorAll('[data-nav]')) a.classList.toggle('on', a.dataset.nav === current);
+  document.body.style.overflow = current === 'trip' ? 'hidden' : '';
+  document.body.dataset.page = current;
+  scrollTo(0, 0);
+  if (enter[current]) enter[current]();
+}
+
+function go(name) {
+  const hash = '#/' + (name === 'home' ? '' : name);
+  if (location.hash === hash || (name === 'home' && !location.hash)) route();
+  else location.hash = hash;
+}
+addEventListener('hashchange', route);
+
+// ---- Trip state ----
+function setPlace(which, place) {
+  trip[which] = place;
+  for (const s of searches) s.sync();
+  if (trip.from && trip.to) go('trip');
+  else if (current === 'trip') enter.trip();
+}
+
+// Type-ahead for one place input: known places instantly (any spelling), then the online search.
+function wireSuggest(input, box, onPick, onType) {
+  let timer = null, seq = 0;
+  input.addEventListener('input', () => {
+    if (onType) onType();
+    clearTimeout(timer);
+    const q = input.value.trim();
+    box.replaceChildren();
+    if (q.length < 2) { box.hidden = true; return; }
+    const addItem = (icon, title, sub, lat, lon) => {
+      const s = el('div', 'sug');
+      const t = el('div', 't');
+      t.append(el('b', null, title), el('span', null, sub));
+      s.append(ic(icon), t);
+      // mousedown so the pick lands before the input's blur hides the list
+      s.addEventListener('mousedown', e => { e.preventDefault(); box.hidden = true; onPick({ lat, lon, label: title }); });
+      box.appendChild(s);
+    };
+    for (const p of searchLocal(q)) addItem(p.icon, p.title, p.sub, p.lat, p.lon);
+    box.hidden = box.children.length === 0;
+    const mine = ++seq;
+    if (q.length < 3) return;
+    timer = setTimeout(async () => {
+      const list = await searchOnline(q);
+      if (mine !== seq) return;
+      for (const p of list) addItem('pin', p.title, p.sub, p.lat, p.lon);
+      if (!box.children.length) box.appendChild(el('div', 'empty', 'কিছু পাওয়া যায়নি — অন্য বানানে লিখে দেখুন, অথবা ম্যাপে চাপ দিয়ে বেছে নিন।'));
+      box.hidden = false;
+    }, 450);
+  });
+  input.addEventListener('keydown', e => {
+    const first = box.querySelector('.sug');
+    if (e.key === 'Enter' && first && !box.hidden) { e.preventDefault(); first.dispatchEvent(new MouseEvent('mousedown', { cancelable: true })); input.blur(); }
+  });
+  input.addEventListener('blur', () => { box.hidden = true; });
+}
+
+// ---- Search box (used on Home and on the map page; both stay in sync through `trip`) ----
+function createSearch(root) {
+  root.innerHTML = `
+    <div class="od">
+      <div class="dots"><i class="a"></i><i class="l"></i><i class="b"></i></div>
+      <div class="inputs">
+        <div class="field"><input data-w="from" autocomplete="off" placeholder="কোথা থেকে" aria-label="কোথা থেকে">
+          <button class="icon-btn" data-act="locate" title="আমার লোকেশন" aria-label="আমার লোকেশন">${svg('locate')}</button>
+          <div class="suggest" hidden></div></div>
+        <div class="field"><input data-w="to" autocomplete="off" placeholder="কোথায় যাবেন" aria-label="কোথায় যাবেন">
+          <button class="icon-btn" data-act="swap" title="অদলবদল" aria-label="অদলবদল">${svg('swap')}</button>
+          <div class="suggest" hidden></div></div>
+      </div>
+    </div>
+    <div class="status"></div>`;
+
+  const inputs = {};
+  for (const input of root.querySelectorAll('input')) {
+    const which = input.dataset.w, box = input.parentNode.querySelector('.suggest');
+    inputs[which] = input;
+    wireSuggest(input, box, place => setPlace(which, place), () => { trip[which] = null; });
+  }
+
+  root.querySelector('[data-act=swap]').addEventListener('click', () => {
+    if (!trip.from || !trip.to) return;
+    [trip.from, trip.to] = [trip.to, trip.from];
+    setPlace('from', trip.from);
+  });
+  root.querySelector('[data-act=locate]').addEventListener('click', () => {
+    if (!navigator.geolocation) { setStatus('এই ডিভাইসে লোকেশন পাওয়া যাচ্ছে না।'); return; }
+    setStatus('লোকেশন খোঁজা হচ্ছে…');
+    navigator.geolocation.getCurrentPosition(pos => {
+      setStatus('');
+      setPlace('from', { lat: pos.coords.latitude, lon: pos.coords.longitude, label: 'আমার লোকেশন' });
+    }, () => setStatus('লোকেশনের অনুমতি পাওয়া যায়নি।'));
+  });
+
+  const api = {
+    sync() {
+      for (const w of ['from', 'to']) {
+        if (trip[w]) inputs[w].value = tr(trip[w].label);
+        else if (document.activeElement !== inputs[w]) inputs[w].value = '';
+      }
+    }
+  };
+  searches.push(api);
+  return api;
+}
+createSearch($('home-search'));
+createSearch($('trip-search'));
+
+// ---- Recent trips (kept on this device only) ----
+const RECENT_KEY = 'bdmap.recent';
+function loadRecent() {
+  try { return JSON.parse(localStorage.getItem(RECENT_KEY)) || []; } catch { return []; }
+}
+function saveRecent(from, to) {
+  const same = r => r.from.label === from.label && r.to.label === to.label;
+  const list = [{ from, to }, ...loadRecent().filter(r => !same(r))].slice(0, 4);
+  try { localStorage.setItem(RECENT_KEY, JSON.stringify(list)); } catch { /* storage unavailable */ }
+}
+function renderRecent() {
+  const box = $('recent'), list = loadRecent();
+  box.replaceChildren();
+  box.hidden = !list.length;
+  for (const r of list) {
+    const chip = el('button', 'chip');
+    chip.innerHTML = svg('clock');
+    chip.appendChild(document.createTextNode(` ${r.from.label} → ${r.to.label}`));
+    chip.addEventListener('click', () => { trip.from = r.from; setPlace('to', r.to); });
+    box.appendChild(chip);
+  }
+}
+
+// ---- Home ----
+(function initHome() {
+  const S = id => ({ lat: STOPS[id].lat, lon: STOPS[id].lon, label: STOPS[id].bn });
+  const D = id => { const d = districtById(id); return { lat: d.lat, lon: d.lon, label: d.bn }; };
+  const popular = [
+    [S('jatrabari'), S('mirpur10')], [S('farmgate'), S('uttara')], [D('dhaka'), D('coxsbazar')],
+    [D('dhaka'), D('sylhet')], [D('dhaka'), D('rajshahi')]
+  ];
+  for (const [a, b] of popular) {
+    const chip = el('button', 'chip', `${a.label} → ${b.label}`);
+    chip.addEventListener('click', () => { trip.from = a; setPlace('to', b); });
+    $('popular').appendChild(chip);
+  }
+
+  for (const h of HELPLINES) {
+    const a = el('a', 'card help');
+    a.href = 'tel:' + h.number;
+    const t = el('div');
+    t.append(el('b', null, h.bn), el('span', null, h.sub));
+    a.append(el('div', 'n', h.number), t);
+    $('helplines').appendChild(a);
+  }
+
+  // Count the headline numbers up once, the first time Home is shown.
+  let counted = false;
+  enter.home = () => {
+    renderRecent();
+    if (counted) return;
+    counted = true;
+    const targets = { routes: LOCAL_ROUTES.length, places: PLACES.length + Object.keys(STOPS).length };
+    for (const node of document.querySelectorAll('[data-count]')) {
+      const end = targets[node.dataset.count] || +node.dataset.count;
+      const start = performance.now();
+      const tick = now => {
+        const p = Math.min(1, (now - start) / 1100);
+        node.textContent = num(Math.round(end * (1 - Math.pow(1 - p, 3))));
+        if (p < 1) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    }
+  };
+})();
+
+// ---- Trip / map ----
+// MapLibre GL with vector tiles: text and roads are drawn on the device, so the map stays sharp on any
+// screen, can tilt into 3D, and can be restyled. Tiles: OpenFreeMap (OpenStreetMap data), no API key.
+let map = null, mapReady = null, driverMarker = null, rideTimer = null, is3D = false, stopPopup = null;
+let lastKey = '', pendingBus = null;
+const markers = { from: null, to: null };
+const drawTokens = {};
+const EMPTY = { type: 'FeatureCollection', features: [] };
+const isDark = () => matchMedia('(prefers-color-scheme: dark)').matches;
+const inBangladesh = (lat, lon) => lat >= BD_LNGLAT[0][1] && lat <= BD_LNGLAT[1][1] && lon >= BD_LNGLAT[0][0] && lon <= BD_LNGLAT[1][0];
+const TERRAIN_TILES = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png';
+
+// ---- Map look ----
+// Modelled on how Google and Apple Maps stay readable at street level:
+//   * one quiet neutral ground, buildings only a shade apart from it, no outlines fighting for attention
+//   * roads in a single blue-grey family (stronger = more important) with no casings, so the network reads as one shape
+//   * each label once, with a halo in the ground colour
+//   * colour reserved for what matters: water, green space, the national border, place badges, and our route lines
+// The same base style is recoloured for light and dark, so both modes show the same things.
+const PALETTES = {
+  light: {
+    ground: '#f2f3f5', halo: '#ffffff', label: '#1f2937', roadLabel: '#3a4a66', waterLabel: '#3f7fc4', border: '#0a8f62',
+    roads: [[/motorway/, '#8fa3c7'], [/trunk_primary/, '#a0b1cd'], [/secondary_tertiary/, '#b2c0d6'], [/./, '#c4cedd']],
+    path: '#cfd6e1', reliefOpacity: 1,
+    paint: {
+      landuse_residential: { 'fill-opacity': 0 },
+      park: { 'fill-color': '#cdeccb', 'fill-opacity': 1 },
+      park_outline: { 'line-color': '#b4deb1' },
+      landcover_wood: { 'fill-color': '#c2e3bd' },
+      landcover_grass: { 'fill-color': '#d9efd4' },
+      landcover_sand: { 'fill-color': '#f3e8c4' },
+      landuse_pitch: { 'fill-color': '#d3ecc9' },
+      landuse_school: { 'fill-color': '#ecebf5', 'fill-opacity': 0.7 },
+      landuse_hospital: { 'fill-color': '#f8e9ea', 'fill-opacity': 0.7 },
+      water: { 'fill-color': '#a8d6fb' },
+      waterway_river: { 'line-color': '#a8d6fb' },
+      waterway_other: { 'line-color': '#a8d6fb' },
+      building: { 'fill-color': '#e3e6eb', 'fill-outline-color': '#d5d9e0' },
+      'building-3d': { 'fill-extrusion-color': '#e7eaee' },
+      boundary_3: { 'line-color': '#c3c9d4' }
+    }
+  },
+  dark: {
+    ground: '#1a1e26', halo: '#12151b', label: '#dfe3ea', roadLabel: '#a9b4c6', waterLabel: '#74aee8', border: '#2fbf8a',
+    roads: [[/motorway/, '#6f80a3'], [/trunk_primary/, '#5a6783'], [/secondary_tertiary/, '#4a556c'], [/./, '#3b4456']],
+    path: '#333b4a', reliefOpacity: 0,
+    paint: {
+      landuse_residential: { 'fill-opacity': 0 },
+      park: { 'fill-color': '#1f3b2b', 'fill-opacity': 1 },
+      park_outline: { 'line-color': '#2a4d38' },
+      landcover_wood: { 'fill-color': '#1d3728' },
+      landcover_grass: { 'fill-color': '#22392b' },
+      landcover_sand: { 'fill-color': '#3a3524' },
+      landcover_wetland: { 'fill-opacity': 0.15 },
+      landcover_ice: { 'fill-opacity': 0.1 },
+      landuse_pitch: { 'fill-color': '#23402e' },
+      landuse_track: { 'fill-opacity': 0.15 },
+      landuse_cemetery: { 'fill-color': '#22302a' },
+      landuse_school: { 'fill-color': '#262a3a', 'fill-opacity': 0.7 },
+      landuse_hospital: { 'fill-color': '#34262b', 'fill-opacity': 0.7 },
+      aeroway_fill: { 'fill-color': '#232833' },
+      aeroway_runway: { 'line-color': '#3b4456' },
+      aeroway_taxiway: { 'line-color': '#333b4a' },
+      road_area_pattern: { 'fill-opacity': 0.1 },
+      water: { 'fill-color': '#10293f' },
+      waterway_river: { 'line-color': '#163650' },
+      waterway_other: { 'line-color': '#163650' },
+      waterway_tunnel: { 'line-color': '#163650' },
+      building: { 'fill-color': '#262b35', 'fill-outline-color': '#303644' },
+      'building-3d': { 'fill-extrusion-color': '#343b48' },
+      boundary_3: { 'line-color': '#3b4456' }
+    }
+  }
+};
+
+// Places of interest get a round coloured badge and a matching label colour, by kind — the way Google Maps
+// lets you tell a clinic from a shop at a glance. `classes` are OpenMapTiles POI classes.
+// Icon is stroke markup on a 24px grid (drawn white, scaled into the disc) or { raw } markup placed as is.
+const SIGN_H = { raw: '<text x="12" y="16.9" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-weight="700" font-size="13.5" fill="#fff">H</text>' };
+const SIGN_MOSQUE = { raw: '<path d="M7.2 17.2v-3a4.8 4.8 0 019.6 0v3z" fill="#fff"/><path d="M12 6.4v2.2M6 17.6h12" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>' };
+const POI_KINDS = [
+  // name, badge colour, label colour, icon, classes, shape ('square' = white tile with a coloured sign, as for transit stops)
+  ['food',    '#f29900', '#b45f06', ICONS.fork,   ['restaurant', 'cafe', 'fast_food', 'bar', 'beer', 'ice_cream', 'bakery', 'food_court']],
+  ['shop',    '#4285f4', '#1a56c4', ICONS.bag,    ['shop', 'grocery', 'clothing_store', 'mall', 'butcher', 'alcohol_shop', 'laundry', 'hairdresser']],
+  ['health',  '#ea4335', '#c5221f', SIGN_H,       ['hospital', 'pharmacy', 'doctors', 'dentist', 'veterinary']],
+  ['stay',    '#ec5f9c', '#c2185b', ICONS.bed,    ['lodging']],
+  ['learn',   '#6b7fa3', '#48597a', ICONS.cap,    ['school', 'college', 'library']],
+  ['green',   '#34a853', '#188038', ICONS.tree,   ['park', 'garden', 'pitch', 'stadium', 'golf', 'zoo', 'playground', 'swimming', 'campsite']],
+  ['bus',     '#1a73e8', '#1a56c4', ICONS.bus,    ['bus', 'ferry_terminal'], 'square'],
+  ['rail',    '#1a73e8', '#1a56c4', ICONS.train,  ['railway', 'aerialway'], 'square'],
+  ['worship', '#8a94a6', '#5b6472', SIGN_MOSQUE,  ['place_of_worship']],
+  ['bank',    '#5c6bc0', '#3f4ea3', ICONS.bank,   ['bank']],
+  ['fuel',    '#00a3bf', '#00798f', ICONS.fuel,   ['fuel']],
+  ['civic',   '#5f6b7a', '#48525f', ICONS.shield, ['police', 'town_hall', 'post', 'fire_station']],
+  ['sight',   '#12b5cb', '#0b8696', ICONS.star,   ['attraction', 'museum', 'castle', 'art_gallery', 'theatre', 'cinema', 'monument']],
+  ['other',   '#8a94a6', '#5b6472', { raw: '<circle cx="12" cy="12" r="3.2" fill="#fff"/>' }, []]
+];
+const poiMatch = pick => ['match', ['get', 'class'],
+  ...POI_KINDS.filter(k => k[4].length).flatMap(k => [k[4], pick(k)]), pick(POI_KINDS[POI_KINDS.length - 1])];
+
+// Draws each badge once at double size so it stays crisp on phone screens.
+let poiImagesPromise = null;
+function poiImages() {
+  return poiImagesPromise || (poiImagesPromise = Promise.all(POI_KINDS.map(async ([name, color, , icon, , shape]) => {
+    const square = shape === 'square';
+    const plate = square
+      ? `<rect x="2.2" y="2.2" width="19.6" height="19.6" rx="5.5" fill="#fff" stroke="${color}" stroke-width="1.8"/>`
+      : `<circle cx="12" cy="12" r="10.6" fill="${color}" stroke="#fff" stroke-width="1.6"/>`;
+    const sign = icon.raw || `<g transform="translate(5.6 5.6) scale(.535)" fill="none" stroke="${square ? color : '#fff'}" ` +
+      `stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">${icon}</g>`;
+    const img = new Image(48, 48);
+    img.src = 'data:image/svg+xml;charset=utf-8,' +
+      encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24">${plate}${sign}</svg>`);
+    await img.decode();
+    return { name: 'poi-' + name, img };
+  })));
+}
+
+// Map labels use the Latin-script name. MapLibre draws text one letter at a time, with no joining of
+// conjuncts and no reordering of vowel signs, so Bangla names come out misspelt; a place with only a
+// Bangla name keeps its icon and gets no label rather than a wrong one.
+// The map lays every name out (so spacing and collisions are right) but draws it invisibly;
+// drawMapLabels() then writes the name at each spot with the browser's own text engine. A place with no
+// name in the chosen language shows its name in the other one rather than nothing.
+const MAP_LABEL = LANG === 'en'
+  ? ['coalesce', ['get', 'name:en'], ['get', 'name:latin'], ['get', 'name_en'], ['get', 'name:nonlatin'], ['get', 'name']]
+  : ['coalesce', ['get', 'name:bn'], ['get', 'name:nonlatin'], ['get', 'name:latin'], ['get', 'name']];
+// The tiles carry translations (name:bn, name:en) for countries, cities and many places, so the world map
+// reads in one language — চীন, ভারত — instead of every country's own script. `name:nonlatin` is the local
+// script, which is Bangla only inside Bangladesh, so it is used only when it really is Bangla.
+const banglaOnly = s => (s && /[\u0980-\u09FF]/.test(s) ? s : '');
+const labelText = p => LANG === 'en'
+  ? p['name:en'] || p['name:latin'] || p.name_en || p['name:bn'] || p['name:nonlatin'] || p.name
+  : p['name:bn'] || banglaOnly(p['name:nonlatin']) || banglaOnly(p.name) || p['name:en'] || p['name:latin'] || p.name;
+const NAME_LAYERS = [];
+
+function restyle(style, dark) {
+  const P = dark ? PALETTES.dark : PALETTES.light;
+  for (const l of style.layers) {
+    const paint = l.paint || (l.paint = {}), layout = l.layout || (l.layout = {});
+
+    if (l.id === 'background') paint['background-color'] = P.ground;
+    if (l.type === 'raster') paint['raster-opacity'] = P.reliefOpacity;   // painted relief suits the light map only
+    if (P.paint[l.id]) Object.assign(paint, P.paint[l.id]);
+
+    // Buildings: flat footprints at every street zoom; the extruded ones only in the tilted view,
+    // because seen from straight above they draw as ragged dark edges.
+    if (l.id === 'building') { delete l.maxzoom; paint['fill-opacity'] = ['interpolate', ['linear'], ['zoom'], 13, 0, 14.5, 1]; }
+    if (l.type === 'fill-extrusion') {
+      layout.visibility = 'none';
+      Object.assign(paint, { 'fill-extrusion-opacity': 0.95, 'fill-extrusion-vertical-gradient': true });
+    }
+
+    if (l.type === 'line') {
+      if (/^boundary(_2|_country)/.test(l.id)) Object.assign(paint, { 'line-color': P.border, 'line-opacity': 0.75 });
+      else if (/path_pedestrian/.test(l.id)) { if (!l.id.endsWith('_casing')) paint['line-color'] = P.path; else paint['line-opacity'] = 0; }
+      else if (/^(road|bridge|tunnel)_/.test(l.id) && !/rail|pattern/.test(l.id)) {
+        if (l.id.endsWith('_casing')) paint['line-opacity'] = 0;
+        else {
+          paint['line-color'] = P.roads.find(([re]) => re.test(l.id))[1];
+          if (l.id.startsWith('tunnel_')) paint['line-opacity'] = 0.55;
+        }
+      } else if (/rail/.test(l.id) && dark) paint['line-color'] = '#4a556c';
+    }
+
+    if (l.type === 'symbol') {
+      // One correctly spelt name per label.
+      const named = layout['text-field'] && JSON.stringify(layout['text-field']).includes('name');
+      if (named) {
+        layout['text-field'] = MAP_LABEL;
+        paint['text-opacity'] = 0;
+        NAME_LAYERS.push(l.id);
+      }
+      const text = /^highway-name/.test(l.id) ? P.roadLabel : /^water/.test(l.id) ? P.waterLabel : P.label;
+      Object.assign(paint, { 'text-color': text, 'text-halo-color': P.halo, 'text-halo-width': 1.6 });
+      // Places of interest: coloured badge, label beside it in the matching colour, free to switch sides.
+      if (l['source-layer'] === 'poi') {
+        delete layout['text-anchor'];
+        delete layout['text-offset'];
+        Object.assign(layout, { 'icon-image': poiMatch(k => 'poi-' + k[0]), 'icon-size': 1, 'text-size': 12, 'text-optional': true,
+                                'text-variable-anchor': ['left', 'right', 'top', 'bottom'], 'text-radial-offset': 1.05, 'text-justify': 'auto' });
+        paint['text-color'] = poiMatch(k => dark ? k[1] : k[2]);
+      }
+    }
+  }
+}
+
+// The tile index (TileJSON) is the slow request — it can take ten seconds. Keep the last copy on the device
+// and use it straight away, refreshing it in the background for next time.
+const TILEJSON_URL = 'https://tiles.openfreemap.org/planet', TILEJSON_KEY = 'bdmap.tilejson';
+async function tileJson() {
+  const refresh = fetch(TILEJSON_URL).then(r => r.json()).then(data => {
+    try { localStorage.setItem(TILEJSON_KEY, JSON.stringify({ at: Date.now(), data })); } catch { /* storage unavailable */ }
+    return data;
+  });
+  try {
+    const saved = JSON.parse(localStorage.getItem(TILEJSON_KEY));
+    if (saved && Date.now() - saved.at < 24 * 3600 * 1000) { refresh.catch(() => {}); return saved.data; }
+  } catch { /* fall through to the network */ }
+  return refresh;
+}
+
+async function buildStyle() {
+  const dark = isDark();
+  const [style, tiles] = await Promise.all([
+    fetch('https://tiles.openfreemap.org/styles/liberty').then(r => r.json()),
+    tileJson().catch(() => null)
+  ]);
+  // Hand the map the tile index directly so it does not fetch it again.
+  for (const src of Object.values(style.sources)) {
+    if (tiles && src.url === TILEJSON_URL) {
+      delete src.url;
+      Object.assign(src, { tiles: tiles.tiles, minzoom: tiles.minzoom, maxzoom: tiles.maxzoom, attribution: tiles.attribution });
+    }
+  }
+
+  // Elevation: soft hill shading in every view, real relief when the map is tilted (separate source for each use).
+  const dem = { type: 'raster-dem', tiles: [TERRAIN_TILES], tileSize: 256, encoding: 'terrarium', maxzoom: 13, attribution: 'Terrain: Mapzen, AWS' };
+  style.sources.hills = dem;
+  style.sources.relief = { ...dem };
+  const hills = { id: 'hills', type: 'hillshade', source: 'hills',
+                  paint: { 'hillshade-exaggeration': ['interpolate', ['linear'], ['zoom'], 7, dark ? 0.3 : 0.4, 13, 0.08], 'hillshade-shadow-color': dark ? '#000000' : '#4f6352',
+                           'hillshade-highlight-color': dark ? '#3a3a3c' : '#ffffff', 'hillshade-accent-color': dark ? '#000000' : '#6f7f6a' } };
+  const beforeWater = style.layers.findIndex(l => l.id.startsWith('waterway') || l.id === 'water');
+  style.layers.splice(beforeWater < 0 ? 1 : beforeWater, 0, hills);
+
+  // 3D buildings for styles that do not ship them (the dark one).
+  const vector = Object.keys(style.sources).find(k => style.sources[k].type === 'vector');
+  if (vector && !style.layers.some(l => l.type === 'fill-extrusion')) {
+    style.layers.push({ id: 'building-3d', type: 'fill-extrusion', source: vector, 'source-layer': 'building', minzoom: 14,
+                        paint: { 'fill-extrusion-color': dark ? '#2c2c2e' : '#e6e2da', 'fill-extrusion-opacity': 0.85,
+                                 'fill-extrusion-height': ['coalesce', ['get', 'render_height'], 6],
+                                 'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0] } });
+  }
+  NAME_LAYERS.length = 0;
+  restyle(style, dark);
+  return style;
+}
+
+// ---- Names on the map ----
+// Each label is a small HTML element pinned to a map position, so Bangla conjuncts and vowel signs are
+// shaped properly (the map engine cannot do that). Which places get a label is decided by the map (the invisible labels above); this only
+// redraws the text. Positions follow the map while it moves; the set is rebuilt whenever it comes to rest.
+const bnLabels = { box: null, items: [] };
+const LABEL_STYLE = [
+  [/^label_country/, 'country'], [/^label_city/, 'city'], [/^label_town/, 'town'], [/^label_state/, 'state'],
+  [/^label_/, 'village'], [/^highway-name/, 'road'], [/^water/, 'water'], [/./, 'poi']
+];
+function placeBanglaLabels() {
+  for (const it of bnLabels.items) {
+    const a = map.project(it.at);
+    let turn = '';
+    if (it.next) {
+      const b = map.project(it.next);
+      let deg = Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI;
+      if (deg > 90) deg -= 180; else if (deg < -90) deg += 180;      // never upside down
+      turn = ` rotate(${deg.toFixed(1)}deg)`;
+    }
+    it.node.style.transform = `translate(${a.x.toFixed(1)}px, ${a.y.toFixed(1)}px)${turn} translate(${it.shift})`;
+  }
+}
+function drawBanglaLabels() {
+  const { width, height } = map.getCanvas().getBoundingClientRect();
+  const onScreen = p => p.x > 0 && p.y > 0 && p.x < width && p.y < height;
+  const dark = isDark(), seen = new Set(), roads = [], items = [];
+  for (const f of map.queryRenderedFeatures({ layers: NAME_LAYERS })) {
+    const text = labelText(f.properties);
+    if (!text) continue;
+    const kind = LABEL_STYLE.find(([re]) => re.test(f.layer.id))[1];
+    const item = { text, kind, shift: '-50%, -50%' };
+    if (f.geometry.type === 'Point') {
+      item.at = f.geometry.coordinates;
+      const p = map.project(item.at);
+      const key = text + '|' + Math.round(p.x / 8) + '|' + Math.round(p.y / 8);
+      if (!onScreen(p) || seen.has(key)) continue;
+      seen.add(key);
+      if (kind === 'poi') {
+        const k = POI_KINDS.find(k => k[4].includes(f.properties.class)) || POI_KINDS[POI_KINDS.length - 1];
+        item.color = dark ? k[1] : k[2];
+        item.shift = '15px, -50%';                 // beside the badge, not on top of it
+      }
+    } else {
+      // A road or river name: use the stretch of the line that is on screen, at its middle, turned to follow it.
+      const line = f.geometry.type === 'LineString' ? f.geometry.coordinates : f.geometry.coordinates[0];
+      const visible = line.map((c, i) => i).filter(i => onScreen(map.project(line[i])));
+      if (visible.length < 2) continue;
+      const mid = visible[Math.floor(visible.length / 2)];
+      const p = map.project(line[mid]);
+      if (roads.some(r => r.text === text && Math.hypot(r.x - p.x, r.y - p.y) < 260)) continue;   // one name per stretch
+      roads.push({ text, x: p.x, y: p.y });
+      item.at = line[mid];
+      item.next = line[mid + 1] || line[mid - 1];
+    }
+    items.push(item);
+    if (items.length >= 180) break;
+  }
+  bnLabels.box.replaceChildren(...items.map(it => {
+    it.node = el('span', 'k-' + it.kind, it.text);
+    if (it.color) it.node.style.color = it.color;
+    return it.node;
+  }));
+  bnLabels.items = items;
+  placeBanglaLabels();
+}
+function initBanglaLabels() {
+  if (bnLabels.box) return;
+  bnLabels.box = el('div', 'bn-labels');
+  map.getCanvasContainer().appendChild(bnLabels.box);
+  map.on('move', placeBanglaLabels);
+  map.on('idle', drawBanglaLabels);
+  drawBanglaLabels();
+}
+
+// Room to leave around fitted shapes so the floating cards do not cover them.
+function mapPadding() {
+  // On wide screens the results sheet fills the left side; without it only the small search card is there.
+  return innerWidth > 760
+    ? { top: 40, bottom: 40, left: $('sheet').hidden ? 40 : 430, right: 70 }
+    : { top: $('trip-search').offsetHeight + 34, bottom: $('sheet').offsetHeight + 24, left: 24, right: 24 };
+}
+
+// Built once and shared; started early from the bottom of this file so the map opens faster.
+let stylePromise = null;
+const getMapStyle = () => stylePromise || (stylePromise = buildStyle().catch(e => { stylePromise = null; throw e; }));
+
+async function createMap() {
+  const [style, badges] = await Promise.all([getMapStyle(), poiImages()]);
+  const dark = isDark();
+  map = new maplibregl.Map({ container: 'map', style, bounds: BD_LNGLAT, fitBoundsOptions: { padding: mapPadding() },
+                             minZoom: 1.6, maxPitch: 70, attributionControl: { compact: true } });
+  // Badges are registered as soon as the style is in, before the first tiles ask for them.
+  map.once('styledata', () => { for (const b of badges) if (!map.hasImage(b.name)) map.addImage(b.name, b.img, { pixelRatio: 2 }); });
+  await new Promise(resolve => map.once('load', resolve));
+  $('map-loading').hidden = true;
+  initBanglaLabels();
+  // Start with the credits folded into their (i) button; they open on tap.
+  const credits = document.querySelector('.maplibregl-ctrl-attrib');
+  if (credits) { credits.classList.remove('maplibregl-compact-show'); credits.removeAttribute('open'); }
+
+  // Our own layers. Lines go under the map's labels so place names stay readable on top of a route.
+  const firstLabel = (map.getStyle().layers.find(l => l.type === 'symbol') || {}).id;
+  const round = { 'line-cap': 'round', 'line-join': 'round' };
+  for (const id of ['route', 'bus', 'stops']) map.addSource(id, { type: 'geojson', data: EMPTY });
+  map.addLayer({ id: 'route-casing', type: 'line', source: 'route', layout: round, paint: { 'line-color': dark ? '#0b0f14' : '#ffffff', 'line-width': 10 } }, firstLabel);
+  map.addLayer({ id: 'route-line', type: 'line', source: 'route', layout: round, paint: { 'line-color': dark ? '#6ea8ff' : '#2563eb', 'line-width': 6 } }, firstLabel);
+  map.addLayer({ id: 'bus-casing', type: 'line', source: 'bus', layout: round, paint: { 'line-color': dark ? '#0b0f14' : '#ffffff', 'line-width': 10 } }, firstLabel);
+  map.addLayer({ id: 'bus-line', type: 'line', source: 'bus', layout: round, paint: { 'line-color': ['get', 'color'], 'line-width': 6 } }, firstLabel);
+  map.addLayer({ id: 'stops', type: 'circle', source: 'stops',
+                 paint: { 'circle-radius': 5.5, 'circle-color': '#ffffff', 'circle-stroke-width': 3, 'circle-stroke-color': ['get', 'color'] } });
+
+  // Live location: a blue dot with an accuracy ring that follows the device. MapLibre's own control does the
+  // tracking; its button is hidden because ours (in .map-tools) triggers it.
+  const geo = new maplibregl.GeolocateControl({ positionOptions: { enableHighAccuracy: true }, trackUserLocation: true,
+                                                showUserHeading: true, showAccuracyCircle: true, fitBoundsOptions: { maxZoom: 16 } });
+  map.addControl(geo, 'bottom-right');
+  document.querySelector('.maplibregl-ctrl-geolocate').parentElement.style.display = 'none';
+  geo.on('trackuserlocationstart', () => $('tool-me').classList.add('on'));
+  geo.on('trackuserlocationend', () => $('tool-me').classList.remove('on'));
+  geo.on('error', () => { $('tool-me').classList.remove('on'); setStatus('লোকেশন পাওয়া যায়নি — ব্রাউজারে লোকেশনের অনুমতি দিন।'); });
+  $('tool-me').addEventListener('click', () => { setStatus(''); geo.trigger(); });
+
+  // Stop names: on hover with a mouse, on tap with a finger.
+  stopPopup = new maplibregl.Popup({ closeButton: false, offset: 12, className: 'stop-popup' });
+  const showStop = e => stopPopup.setLngLat(e.features[0].geometry.coordinates).setText(e.features[0].properties.name).addTo(map);
+  map.on('mouseenter', 'stops', e => { map.getCanvas().style.cursor = 'pointer'; showStop(e); });
+  map.on('mouseleave', 'stops', () => { map.getCanvas().style.cursor = ''; stopPopup.remove(); });
+  map.on('click', 'stops', showStop);
+
+  // A tap on the map fills whichever end of the trip is still empty.
+  map.on('click', async e => {
+    if (map.queryRenderedFeatures(e.point, { layers: ['stops'] }).length) return;
+    const which = !trip.from ? 'from' : !trip.to ? 'to' : null;
+    if (!which) return;
+    const { lat, lng } = e.lngLat;
+    if (!inBangladesh(lat, lng)) { setStatus('বাংলাদেশের ভেতরে বেছে নিন।'); return; }
+    const place = { lat, lon: lng, label: 'ম্যাপে বাছাই করা জায়গা' };
+    setPlace(which, place);
+    const name = await reverseName(lat, lng);
+    if (name && trip[which] === place) { place.label = name; for (const s of searches) s.sync(); }
+  });
+}
+
+function ensureMap() {
+  if (mapReady) { if (map) map.resize(); return mapReady; }
+  mapReady = createMap().catch(() => {
+    mapReady = null;
+    $('map-loading').textContent = 'ম্যাপ লোড করা যায়নি। ইন্টারনেট সংযোগ দেখে আবার চেষ্টা করুন।';
+    throw new Error('map failed');
+  });
+  return mapReady;
+}
+
+// `points` are [lon, lat] pairs.
+function fit(points, animate = true) {
+  const b = points.reduce((box, p) => box.extend(p), new maplibregl.LngLatBounds(points[0], points[0]));
+  map.fitBounds(b, { padding: mapPadding(), animate, duration: 900, maxZoom: 16, pitch: is3D ? 60 : 0 });
+}
+
+function drawMarkers() {
+  for (const w of ['from', 'to']) {
+    if (markers[w]) { markers[w].remove(); markers[w] = null; }
+    if (!trip[w]) continue;
+    markers[w] = new maplibregl.Marker({ element: el('div', 'pin ' + (w === 'from' ? 'a' : 'b')) })
+      .setLngLat([trip[w].lon, trip[w].lat]).addTo(map);
+  }
+}
+
+// Puts lines ({ coords, color }) into a source, growing them from their start as if a pen traces them.
+function drawLines(source, lines) {
+  const token = drawTokens[source] = (drawTokens[source] || 0) + 1;
+  const data = part => ({ type: 'FeatureCollection', features: lines.map(l => ({
+    type: 'Feature', properties: { color: l.color || '' },
+    geometry: { type: 'LineString', coordinates: l.coords.slice(0, Math.max(2, Math.ceil(l.coords.length * part))) } })) });
+  const src = map.getSource(source);
+  if (!lines.length) { src.setData(EMPTY); return; }
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) { src.setData(data(1)); return; }
+  const start = performance.now();
+  const step = now => {
+    if (token !== drawTokens[source]) return;      // a newer drawing replaced this one
+    const p = Math.min(1, (now - start) / 1000);
+    src.setData(data(1 - Math.pow(1 - p, 3)));
+    if (p < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+function clearBus() {
+  drawLines('bus', []);
+  map.getSource('stops').setData(EMPTY);
+  if (stopPopup) stopPopup.remove();
+}
+
+function showBusOnMap(segs) {
+  const colors = ['#0a8f62', '#6b4de6'];
+  const lines = segs.map((seg, n) => ({ color: colors[n % 2], coords: seg.map(id => [STOPS[id].lon, STOPS[id].lat]) }));
+  fit(lines.flatMap(l => l.coords));
+  drawLines('bus', lines);
+  map.getSource('stops').setData({ type: 'FeatureCollection', features: segs.flatMap((seg, n) => seg.map(id => ({
+    type: 'Feature', properties: { name: STOPS[id].bn, color: colors[n % 2] },
+    geometry: { type: 'Point', coordinates: [STOPS[id].lon, STOPS[id].lat] } }))) });
+}
+
+// Tilted view with real relief and 3D buildings, or flat and north-up.
+function set3D(on) {
+  is3D = on;
+  $('tool-3d').classList.toggle('on', on);
+  map.setTerrain(on ? { source: 'relief', exaggeration: 1.4 } : null);
+  for (const l of map.getStyle().layers) if (l.type === 'fill-extrusion') map.setLayoutProperty(l.id, 'visibility', on ? 'visible' : 'none');
+  map.easeTo({ pitch: on ? 60 : 0, bearing: on ? -18 : 0, duration: 900 });
+}
+$('tool-3d').addEventListener('click', () => { if (map) set3D(!is3D); });
+$('tool-home').addEventListener('click', () => { if (map) fit(BD_LNGLAT); });
+$('tool-in').addEventListener('click', () => { if (map) map.zoomIn(); });
+$('tool-out').addEventListener('click', () => { if (map) map.zoomOut(); });
+
+function renderBusPane(km) {
+  const pane = $('pane-bus');
+  pane.replaceChildren();
+  const trips = localTrips(trip.from, trip.to);
+  const rule = busRule(trip.from, trip.to);
+  if (trips.length) {
+    pane.appendChild(el('div', 'label', `যে বাসে যেতে পারেন · ${perKmText(rule.perKm)}`));
+    const list = el('div');
+    for (const t of trips.slice(0, 6)) {
+      const first = t.legs[0], last = t.legs[t.legs.length - 1];
+      const card = item('bus', t.legs.map(l => l.r.bn).join(' → '), `${STOPS[first.seg[0]].bn} থেকে উঠুন · প্রায় ${fmtMin(t.min)}`, taka(t.fare), node => {
+        selectOnly(node);
+        showBusOnMap(t.legs.map(l => l.seg));
+      });
+      if (t.legs.length > 1) card.querySelector('.t').appendChild(el('span', 'badge v', `${STOPS[last.seg[0]].bn}-এ বাস বদল`));
+      list.appendChild(card);
+    }
+    stagger(list);
+    pane.appendChild(list);
+    return;
+  }
+
+  const a = nearestDistrict(trip.from), b = nearestDistrict(trip.to);
+  if (rule !== FARES.bus.intercity || a === b) {
+    pane.appendChild(item('bus', 'বাস ভাড়া · আনুমানিক', perKmText(rule.perKm), taka(busFare(rule, km))));
+    if (rule !== FARES.bus.intercity) pane.appendChild(el('div', 'empty', 'এই পথের বাসের নাম এখনো আমাদের কাছে নেই।'));
+    return;
+  }
+  pane.appendChild(fareTiles(rule, km));
+  const counter = counterFare(a, b);
+  if (counter) pane.appendChild(counter);
+  pane.append(el('div', 'label', `${a.bn} – ${b.bn} রুটের বাস`), operatorChips(a, b));
+}
+
+function renderRidePane(km, min) {
+  const pane = $('pane-ride');
+  pane.replaceChildren();
+  cancelRide();
+  const add = (icon, name, sub, price) => {
+    pane.appendChild(item(icon, name, sub, taka(price), node => { selectOnly(node); requestRide(name, price); }));
+  };
+  if (km <= FARES.cng.maxKm) add('cng', 'সিএনজি', 'মিটার রেট', cngFare(km));
+  for (const r of FARES.rides) if (km <= r.maxKm) add(r.id, r.name, r.sub, rideFare(r, km, min));
+  const any = pane.children.length > 0;
+  $('seg').hidden = !any;
+  if (any) {
+    stagger(pane);
+    const toast = el('div', 'toast');
+    toast.hidden = true;
+    pane.appendChild(toast);
+  }
+}
+
+function cancelRide() {
+  clearTimeout(rideTimer);
+  if (driverMarker) { driverMarker.remove(); driverMarker = null; }
+}
+
+// Demo only: there are no real drivers yet.
+function requestRide(name, price) {
+  cancelRide();
+  const toast = $('pane-ride').querySelector('.toast');
+  toast.hidden = false;
+  toast.textContent = `${name} খোঁজা হচ্ছে…`;
+  rideTimer = setTimeout(() => {
+    const lat = trip.from.lat + (Math.random() - .5) * .01;
+    const lon = trip.from.lon + (Math.random() - .5) * .01;
+    const dot = el('div', 'driver');
+    dot.appendChild(el('span', null, 'ড্রাইভার (ডেমো)'));
+    driverMarker = new maplibregl.Marker({ element: dot }).setLngLat([lon, lat]).addTo(map);
+    toast.textContent = `ডেমো: ${name} ${num(2 + Math.floor(Math.random() * 6))} মিনিটে আসছে · ${taka(price)}`;
+  }, 2000);
+}
+
+function showPane(name) {
+  for (const b of $('seg').children) b.classList.toggle('on', b.dataset.pane === name);
+  $('pane-bus').hidden = name !== 'bus';
+  $('pane-ride').hidden = name !== 'ride';
+}
+
+async function calculate() {
+  const key = [trip.from.lat, trip.from.lon, trip.to.lat, trip.to.lon].join();
+  if (key === lastKey) return;
+  lastKey = key;
+  setStatus('রুট খোঁজা হচ্ছে…');
+  let r;
+  try { r = await getRoute([trip.from, trip.to]); }
+  catch { lastKey = ''; setStatus('রুট পাওয়া যায়নি। অন্য জায়গা দিয়ে চেষ্টা করুন।'); return; }
+  if (key !== lastKey) return;
+  setStatus('');
+
+  const km = r.distance / 1000, min = r.duration / 60;
+  saveRecent(trip.from, trip.to);
+  $('trip-km').textContent = `${num(km, 1)} কিমি`;
+  $('trip-time').textContent = `গাড়িতে প্রায় ${fmtMin(min)} · জ্যাম ছাড়া`;
+  $('sheet').hidden = false;
+  $('trip-photo').replaceChildren(photoStrip(trip.to));
+  clearBus();
+  renderBusPane(km);
+  renderRidePane(km, min);
+  showPane('bus');
+
+  fit(r.geometry.coordinates);
+  drawLines('route', [{ coords: r.geometry.coordinates }]);
+}
+
+function clearTrip() {
+  cancelRide();
+  trip.from = trip.to = null;
+  lastKey = '';
+  $('sheet').hidden = true;
+  setStatus('');
+  for (const s of searches) s.sync();
+  if (!map) return;
+  drawLines('route', []);
+  clearBus();
+  drawMarkers();
+  fit(BD_LNGLAT);
+}
+
+enter.trip = async () => {
+  try { await ensureMap(); } catch { return; }
+  if (current !== 'trip') return;
+  drawMarkers();
+  if (pendingBus) {
+    showBusOnMap([pendingBus]);
+    pendingBus = null;
+  } else if (trip.from && trip.to) {
+    calculate();
+  } else if (trip.from || trip.to) {
+    const p = trip.from || trip.to;
+    map.easeTo({ center: [p.lon, p.lat], zoom: 14, duration: 800 });
+    setStatus(trip.to ? 'কোথা থেকে যাবেন লিখুন, অথবা ম্যাপে চাপ দিয়ে বেছে নিন।' : 'কোথায় যাবেন লিখুন, অথবা ম্যাপে চাপ দিয়ে বেছে নিন।');
+  }
+};
+$('reset').addEventListener('click', clearTrip);
+for (const b of $('seg').children) b.addEventListener('click', () => showPane(b.dataset.pane));
+
+// ---- Dhaka buses ----
+(function initBuses() {
+  const hubs = ['farmgate', 'mirpur10', 'jatrabari', 'uttara', 'gulistan', 'gabtoli', 'mohakhali', 'notunbazar'];
+  let hub = null;
+
+  let timer = null, seq = 0;
+
+  // `getOff` maps a route to the stop nearest the searched place, when the search was for a place.
+  function show(list, note, getOff) {
+    $('bus-note').textContent = note || '';
+    $('bus-note').hidden = !note;
+    const grid = $('bus-grid');
+    grid.replaceChildren();
+    for (const r of list) {
+      const card = el('button', 'card bus-card');
+      card.append(
+        el('b', null, r.bn),
+        el('span', null, `${STOPS[r.stops[0]].bn} – ${STOPS[r.stops[r.stops.length - 1]].bn}`),
+        getOff ? el('span', 'badge v', `${STOPS[getOff.get(r)].bn} স্টপে নামুন`) : el('span', 'badge g', `${num(r.stops.length)} স্টপ`)
+      );
+      card.addEventListener('click', () => open(r));
+      grid.appendChild(card);
+    }
+    stagger(grid);
+  }
+
+  // Buses that pass within walking distance of a place (a park, hospital, road, neighbourhood…).
+  function showNear(place, pool) {
+    const near = nearStops(place);
+    const getOff = new Map();
+    for (const r of pool) {
+      const id = near.find(id => r.stops.includes(id));
+      if (id) getOff.set(r, id);
+    }
+    if (!getOff.size) { show([], `${place.title}-এর কাছে (১.২ কিমির মধ্যে) কোনো বাস স্টপ আমাদের তালিকায় নেই।`); return; }
+    const stops = [...new Set(getOff.values())].map(id => STOPS[id].bn).join(', ');
+    show([...getOff.keys()], `${place.title} — কাছের স্টপ: ${stops} · ${num(getOff.size)} টি বাস যায়`, getOff);
+  }
+
+  function render() {
+    clearTimeout(timer);
+    const mine = ++seq;
+    const q = $('bus-filter').value.trim();
+    const pool = LOCAL_ROUTES.filter(r => !hub || r.stops.includes(hub));
+    if (!q) { show(pool); return; }
+
+    // 1) a bus or stop name, 2) a known place, 3) anything else through the online search.
+    const direct = pool.filter(r => matches(r, q) || r.stops.some(id => matches(STOPS[id], q)));
+    if (direct.length) { show(direct); return; }
+    const place = searchLocal(q).find(p => p.icon === 'pin');
+    if (place) { showNear(place, pool); return; }
+    if (q.length < 3) { show([], 'কোনো বাস পাওয়া যায়নি।'); return; }
+    show([], 'জায়গাটি খোঁজা হচ্ছে…');
+    timer = setTimeout(async () => {
+      const found = (await searchOnline(q)).find(p => inZone(p, FARES.zones.dtca));
+      if (mine !== seq) return;
+      if (found) showNear(found, pool);
+      else show([], 'এই নামে ঢাকায় কোনো বাস বা জায়গা পাওয়া যায়নি — অন্য বানানে লিখে দেখুন।');
+    }, 500);
+  }
+
+  function open(r) {
+    const ul = el('ul', 'timeline');
+    ul.append(...r.stops.map(id => el('li', null, STOPS[id].bn)));
+    stagger(ul);
+    openModal(r.bn, `${r.en} · ${num(r.stops.length)} স্টপ`, [ul],
+      [button('route', 'ম্যাপে দেখুন', () => { closeModal(); pendingBus = r.stops; go('trip'); })]);
+  }
+
+  for (const id of hubs) {
+    const chip = el('button', 'chip', STOPS[id].bn);
+    chip.addEventListener('click', () => {
+      hub = hub === id ? null : id;
+      for (const c of $('hubs').children) c.classList.toggle('on', c === chip && hub === id);
+      render();
+    });
+    $('hubs').appendChild(chip);
+  }
+  $('bus-filter').addEventListener('input', render);
+  render();
+})();
+
+// ---- Districts: 64 district cards, district-to-district fares, bus companies ----
+(function initDistricts() {
+  const from = $('ic-from'), to = $('ic-to'), box = $('ic-result');
+  const cache = new Map();
+  let seq = 0;
+
+  for (const sel of [from, to]) {
+    for (const division of [...new Set(DISTRICTS.map(d => d.division))]) {
+      const group = document.createElement('optgroup');
+      group.label = division + ' বিভাগ';
+      for (const d of DISTRICTS.filter(d => d.division === division)) group.appendChild(new Option(d.bn, d.id));
+      sel.appendChild(group);
+    }
+  }
+  from.value = 'dhaka';
+  to.value = 'chattogram';
+
+  async function update() {
+    const a = districtById(from.value), b = districtById(to.value);
+    const mine = ++seq;
+    box.replaceChildren();
+    if (a === b) { box.appendChild(el('div', 'empty', 'দুটি আলাদা জেলা বেছে নিন।')); return; }
+    const key = a.id + '>' + b.id;
+    if (!cache.has(key)) {
+      box.appendChild(el('div', 'skeleton'));
+      try { cache.set(key, await getRoute([a, b])); }
+      catch {
+        if (mine === seq) box.replaceChildren(el('div', 'empty', 'দূরত্ব বের করা যায়নি। ইন্টারনেট সংযোগ দেখে আবার চেষ্টা করুন।'));
+        return;
+      }
+      if (mine !== seq) return;
+      box.replaceChildren();
+    }
+    const r = cache.get(key), km = r.distance / 1000;
+    const head = el('div', 'head');
+    const titles = el('div', 'grow');
+    titles.append(el('h3', null, `${a.bn} → ${b.bn}`), el('p', null, `${num(km, 1)} কিমি · গাড়িতে প্রায় ${fmtMin(r.duration / 60)}`));
+    head.appendChild(titles);
+    const btn = button('route', 'ম্যাপে দেখুন', () => { trip.from = asPlace(a); setPlace('to', asPlace(b)); }, true);
+    const actions = el('div', 'actions');
+    actions.appendChild(btn);
+    box.append(head, fareTiles(busRule(a, b), km));
+    const counter = counterFare(a, b);
+    if (counter) box.appendChild(counter);
+    box.append(el('div', 'label', 'এই রুটের বাস'), operatorChips(a, b), actions);
+    stagger(box);
+  }
+
+  from.addEventListener('change', update);
+  to.addEventListener('change', update);
+  $('ic-swap').addEventListener('click', () => { [from.value, to.value] = [to.value, from.value]; update(); });
+
+  const grid = $('op-grid');
+  for (const o of OPERATORS) {
+    const card = el('div', 'card op-card');
+    card.tabIndex = 0;
+    card.setAttribute('role', 'button');
+    const badges = el('div', 'chips');
+    if (o.ac) badges.appendChild(el('span', 'badge v', 'এসি'));
+    if (o.nonAc) badges.appendChild(el('span', 'badge', 'নন-এসি'));
+    card.append(el('b', null, o.bn), el('span', null, `ঢাকা থেকে ${num(o.districts.length - 1)} জেলায়`), badges,
+      ratingStars('bus:' + o.en));
+    card.addEventListener('click', () => {
+      const open = card.querySelector('.where');
+      if (open) { open.remove(); return; }
+      card.appendChild(el('div', 'where', o.districts.slice(1).map(id => districtById(id).bn).join(' · ')));
+    });
+    grid.appendChild(card);
+  }
+
+  const dhaka = districtById('dhaka');
+
+  function openDistrict(d) {
+    const body = [photoStrip(asPlace(d), 3000)];
+    const f = MARKET_FARES[d.id];
+    if (f) {
+      const tiles = el('div', 'tiles');
+      tiles.appendChild(tile('main', 'নন-এসি · কাউন্টারে', fareRange(f[0], f[1]), 'ঢাকা থেকে'));
+      tiles.appendChild(f.length > 2 ? tile('', 'এসি · কাউন্টারে', fareRange(f[2], f[3]), 'কোম্পানি ভেদে আলাদা')
+                                     : tile('', 'এসি', '—', 'তথ্য নেই'));
+      body.push(tiles);
+    }
+    const road = el('div', 'empty', d === dhaka ? '' : 'দূরত্ব বের করা হচ্ছে…');
+    body.push(road);
+
+    if (d !== dhaka) {
+      const names = [...new Set([...operatorsBetween(dhaka, d).map(o => o.bn), ...(DIVISION_OPERATORS[d.division] || [])])];
+      body.push(el('div', 'label', 'ঢাকা থেকে বাস'));
+      if (names.length) {
+        const chips = el('div', 'chips');
+        chips.append(...names.map(n => el('div', 'chip', n)));
+        body.push(chips);
+      } else body.push(el('div', 'empty', 'এই জেলার বাস কোম্পানির নাম এখনো যোগ হয়নি।'));
+    }
+
+    const sights = PLACES.filter(p => nearestDistrict(p) === d).slice(0, 10);
+    if (sights.length) {
+      body.push(el('div', 'label', 'চেনা জায়গা'));
+      const chips = el('div', 'chips');
+      for (const p of sights) {
+        const chip = el('button', 'chip', p.bn);
+        chip.addEventListener('click', () => { closeModal(); goTo(asPlace(p)); });
+        chips.appendChild(chip);
+      }
+      body.push(chips);
+    }
+
+    const actions = [button('compass', 'কাছাকাছি খুঁজুন', () => { closeModal(); nearbyAt(asPlace(d)); }, true)];
+    if (d !== dhaka) actions.unshift(button('route', 'ঢাকা থেকে রুট', () => { closeModal(); trip.from = asPlace(dhaka); setPlace('to', asPlace(d)); }));
+    openModal(d.bn, `${d.division} বিভাগ`, body, actions);
+
+    if (d === dhaka) return;
+    const key = 'dhaka>' + d.id;
+    (cache.has(key) ? Promise.resolve(cache.get(key)) : getRoute([dhaka, d]).then(r => (cache.set(key, r), r)))
+      .then(r => {
+        const km = r.distance / 1000;
+        road.textContent = `সড়কপথে ${num(km, 1)} কিমি · প্রায় ${fmtMin(r.duration / 60)} · সরকারি হারে আনুমানিক ${taka(busFare(busRule(dhaka, d), km))}`;
+      })
+      .catch(() => { road.textContent = 'দূরত্ব বের করা যায়নি।'; });
+  }
+
+  function renderDistricts() {
+    const q = $('district-filter').value.trim();
+    const box = $('district-list');
+    box.replaceChildren();
+    for (const division of [...new Set(DISTRICTS.map(d => d.division))]) {
+      const list = DISTRICTS.filter(d => d.division === division && (!q || matches(d, q)));
+      if (!list.length) continue;
+      const section = el('div', 'division');
+      const grid = el('div', 'grid');
+      for (const d of list) {
+        const card = el('button', 'card district-card');
+        const f = MARKET_FARES[d.id];
+        card.append(el('b', null, d.bn), el('span', null, f ? `ঢাকা থেকে ${fareRange(f[0], f[1])}` : d.id === 'dhaka' ? 'রাজধানী' : 'ভাড়া দেখুন'));
+        card.addEventListener('click', () => openDistrict(d));
+        grid.appendChild(card);
+      }
+      stagger(grid);
+      section.append(el('div', 'label', division + ' বিভাগ'), grid);
+      box.appendChild(section);
+    }
+    if (!box.children.length) box.appendChild(el('div', 'empty', 'এই নামে কোনো জেলা পাওয়া যায়নি।'));
+  }
+  $('district-filter').addEventListener('input', renderDistricts);
+  renderDistricts();
+
+  let loaded = false;
+  enter.districts = () => { if (!loaded) { loaded = true; update(); } };
+})();
+
+// ---- Nearby: pick a place, pick a kind of thing, get the closest ones ----
+let nearbyAt = () => {};
+(function initNearby() {
+  let center = null, cat = NEARBY_CATEGORIES[0], seq = 0, found = [], byRating = false;
+  const input = $('near-input'), note = $('near-note'), list = $('near-list');
+
+  // Facts OpenStreetMap holds about a place, as short labels.
+  const facts = p => [p.x.em && 'জরুরি বিভাগ', p.x.gov && 'সরকারি', p.x.pvt && 'বেসরকারি', p.x.beds && `${num(p.x.beds)} শয্যা`].filter(Boolean);
+
+  function openPlace(p) {
+    const body = [photoStrip({ lat: p.lat, lon: p.lon, label: p.title })];
+    const f = facts(p);
+    if (f.length || p.sub) {
+      const chips = el('div', 'chips');
+      if (p.sub) chips.appendChild(el('div', 'chip', p.sub));
+      chips.append(...f.map(t => el('div', 'chip', t)));
+      body.push(chips);
+    }
+    body.push(el('div', 'label', 'রেটিং দিন'), ratingStars(placeKey(p), draw),
+      el('div', 'empty', RATINGS_ONLINE ? 'আপনার রেটিং সবার রেটিংয়ের সাথে যোগ হয়।' : 'সার্ভার ছাড়া চলছে — রেটিং শুধু এই ডিভাইসে থাকছে।'));
+    const actions = [button('route', 'রুট দেখুন', () => { closeModal(); goTo({ lat: p.lat, lon: p.lon, label: p.title }); })];
+    if (p.x.ph) {
+      const call = el('a', 'btn quiet');
+      call.href = 'tel:' + p.x.ph.replace(/[^+\d]/g, '');
+      call.innerHTML = svg('phone');
+      call.appendChild(document.createTextNode(p.x.ph));
+      actions.push(call);
+    }
+    openModal(p.title, `${cat.bn} · ${distText(p.km)} দূরে`, body, actions);
+  }
+
+  function draw() {
+    list.replaceChildren();
+    const rated = found.some(p => ratingScore(placeKey(p)));
+    $('near-sort').hidden = !rated;
+    const rows = byRating && rated
+      ? [...found].sort((a, b) => ratingScore(placeKey(b)) - ratingScore(placeKey(a)) || a.km - b.km)
+      : found;
+    for (const p of rows.slice(0, 30)) {
+      const sub = [ratingText(placeKey(p)), p.sub, ...facts(p)].filter(Boolean).join(' · ');
+      list.appendChild(item(cat.icon, p.title, sub, distText(p.km), () => openPlace(p)));
+    }
+    stagger(list);
+  }
+  for (const b of $('near-sort').children) {
+    b.addEventListener('click', () => {
+      byRating = b.dataset.sort === 'rating';
+      for (const n of $('near-sort').children) n.classList.toggle('on', n === b);
+      draw();
+    });
+  }
+
+  async function load() {
+    const mine = ++seq;
+    list.replaceChildren(el('div', 'skeleton'));
+    note.textContent = `${center.label}-এর কাছের ${cat.bn} খোঁজা হচ্ছে…`;
+    try { found = await searchNearby(center, cat.tag); }
+    catch {
+      if (mine === seq) { found = []; list.replaceChildren(); note.textContent = 'খোঁজা যায়নি। ইন্টারনেট সংযোগ দেখে আবার চেষ্টা করুন।'; }
+      return;
+    }
+    if (mine !== seq) return;
+    list.replaceChildren();
+    $('near-sort').hidden = true;
+    if (!found.length) { note.textContent = `${center.label}-এর ৩০ কিমির মধ্যে কোনো ${cat.bn} ম্যাপে পাওয়া যায়নি।`; return; }
+    note.textContent = `${center.label}-এর কাছে ${num(found.length)} টি ${cat.bn} · চাপ দিলে বিস্তারিত`;
+    draw();
+  }
+
+  function setCenter(place) {
+    center = place;
+    input.value = tr(place.label);
+    load();
+  }
+  nearbyAt = place => { go('nearby'); setCenter(place); };
+
+  for (const c of NEARBY_CATEGORIES) {
+    const b = el('button', 'cat' + (c === cat ? ' on' : ''));
+    b.append(ic(c.icon), document.createTextNode(c.bn));
+    b.addEventListener('click', () => {
+      cat = c;
+      for (const n of $('cats').children) n.classList.toggle('on', n === b);
+      if (center) load();
+    });
+    $('cats').appendChild(b);
+  }
+  wireSuggest(input, $('near-suggest'), setCenter);
+  $('near-locate').addEventListener('click', () => {
+    if (!navigator.geolocation) { note.textContent = 'এই ডিভাইসে লোকেশন পাওয়া যাচ্ছে না।'; return; }
+    note.textContent = 'লোকেশন খোঁজা হচ্ছে…';
+    navigator.geolocation.getCurrentPosition(
+      pos => setCenter({ lat: pos.coords.latitude, lon: pos.coords.longitude, label: 'আমার লোকেশন' }),
+      () => { note.textContent = 'লোকেশনের অনুমতি পাওয়া যায়নি।'; });
+  });
+
+  // First visit: start from the trip's destination or start if there is one, otherwise Dhaka.
+  enter.nearby = () => { if (!center) setCenter(trip.to || trip.from || asPlace(districtById('dhaka'))); };
+})();
+
+// ---- Fares ----
+(function initFares() {
+  const { bus, cng, rides } = FARES;
+  const range = $('calc-range'), tiles = $('calc-tiles');
+  const AVG_KMH = 25;   // assumed ride speed, only to estimate the per-minute part of a ride fare
+
+  function update() {
+    const km = +range.value, min = km / AVG_KMH * 60;
+    $('calc-km').textContent = num(km);
+    // A city bus trip longer than the metro area makes no sense, so it drops out past the CNG range too.
+    const rows = [];
+    if (km <= cng.maxKm) rows.push(['bus', 'শহরের বাস', taka(busFare(bus.metro, km)), bus.metro.perKm]);
+    rows.push(['send', 'দূরপাল্লার বাস', taka(busFare(bus.intercity, km)), bus.intercity.perKm]);
+    if (km <= cng.maxKm) rows.push(['cng', 'সিএনজি', taka(cngFare(km)), cng.perKm]);
+    for (const r of rides) if (km <= r.maxKm) rows.push([r.id, r.name, taka(rideFare(r, km, min)), r.perKm]);
+    tiles.replaceChildren(...rows.map(([icon, label, value, rate], i) => {
+      const t = tile(i === 0 ? 'main' : '', label, value, perKmText(rate));
+      t.prepend(ic(icon));
+      return t;
+    }));
+  }
+  range.addEventListener('input', update);
+  update();
+
+  const perKm = r => `${rateText(r.perKm)}/কিমি`;
+  const groups = [
+    ['bus', 'বাস (নন-এসি)', [
+      ['ঢাকা ও চট্টগ্রাম শহর', perKm(bus.metro)],
+      ['ঢাকার আশপাশের জেলা', perKm(bus.dtca)],
+      ['সারা দেশ, দূরপাল্লা', perKm(bus.intercity)],
+      ['শহরে সর্বনিম্ন', taka(bus.metro.min)]
+    ]],
+    ['cng', 'সিএনজি', [
+      [`প্রথম ${num(cng.baseKm)} কিমি`, taka(cng.base)],
+      ['এরপর প্রতি কিমি', taka(cng.perKm)],
+      ['অপেক্ষা, প্রতি মিনিট', taka(cng.waitPerMin)]
+    ]],
+    ['car', 'রাইড', rides.map(r => [r.name, `${taka(r.base)} + ${taka(r.perKm)}/কিমি`])]
+  ];
+  for (const [icon, title, rows] of groups) {
+    const card = el('div', 'card rule-card');
+    const h = el('h4');
+    h.append(ic(icon), document.createTextNode(title));
+    card.appendChild(h);
+    for (const [a, b] of rows) {
+      const row = el('div', 'rule');
+      row.append(el('span', null, a), el('b', null, b));
+      card.appendChild(row);
+    }
+    $('rules').appendChild(card);
+  }
+  stagger($('rules'));
+  $('rules-foot').textContent = `কিমি-প্রতি হার সরকার নির্ধারিত, ${FARES.effective} থেকে। অ্যাপের ভাড়া এই হার × আনুমানিক দূরত্ব — ` +
+    'বিআরটিএর রুটভিত্তিক তালিকার সাথে কিছু কমবেশি হতে পারে (সেতুর টোল ধরা নেই)। এসি বাসের ভাড়া কোম্পানি ঠিক করে।';
+})();
+
+for (const b of document.querySelectorAll('.lang-btn')) {
+  b.textContent = LANG === 'en' ? 'বাংলা' : 'English';
+  b.addEventListener('click', () => setLang(LANG === 'en' ? 'bn' : 'en'));
+}
+startTranslating();
+route();
+setTimeout(() => getMapStyle().catch(() => {}), 1200);   // warm the map style while the user is still on Home
+// Shared ratings arrive after first paint; cards drawn earlier pick up the averages on their next draw.
+loadRatings().then(() => { for (const box of document.querySelectorAll('#op-grid .rate')) box.dispatchEvent(new Event('refresh')); });
+loadIndex().then(n => {
+  const stat = document.querySelector('[data-count=places]');
+  if (!n || !stat) return;
+  stat.dataset.count = n + PLACES.length + Object.keys(STOPS).length;
+  // Written after Home's count-up has finished, which would otherwise overwrite it with the old total.
+  setTimeout(() => { stat.textContent = num(+stat.dataset.count); }, 1300);
+});
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});

@@ -1,0 +1,8 @@
+# the ratings database and build caches stay on the machine that made them
+db/
+tools/.cache/
+node_modules/
+.claude/
+tour-*.webm
+tour-*.mp4
+tour-*.png
