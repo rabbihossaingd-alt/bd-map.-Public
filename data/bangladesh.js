@@ -101,6 +101,32 @@ const OPERATORS = [
   ['অনন্যা সুপার', 'Ananya Super', false, true, 'kishoreganj']
 ].map(([bn, en, ac, nonAc, d]) => ({ bn, en, ac, nonAc, districts: ['dhaka', ...d.split(' ')] }));
 
+// ---- Official non-AC fares from Dhaka, per district ----
+// Source: BRTA's re-fixed fare charts for inter-district and long-distance routes, September 2026 (signed
+// 22-09-2026), one chart per Dhaka terminal: Sayedabad (s), Gabtoli (g), Mohakhali (m). Read from the scanned
+// charts; each fare is distance x Tk 2.40 plus the route's bridge/ferry toll per seat.
+// [terminal, km in the chart, fare in a 51-seat bus, fare in a 40-seat bus]. Where a district is reached by
+// more than one listed route, the shortest is used. Districts missing here are not in the three charts.
+const BRTA_FARES = {
+  chattogram: ['s', 242, 593, 757], coxsbazar: ['s', 396, 967, 1233], rangamati: ['s', 307, 749, 955],
+  bandarban: ['s', 318, 776, 989], khagrachhari: ['s', 276, 675, 861], cumilla: ['s', 102, 257, 328],
+  brahmanbaria: ['s', 103, 253, 322], chandpur: ['s', 97, 245, 313], feni: ['s', 149, 370, 472],
+  lakshmipur: ['s', 177, 437, 558], noakhali: ['s', 188, 464, 591],
+  sylhet: ['s', 257, 624, 796], moulvibazar: ['s', 203, 493, 628], habiganj: ['s', 166, 404, 515], sunamganj: ['s', 307, 746, 951],
+  barishal: ['s', 171, 493, 629], patuakhali: ['s', 210, 605, 772], pirojpur: ['s', 225, 628, 801], barguna: ['s', 246, 677, 863],
+  jhalokathi: ['g', 258, 695, 887],
+  khulna: ['s', 205, 576, 734], satkhira: ['s', 254, 686, 875], narail: ['s', 136, 409, 522], jashore: ['g', 212, 582, 742],
+  kushtia: ['g', 230, 625, 797], meherpur: ['g', 249, 671, 855], chuadanga: ['g', 216, 592, 754], jhenaidah: ['g', 192, 534, 681],
+  magura: ['g', 155, 445, 568], bagerhat: ['g', 310, 817, 1042],
+  pabna: ['g', 223, 563, 718], rajshahi: ['g', 247, 621, 792], chapainawabganj: ['g', 293, 731, 932], bogura: ['g', 191, 486, 620],
+  naogaon: ['g', 243, 611, 779], joypurhat: ['g', 247, 621, 792], natore: ['g', 203, 515, 657], sirajganj: ['g', 123, 323, 412],
+  gaibandha: ['g', 268, 671, 856], rangpur: ['g', 308, 767, 978], lalmonirhat: ['g', 350, 868, 1107], kurigram: ['g', 353, 875, 1116],
+  dinajpur: ['g', 330, 820, 1046], thakurgaon: ['g', 387, 957, 1220], panchagarh: ['g', 424, 1046, 1333], nilphamari: ['g', 358, 887, 1131],
+  mymensingh: ['m', 116, 278, 355], jamalpur: ['m', 173, 415, 529], netrokona: ['m', 155, 374, 476], sherpur: ['m', 183, 441, 562],
+  kishoreganj: ['m', 179, 431, 550]
+};
+const TERMINALS = { s: 'সায়েদাবাদ', g: 'গাবতলী', m: 'মহাখালী' };
+
 // ---- Counter (market) fares from Dhaka, per district ----
 // Source: vromonprio.com "ঢাকা থেকে ৬৪ জেলার বাস ভাড়ার তালিকা ২০২৬" — an unofficial travel site, not BRTA.
 // These are what counters typically charge; show them as a guide next to the government-rate estimate.

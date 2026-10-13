@@ -6,3 +6,5 @@ node_modules/
 tour-*.webm
 tour-*.mp4
 tour-*.png
+# mail password and other settings for this machine
+.env

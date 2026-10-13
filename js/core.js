@@ -37,6 +37,34 @@ const ICONS = {
   city: '<path d="M4 21V8l6-3v16M10 21V11l10-2v12M3 21h18M14 13h2M14 17h2M6.500 10h.01M6.500 14h.01"/>',
   car: '<path d="M4 16l2-6a2 2 0 012-1.400h8a2 2 0 012 1.400l2 6v3H4v-3z"/><path d="M7.500 16h.01M16.500 16h.01M6 19v1.500M18 19v1.500"/>',
   bike: '<circle cx="5.500" cy="16.500" r="3"/><circle cx="18.500" cy="16.500" r="3"/><path d="M5.500 16.500l4-7h5l4 7M9.500 9.500L8 7H6M14.500 9.500l1-2.500h2"/>',
+  chev: '<path d="M9 5l7 7-7 7"/>',
+  sound: '<path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16 9a4 4 0 010 6M18.500 6.500a8 8 0 010 11"/>',
+  heart: '<path d="M12 20s-7-4.400-7-10a4 4 0 017-2.600A4 4 0 0119 10c0 5.600-7 10-7 10z"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  play: '<path d="M8 5l11 7-11 7z"/>',
+  image: '<rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="2"/><path d="M4 18l5-5 4 4 3-3 4 4"/>',
+  grid: '<rect x="4" y="4" width="7" height="7" rx="1.500"/><rect x="13" y="4" width="7" height="7" rx="1.500"/><rect x="4" y="13" width="7" height="7" rx="1.500"/><rect x="13" y="13" width="7" height="7" rx="1.500"/>',
+  cog: '<circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 00-.1-1.300l2-1.500-2-3.400-2.300.900a7 7 0 00-2.200-1.300L14 3h-4l-.400 2.400a7 7 0 00-2.200 1.300l-2.300-.900-2 3.400 2 1.500A7 7 0 005 12c0 .400 0 .900.100 1.300l-2 1.500 2 3.400 2.300-.900c.600.600 1.400 1 2.200 1.300L10 21h4l.400-2.400c.800-.300 1.600-.700 2.200-1.300l2.300.900 2-3.400-2-1.500c.100-.400.100-.900.100-1.300z"/>',
+  logout: '<path d="M10 4H5v16h5M15 8l4 4-4 4M19 12H9"/>',
+  trash: '<path d="M5 7h14M9 7V4h6v3M7 7l1 13h8l1-13"/>',
+  globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.8 3 2.8 15 0 18M12 3c-2.8 3-2.8 15 0 18"/>',
+  camera: '<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>',
+  close: '<path d="M6 6l12 12M18 6L6 18"/>',
+  check: '<path d="M5 12l5 5 9-10"/>',
+  bell: '<path d="M6 16V11a6 6 0 0112 0v5l2 2H4l2-2zM10 20a2 2 0 004 0"/>',
+  help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 114 2c-.9.6-1.5 1.1-1.5 2.2M12 17h.01"/>',
+  chat: '<path d="M21 12a8 8 0 01-11.8 7L4 20l1.2-4.6A8 8 0 1121 12z"/>',
+  send: '<path d="M4 12l16-8-6 16-3-7-7-1z"/>',
+  phone: '<path d="M5 4h4l2 5-2.5 1.5a11 11 0 005 5L15 13l5 2v4a2 2 0 01-2 2A16 16 0 013 6a2 2 0 012-2z"/>',
+  video: '<rect x="3" y="6" width="12" height="12" rx="3"/><path d="M15 10l6-3v10l-6-3"/>',
+  mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/>',
+  userplus: '<circle cx="10" cy="8" r="4"/><path d="M2 21c0-4.4 3.6-7 8-7 1.5 0 2.9.3 4 .9M19 14v6M16 17h6"/>',
+  back: '<path d="M15 5l-7 7 7 7"/>',
+  shield: '<path d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6l8-3z"/>',
+  user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/>',
+  more: '<circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/>',
+  ship: '<path d="M3 17l2 4h14l2-4-9-3-9 3z"/><path d="M6 15.5V9h12v6.5M12 3v6M9 9V6h6v3"/>',
+  edit: '<path d="M4 20h4l10-10-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/>',
   cng: '<path d="M4 16v-6a4 4 0 014-4h5l5 5v5"/><path d="M4 12h9V6"/><circle cx="7" cy="17" r="2"/><circle cx="16" cy="17" r="2"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
   minus: '<path d="M5 12h14"/>',
@@ -134,28 +162,51 @@ function matchScore(it, q) {
 const matches = (it, q) => matchScore(it, q) > 0;
 
 // Instant suggestions from the app's own data: districts, bus stops, known places. Best matches first.
+// Among results that match equally well, the better known place comes first. "Known" is worked out from
+// the data itself: a district town, then a bus stop by how many routes use it, then a curated place, then
+// the nationwide index by the kind of place (an airport or a neighbourhood before a market or a hotel).
 function searchLocal(q, limit = 8) {
-  const out = [];
-  const scan = (list, icon, sub) => {
+  const out = [], low = q.toLowerCase();
+  const scan = (list, icon, sub, pop) => {
     for (const it of list) {
       const score = matchScore(it, q);
-      if (score) out.push({ score, icon, title: it.bn, sub: sub(it), lat: it.lat, lon: it.lon });
+      if (!score) continue;
+      // A name that begins with what was typed beats one where a later word does, which beats the rest.
+      const en = (it.en || '').toLowerCase();
+      const starts = it.bn.startsWith(q) || en.startsWith(low) ? 2
+                   : it.bn.split(' ').some(w => w.startsWith(q)) || en.split(' ').some(w => w.startsWith(low)) ? 1 : 0;
+      out.push({ score, starts, pop: pop(it), icon, title: it.bn, sub: sub(it), lat: it.lat, lon: it.lon });
     }
   };
-  scan(DISTRICTS, 'city', d => `জেলা · ${d.division} বিভাগ`);
-  scan(Object.values(STOPS), 'bus', () => 'বাস স্টপ · ঢাকা');
-  scan(PLACES, 'pin', p => p.kind);
-  const own = out.length;
-  // The nationwide index is searched last and ranks below the app's own entries at equal score.
-  scan(OSM_INDEX, 'pin', p => `${KIND_LABELS[p.kind]} · ${nearestDistrict(p).bn}`);
-  out.forEach((p, i) => { p.pri = i < own ? 0 : 1; });
-  return out.sort((a, b) => b.score - a.score || a.pri - b.pri).slice(0, limit);
+  stopUse();
+  scan(DISTRICTS, 'city', d => `জেলা · ${d.division} বিভাগ`, d => d.bn === d.division ? 1000 : 900);
+  scan(Object.values(STOPS), 'bus', () => 'বাস স্টপ · ঢাকা', s => 300 + 6 * (s.use || 0));
+  scan(PLACES, 'pin', p => p.kind, () => 500);
+  scan(OSM_INDEX, 'pin', p => `${KIND_LABELS[p.kind]} · ${nearestDistrict(p).bn}`, p => KIND_POP[p.kind] || 100);
+  return out.sort((a, b) => b.score - a.score || b.starts - a.starts || b.pop - a.pop).slice(0, limit);
+}
+const KIND_POP = { f: 450, t: 400, r: 350, u: 330, a: 320, l: 300, h: 280, b: 260, p: 250, m: 200, c: 180, o: 150 };
+
+// How many bus routes call at each stop (kept on the stop as `use`), counted once.
+let stopsCounted = false;
+function stopUse() {
+  if (stopsCounted) return;
+  stopsCounted = true;
+  for (const r of LOCAL_ROUTES) for (const id of new Set(r.stops)) STOPS[id].use = (STOPS[id].use || 0) + 1;
+}
+const busiestStops = n => (stopUse(), Object.values(STOPS).sort((a, b) => b.use - a.use).slice(0, n));
+
+// What an empty search box offers: the busiest bus stops in Dhaka and the most travelled-to cities.
+function popularPlaces() {
+  const stops = busiestStops(5).map(s => ({ icon: 'bus', title: s.bn, sub: `বাস স্টপ · ${num(s.use)} টি বাস`, lat: s.lat, lon: s.lon }));
+  const cities = ['chattogram', 'coxsbazar', 'sylhet'].map(districtById).map(d => ({ icon: 'city', title: d.bn, sub: `জেলা · ${d.division} বিভাগ`, lat: d.lat, lon: d.lon }));
+  return [...stops, ...cities];
 }
 
 // ---- Nationwide place index (data/osm-places.json, built by tools/build-places.mjs from OpenStreetMap) ----
-const KIND_LABELS = { h: 'হাসপাতাল', p: 'পার্ক', r: 'রেলস্টেশন', b: 'বাস স্ট্যান্ড', u: 'বিশ্ববিদ্যালয়', c: 'কলেজ',
+const KIND_LABELS = { o: 'হোটেল', h: 'হাসপাতাল', p: 'পার্ক', r: 'রেলস্টেশন', b: 'বাস স্ট্যান্ড', u: 'বিশ্ববিদ্যালয়', c: 'কলেজ',
                       a: 'দর্শনীয় স্থান', m: 'বাজার', l: 'শপিং মল', f: 'বিমানবন্দর', t: 'এলাকা' };
-const TAG_KIND = { 'amenity:hospital': 'h', 'leisure:park': 'p', 'railway:station': 'r', 'amenity:bus_station': 'b',
+const TAG_KIND = { 'tourism:hotel': 'o', 'amenity:hospital': 'h', 'leisure:park': 'p', 'railway:station': 'r', 'amenity:bus_station': 'b',
                    'amenity:university': 'u', 'amenity:college': 'c', 'tourism:attraction': 'a', 'amenity:marketplace': 'm' };
 let OSM_INDEX = [];
 async function loadIndex() {
@@ -278,7 +329,18 @@ function busRule(a, b) {
 }
 const busFare = (rule, km) => Math.max(rule.min, km * rule.perKm);
 const cngFare = km => FARES.cng.base + Math.max(0, km - FARES.cng.baseKm) * FARES.cng.perKm;
-const rideFare = (r, km, min) => Math.max(r.min, r.base + km * r.perKm + min * r.perMin);
+// `at` is where the ride starts: some rates differ by city.
+function rideFare(r, km, min, at) {
+  const city = at && r.cities && Object.keys(r.cities).find(z => inZone(at, FARES.zones[z]));
+  const rate = city ? { ...r, ...r.cities[city] } : r;
+  return Math.max(rate.min, rate.base + km * rate.perKm + min * rate.perMin);
+}
+// BRTA's chart fare between Dhaka and a district, when the chart has it.
+function officialFare(a, b) {
+  const other = a.id === 'dhaka' ? b : b.id === 'dhaka' ? a : null;
+  const f = other && BRTA_FARES[other.id];
+  return f ? { terminal: TERMINALS[f[0]], km: f[1], f51: f[2], f40: f[3] } : null;
+}
 const operatorsBetween = (a, b) => OPERATORS.filter(o => o.districts.includes(a.id) && o.districts.includes(b.id));
 
 // ---- Network lookups ----
@@ -326,17 +388,64 @@ async function searchOnline(q) {
 
 // Named places of one kind around a point (hospitals, parks, ATMs…), nearest first. Uses OpenStreetMap
 // data through Photon, so it works anywhere in the country. Widens the radius once if little is found.
-async function searchNearby(center, tag, radiusKm = 8) {
-  // Kinds held in the nationwide index answer instantly and carry extra details (phone, emergency…).
-  const kind = TAG_KIND[tag];
-  if (kind && OSM_INDEX.length) {
-    const local = OSM_INDEX.filter(p => p.kind === kind)
-      .map(p => ({ title: p.bn, sub: '', lat: p.lat, lon: p.lon, x: p.x, km: haversineKm(center, p) }))
-      .filter(p => p.km <= 30).sort((a, b) => a.km - b.km);
-    if (local.length >= 5) return local.slice(0, 60);
-  }
-  const url = `https://photon.komoot.io/reverse?lat=${center.lat}&lon=${center.lon}&radius=${radiusKm}&limit=50&osm_tag=${encodeURIComponent(tag)}`;
-  const res = await fetch(url);
+// What each category really means in OpenStreetMap. One tag is rarely the whole story: an ATM is often a bank
+// with atm=yes, a mosque is a place of worship whose religion is muslim, a clinic is tagged apart from a hospital.
+const NEARBY_FILTERS = {
+  'amenity:hospital': ['[amenity~"^(hospital|clinic)$"]'],
+  'amenity:pharmacy': ['[amenity=pharmacy]', '[shop=chemist]'],
+  'amenity:atm': ['[amenity=atm]', '[amenity=bank][atm=yes]'],
+  'amenity:place_of_worship': ['[amenity=place_of_worship][religion=muslim]'],
+  'amenity:restaurant': ['[amenity~"^(restaurant|fast_food|cafe)$"]'],
+  'amenity:marketplace': ['[amenity=marketplace]', '[shop~"^(supermarket|mall|department_store)$"]'],
+  'railway:station': ['[railway~"^(station|halt)$"]'],
+  'tourism:hotel': ['[tourism~"^(hotel|guest_house|motel|resort)$"]'],
+  'tourism:attraction': ['[tourism~"^(attraction|museum|viewpoint|zoo|theme_park)$"]', '[historic~"."]'],
+  'leisure:park': ['[leisure~"^(park|garden|playground)$"]']
+};
+const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'];
+
+// Everything of one category within `metres` of a point, straight from OpenStreetMap (Overpass API). The public
+// servers are often busy, so both are asked at once and whichever answers first wins; none within 9 s is a failure.
+function overpassNear(center, tag, metres) {
+  const [k, v] = tag.split(':');
+  const filters = NEARBY_FILTERS[tag] || [`[${k}=${v}]`];
+  const q = `[out:json][timeout:8];(${filters.map(f => `nwr${f}(around:${metres},${center.lat},${center.lon});`).join('')});out center tags 220;`;
+  return Promise.any(OVERPASS.map(async base => {
+    const stop = new AbortController(), timer = setTimeout(() => stop.abort(), 9000);
+    try {
+      const res = await fetch(base, { method: 'POST', body: 'data=' + encodeURIComponent(q), headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, signal: stop.signal });
+      if (!res.ok) throw new Error('busy');
+      return (await res.json()).elements;
+    } finally { clearTimeout(timer); }
+  }));
+}
+
+function placeFromOsm(e, center, tag) {
+  const t = e.tags || {}, lat = e.lat ?? (e.center && e.center.lat), lon = e.lon ?? (e.center && e.center.lon);
+  let name = LANG === 'en' ? t['name:en'] || t.name : t['name:bn'] || t.name || t['name:en'];
+  const who = t.operator || t.brand;
+  if (!name && who && tag === 'amenity:atm') name = `${who} এটিএম`;
+  if (!name && who && tag === 'amenity:fuel') name = who;
+  if (!name || lat == null) return null;
+  const x = {};
+  const phone = t.phone || t['contact:phone'] || t['contact:mobile'];
+  if (phone) x.ph = phone.split(/[;,]/)[0].trim();
+  if (t.emergency === 'yes') x.em = 1;
+  if (t.opening_hours) x.hours = t.opening_hours;
+  if (t.website || t['contact:website']) x.web = t.website || t['contact:website'];
+  if (t.amenity === 'clinic') x.kind = 'ক্লিনিক';
+  if (t.amenity === 'bank' && tag === 'amenity:atm') x.kind = 'ব্যাংকের ভেতরে';
+  if (tag === 'amenity:fuel' && (t['fuel:cng'] === 'yes' || t['fuel:lpg'] === 'yes')) x.kind = t['fuel:cng'] === 'yes' ? 'সিএনজি আছে' : 'এলপিজি আছে';
+  if (t['operator:type'] === 'government' || t['operator:type'] === 'public') x.gov = 1;
+  if (t.beds > 0) x.beds = +t.beds;
+  if (t.stars > 0) x.st = +t.stars;
+  const where = [...new Set([t['addr:street'], t['addr:suburb'] || t['addr:city']].filter(Boolean))].join(', ');
+  return { title: name, sub: where, lat, lon, x, km: haversineKm(center, { lat, lon }) };
+}
+
+// The older, thinner source: used only when Overpass cannot be reached.
+async function photonNear(center, tag, radiusKm) {
+  const res = await fetch(`https://photon.komoot.io/reverse?lat=${center.lat}&lon=${center.lon}&radius=${radiusKm}&limit=50&osm_tag=${encodeURIComponent(tag)}`);
   if (!res.ok) throw new Error('nearby failed');
   const seen = new Set(), out = [];
   for (const f of (await res.json()).features) {
@@ -347,9 +456,46 @@ async function searchNearby(center, tag, radiusKm = 8) {
     const where = [...new Set([p.street, p.district || p.locality, p.city || p.county].filter(Boolean))].slice(0, 2).join(', ');
     out.push({ title: p.name, sub: where, lat, lon, x: {}, km: haversineKm(center, { lat, lon }) });
   }
-  out.sort((a, b) => a.km - b.km);
-  if (out.length < 5 && radiusKm < 30) return searchNearby(center, tag, 30);
   return out;
+}
+
+// The nearest places of one category, in two steps so the list never waits on a slow server:
+//  1. at once — the app's own index, or the Photon search, whichever knows this category;
+//  2. a little later, if the live OpenStreetMap server answers — everything within 3 km with its details
+//     (phone, opening hours, clinic or hospital, mosque rather than any place of worship). `onMore` is then
+//     called with the fuller list.
+const MOSQUE = /মসজিদ|masjid|mosque|mosjid|jame|জামে/i;
+function mergePlaces(lists) {
+  // The same building is often mapped twice (a point and an outline): keep one per name within 120 m.
+  const out = [];
+  for (const p of lists.flat().sort((a, b) => a.km - b.km)) {
+    const twin = out.find(o => haversineKm(o, p) < 0.12 && (o.title === p.title || !Object.keys(p.x).length));
+    if (twin) twin.x = { ...p.x, ...twin.x }; else out.push(p);
+  }
+  return out.slice(0, 80);
+}
+async function searchNearby(center, tag, onMore) {
+  const kind = TAG_KIND[tag];
+  let quick = kind ? OSM_INDEX.filter(p => p.kind === kind)
+    .map(p => ({ title: p.bn, sub: '', lat: p.lat, lon: p.lon, x: p.x, km: haversineKm(center, p) })).filter(p => p.km <= 30).sort((a, b) => a.km - b.km).slice(0, 60) : [];
+  if (quick.length < 5) {
+    try {
+      let found = await photonNear(center, tag, 8);
+      if (found.length < 5) found = await photonNear(center, tag, 30);
+      if (tag === 'amenity:place_of_worship') found = found.filter(p => MOSQUE.test(p.title));
+      quick = mergePlaces([quick, found]);
+    } catch { if (!quick.length && !onMore) throw new Error('nearby failed'); }
+  }
+  if (onMore) {
+    overpassNear(center, tag, 3000).then(elements => {
+      const live = elements.map(e => placeFromOsm(e, center, tag)).filter(Boolean);
+      if (!live.length) return;
+      // Beyond the live circle the quick list still has the only answers.
+      const reach = Math.max(3, ...live.map(p => p.km));
+      onMore(mergePlaces([live, quick.filter(p => p.km > reach || live.some(l => haversineKm(l, p) < 0.12))]));
+    }).catch(() => { /* the quick list stands */ });
+  }
+  return quick;
 }
 
 // ---- Photos: freely licensed pictures taken near a place, from Wikimedia Commons ----
@@ -428,6 +574,34 @@ function boardIndex(route, nearIds) {
 
 const segment = (route, i, j) => i < j ? route.stops.slice(i, j + 1) : route.stops.slice(j, i + 1).reverse();
 
+// Fares riders have reported through the app, from the server: "stopA>stopB" (sorted) -> [middle fare, reports].
+let REPORTED = {};
+async function loadFareReports() {
+  try {
+    const res = await fetch('api/fares');
+    if (res.ok && (res.headers.get('content-type') || '').includes('json')) REPORTED = await res.json();
+  } catch { /* no server: only the built-in fares are used */ }
+}
+async function reportFare(from, to, fare) {
+  const res = await fetch('api/fares', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                         body: JSON.stringify({ from, to, fare, device: deviceId() }) });
+  if (!res.ok) throw new Error('not saved');
+  await loadFareReports();
+}
+const fareIsConfirmed = (a, b) => !!(KNOWN_FARES[a + '>' + b] || KNOWN_FARES[b + '>' + a] || REPORTED[[a, b].sort().join('>')]);
+
+// What a local bus charges between two stops. A fare someone has confirmed on the road (KNOWN_FARES) wins;
+// otherwise it is the government per-km rate, rounded down to the ৳5 step conductors actually charge in.
+function localFare(seg, rule, km) {
+  const a = seg[0], b = seg[seg.length - 1];
+  const known = KNOWN_FARES[a + '>' + b] || KNOWN_FARES[b + '>' + a];
+  if (known) return known;
+  const told = REPORTED[[a, b].sort().join('>')];          // what riders have reported paying
+  if (told) return told[0];
+  const step = FARES.bus.roundTo;
+  return Math.max(rule.min, Math.floor(km * rule.perKm / step) * step);
+}
+
 // Distance is stop-to-stop straight lines scaled by a road factor; the stop coordinates are too
 // approximate to route through on real roads without detours that would inflate the fare.
 function legInfo(seg) {
@@ -436,7 +610,7 @@ function legInfo(seg) {
   km *= FARES.bus.roadFactor;
   const rule = busRule(STOPS[seg[0]], STOPS[seg[seg.length - 1]]);
   const [slow, fast] = FARES.bus.localSpeedKmh;
-  return { km, fare: busFare(rule, km), minFast: km / fast * 60, minSlow: km / slow * 60 };
+  return { km, fare: localFare(seg, rule, km), minFast: km / fast * 60, minSlow: km / slow * 60 };
 }
 
 function findDirect(nf, nt) {

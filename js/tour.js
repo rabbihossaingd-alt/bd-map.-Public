@@ -99,7 +99,8 @@
   function busFareEach() {
     if (flying()) return plan.airFare;
     const other = plan.from === dhaka ? plan.to : plan.to === dhaka ? plan.from : null;
-    const f = other && MARKET_FARES[other.id];
+    const f = other && MARKET_FARES[other.id], official = other && BRTA_FARES[other.id];
+    if (official && !plan.ac) return (official[2] + official[3]) / 2;      // BRTA chart: between a 51- and a 40-seat bus
     if (f) {
       const nonAc = (f[0] + f[1]) / 2;
       return plan.ac ? (f.length > 2 ? (f[2] + f[3]) / 2 : nonAc * 1.6) : nonAc;
@@ -148,6 +149,11 @@
     const ops = same ? [] : [...new Set([...operatorsBetween(plan.from, plan.to).map(o => o.bn),
       ...(plan.from === dhaka ? DIVISION_OPERATORS[plan.to.division] || [] : [])])];
     $('tour-ops').replaceChildren(...(air ? [] : ops.slice(0, 8)).map(n => el('div', 'chip', n)));
+    // Hotels the map knows near the destination — names only; the room price above is still an estimate.
+    const hotels = OSM_INDEX.filter(p => p.kind === 'o').map(p => ({ p, d: haversineKm(plan.to, p) })).filter(x => x.d <= 15)
+      .sort((a, b) => (b.p.x.st || 0) - (a.p.x.st || 0) || a.d - b.d).slice(0, 10);
+    $('tour-hotels').replaceChildren(...hotels.map(({ p }) => el('div', 'chip', p.x.st ? `${p.bn} · ${num(p.x.st)}★` : p.bn)));
+    $('tour-hotels-label').hidden = !hotels.length;
 
     const rows = [
       [air ? 'বিমান ভাড়া' : 'বাস ভাড়া', c.bus, `${num(plan.people)} জন সদস্য${plan.roundTrip ? ' · আসা-যাওয়া' : ''}`],

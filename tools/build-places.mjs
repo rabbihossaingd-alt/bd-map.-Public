@@ -23,7 +23,8 @@ const KINDS = {
   m: '["amenity"="marketplace"]',
   l: '["shop"="mall"]',
   f: '["aeroway"="aerodrome"]',
-  t: '["place"~"^(city|town|suburb|neighbourhood|quarter)$"]'
+  t: '["place"~"^(city|town|suburb|neighbourhood|quarter)$"]',
+  o: '["tourism"~"^(hotel|guest_house|motel|resort)$"]'
 };
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -88,6 +89,10 @@ for (const [kind, filter] of Object.entries(KINDS)) {
     if (/government|public/.test(t['operator:type'] || '')) extra.gov = 1;
     if (/private/.test(t['operator:type'] || '')) extra.pvt = 1;
     if (/^\d+$/.test(t.beds || '')) extra.beds = +t.beds;
+    // Hotels: star rating and website, when the map has them.
+    if (/^[1-5]/.test(t.stars || '')) extra.st = +t.stars[0];
+    const web = clean(t.website || t['contact:website']);
+    if (kind === 'o' && /^https?:\/\//.test(web)) extra.web = web;
     const row = [kind, bn, en, +lat.toFixed(5), +lon.toFixed(5)];
     if (Object.keys(extra).length) row.push(extra);
     rows.push(row);

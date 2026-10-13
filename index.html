@@ -19,14 +19,20 @@
   <div class="links">
     <a href="#/" data-nav="home"><i data-ic="home"></i><span>হোম</span></a>
     <a href="#/trip" data-nav="trip"><i data-ic="route"></i><span>ম্যাপ</span></a>
-    <a href="#/buses" data-nav="buses"><i data-ic="bus"></i><span>ঢাকার বাস</span></a>
-    <a href="#/districts" data-nav="districts"><i data-ic="city"></i><span>জেলা</span></a>
+    <a href="#/buses" data-nav="buses" class="desk-only"><i data-ic="bus"></i><span>ঢাকার বাস</span></a>
+    <a href="#/explore" data-nav="explore"><i data-ic="image"></i><span>এক্সপ্লোর</span></a>
+    <a href="#/train" data-nav="train" class="desk-only"><i data-ic="train"></i><span>ট্রেন</span></a>
+    <a href="#/chat" data-nav="chat" class="phone-only"><i data-ic="chat"></i><span>মেসেজ</span><em class="nbadge" data-chat-badge hidden></em></a>
+    <a href="#/districts" data-nav="districts" class="desk-only"><i data-ic="city"></i><span>জেলা</span></a>
     <a href="#/nearby" data-nav="nearby" class="desk-only"><i data-ic="compass"></i><span>কাছাকাছি</span></a>
-    <a href="#/tour" data-nav="tour"><i data-ic="star"></i><span>ট্যুর</span></a>
+    <a href="#/tour" data-nav="tour" class="desk-only"><i data-ic="star"></i><span>ট্যুর</span></a>
     <a href="#/fares" data-nav="fares" class="desk-only"><i data-ic="tag"></i><span>ভাড়া</span></a>
+    <a href="#/more" data-nav="more" class="phone-only"><i data-ic="more"></i><span>আরও</span></a>
   </div>
 </nav>
 <button class="lang-btn" title="Language / ভাষা"></button>
+<button class="chat-btn" title="মেসেজ" aria-label="মেসেজ"><i data-ic="chat"></i><em class="nbadge" data-chat-badge hidden></em></button>
+<button class="acct-btn" id="acct-btn" title="অ্যাকাউন্ট" aria-label="অ্যাকাউন্ট"><i data-ic="user"></i><span></span></button>
 
 <main>
   <!-- Home -->
@@ -44,6 +50,10 @@
       <a class="card tour-banner" href="#/tour">
         <div><b>ট্যুর প্ল্যান করুন</b><span>দল নিয়ে ঘুরতে যাচ্ছেন? খরচ হিসাব করুন, সবার ছবি দিয়ে কার্ড বানান।</span></div>
         <span class="btn">শুরু করুন <i data-ic="arrow"></i></span>
+      </a>
+      <a class="card tour-banner give-banner" href="#/community">
+        <div><b>ভাড়া জানান, পয়েন্ট জিতুন</b><span>আপনি যে পথের ভাড়া জানেন, তা জানিয়ে অন্যদের সাহায্য করুন। সেরা তিনজন থাকেন লিডারবোর্ডে।</span></div>
+        <span class="btn">ভাড়া জানান <i data-ic="arrow"></i></span>
       </a>
       <div class="features stagger">
         <a class="card feature" href="#/buses" style="--i:0"><i class="ic" data-ic="bus"></i><b>ঢাকার বাস</b><span>কোন বাস কোথায় যায়</span><span class="go">দেখুন <i data-ic="arrow"></i></span></a>
@@ -83,9 +93,11 @@
         <div class="seg" id="seg">
           <button data-pane="bus" class="on"><i data-ic="bus"></i>বাস</button>
           <button data-pane="ride"><i data-ic="car"></i>রাইড</button>
+          <button data-pane="train" hidden><i data-ic="train"></i>ট্রেন</button>
         </div>
         <div id="pane-bus"></div>
         <div id="pane-ride" hidden></div>
+        <div id="pane-train" hidden></div>
         <div class="foot">ভাড়া আনুমানিক — সরকারি তালিকার সাথে কিছু কমবেশি হতে পারে · <a href="#/fares">কীভাবে হিসাব হয়</a></div>
       </div>
     </div>
@@ -95,10 +107,238 @@
   <section class="page" id="page-buses">
     <div class="wrap">
       <div class="page-head"><h2>ঢাকার বাস</h2><p>বাসের নাম বা যেকোনো জায়গা লিখুন — কোন বাস যায় দেখাবে।</p></div>
-      <label class="filter"><i data-ic="search"></i><input id="bus-filter" autocomplete="off" placeholder="যেমন: তুরাগ, romna park, ঢাকা মেডিকেল" aria-label="বাস বা জায়গা খুঁজুন"></label>
+      <div class="filter" style="position: relative">
+        <i data-ic="search"></i>
+        <input id="bus-filter" autocomplete="off" placeholder="যেমন: তুরাগ, jatrabari, ঢাকা মেডিকেল" aria-label="বাস বা জায়গা খুঁজুন">
+        <div class="suggest" id="bus-suggest" style="left: 0; right: 0" hidden></div>
+      </div>
       <div class="chips" id="hubs"></div>
       <div class="label note" id="bus-note" hidden></div>
       <div class="grid" id="bus-grid"></div>
+    </div>
+  </section>
+
+  <!-- Community: awareness, fares people know, points -->
+  <section class="page" id="page-community">
+    <div class="wrap give-wrap">
+      <div class="lead-head">
+        <span class="eyebrow">সবাই মিলে</span>
+        <h2>আপনি জানেন,<br>অন্যরা জানে না।</h2>
+        <p>যে পথের ভাড়া আপনি জানেন, তা জানিয়ে দিন। একজন যাত্রী ঠকবে না — আর আপনি পাবেন পয়েন্ট।</p>
+      </div>
+      <div class="give-grid">
+        <div class="card give-card" id="give-card">
+          <h3>ভাড়া জানান <em>+১০ পয়েন্ট</em></h3>
+          <div class="od">
+            <div class="dots"><i class="a"></i><i class="l"></i><i class="b"></i></div>
+            <div class="inputs">
+              <div class="field"><input id="give-from" autocomplete="off" placeholder="কোথা থেকে" aria-label="কোথা থেকে"><div class="suggest" id="give-from-suggest" hidden></div></div>
+              <div class="field"><input id="give-to" autocomplete="off" placeholder="কোথায়" aria-label="কোথায়"><div class="suggest" id="give-to-suggest" hidden></div></div>
+            </div>
+          </div>
+          <div class="label">কীসে গিয়েছেন?</div>
+          <div class="chips" id="give-modes"></div>
+          <label class="money"><span>ভাড়া কত দিয়েছেন? (টাকা)</span><input id="give-fare" type="number" inputmode="numeric" min="5" max="20000" placeholder="৳"></label>
+          <div class="form-note" id="give-note">শুধু নিজে দেওয়া আসল ভাড়াটি জানান। ভুল তথ্য সরিয়ে দেওয়া হয়, পয়েন্টও কাটা যায়।</div>
+          <button class="btn" id="give-send"><i data-ic="check"></i>জমা দিন</button>
+        </div>
+
+        <div class="card lead-card">
+          <h3>লিডারবোর্ড</h3>
+          <div class="podium" id="podium"></div>
+          <div class="person mine" id="my-points" hidden></div>
+          <button class="btn quiet lead-more" id="lead-more" hidden>সেরা ৫০ জন দেখুন <i data-ic="arrow"></i></button>
+          <div class="foot" id="lead-stats"></div>
+        </div>
+      </div>
+
+      <div class="label">পয়েন্ট দিয়ে কী হবে?</div>
+      <div class="card points-info">
+        <i class="mi soft" data-ic="star"></i>
+        <span><b>এখন: সম্মান। সামনে: ছাড়।</b><em>BD Map-এ রাইড বা টিকিট কাটার ব্যবস্থা চালু হলে জমানো পয়েন্ট দিয়ে ছাড় পাওয়া যাবে। সেটি এখনো চালু হয়নি — ততদিন পয়েন্ট জমতে থাকবে।</em></span>
+      </div>
+
+      <div class="label row-label"><span>সচেতন থাকুন</span><span class="arrows"><button class="icon-btn" id="tips-prev" aria-label="আগের"><i data-ic="back"></i></button><button class="icon-btn" id="tips-next" aria-label="পরের"><i data-ic="chev"></i></button></span></div>
+      <div class="tips" id="tips"></div>
+
+      <div class="label" id="recent-label" hidden>সম্প্রতি যাঁরা জানিয়েছেন</div>
+      <div class="recent-fares" id="recent-fares"></div>
+    </div>
+  </section>
+
+  <!-- Explore: everyone's photos and videos -->
+  <section class="page" id="page-explore">
+    <div class="wrap explore">
+      <div class="ex-top">
+        <label class="ex-search"><i data-ic="search"></i><input id="explore-q" type="search" autocomplete="off" placeholder="খুঁজুন — মানুষ, জায়গা, পোস্ট" aria-label="খুঁজুন"></label>
+        <button class="ex-new" id="explore-new" title="নতুন পোস্ট" aria-label="নতুন পোস্ট"><i data-ic="plus"></i></button>
+      </div>
+      <div class="faces" id="explore-people" hidden></div>
+      <div id="explore-results" hidden></div>
+      <div id="explore-feed"></div>
+      <div id="explore-end"></div>
+    </div>
+  </section>
+
+  <!-- A person's profile -->
+  <section class="page" id="page-profile">
+    <div class="wrap prof" id="prof"></div>
+  </section>
+
+  <!-- Settings -->
+  <section class="page" id="page-settings">
+    <div class="wrap hub">
+      <div class="page-head"><h2>সেটিংস</h2></div>
+      <div class="label">অ্যাকাউন্ট</div>
+      <div class="card menu">
+        <button id="set-edit"><i class="mi soft" data-ic="user"></i><span><b>প্রোফাইল এডিট</b><em id="set-email"></em></span><i class="chev" data-ic="chev"></i></button>
+        <div class="row"><i class="mi soft" data-ic="globe"></i><span><b>ভাষা</b><em>বাংলা · English</em></span><button class="lang-btn in-page"></button></div>
+      </div>
+      <div class="label">সাহায্য</div>
+      <div class="card menu">
+        <a href="#/support"><i class="mi soft" data-ic="help"></i><span><b>সাহায্য ও সাপোর্ট</b><em>প্রশ্নের উত্তর, সমস্যা জানান</em></span><em class="nbadge inline" data-support-badge hidden></em><i class="chev" data-ic="chev"></i></a>
+        <a href="admin.html" data-admin-link hidden><i class="mi soft" data-ic="shield"></i><span><b>অ্যাডমিন প্যানেল</b><em>ব্যবহারকারী, সাপোর্ট, রিপোর্ট</em></span><i class="chev" data-ic="chev"></i></a>
+      </div>
+      <div class="label" data-needs-login>অ্যাকাউন্ট থেকে বের হওয়া</div>
+      <div class="card menu" data-needs-login>
+        <button id="set-logout"><i class="mi soft" data-ic="logout"></i><span><b>লগআউট</b></span></button>
+        <button id="set-delete" class="bad"><i class="mi soft bad" data-ic="trash"></i><span><b>অ্যাকাউন্ট মুছে ফেলুন</b><em>সব তথ্য চিরতরে মুছে যাবে</em></span></button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Help and support -->
+  <section class="page" id="page-support">
+    <div class="help-hero">
+      <div class="in">
+        <span class="eyebrow">সাহায্য কেন্দ্র</span>
+        <h2>কীভাবে সাহায্য করতে পারি?</h2>
+        <label class="help-search"><i data-ic="search"></i><input id="help-q" autocomplete="off" placeholder="যেমন: লগইন কোড, ভাড়া ভুল, কল লাগছে না" aria-label="সাহায্য খুঁজুন"></label>
+      </div>
+    </div>
+    <div class="wrap help-wrap">
+      <div class="help-topics" id="help-topics"></div>
+      <div class="label" id="help-label"></div>
+      <div class="card faqs" id="help-list"></div>
+      <div class="empty" id="help-none" hidden>এই খোঁজে কোনো উত্তর পাওয়া যায়নি। অন্য শব্দে লিখে দেখুন, অথবা নিচ থেকে আমাদের লিখুন।</div>
+
+      <div class="card help-contact">
+        <i class="mi c-teal" data-ic="chat"></i>
+        <span><b>এখনো সমাধান হয়নি?</b><em>আমাদের টিমকে লিখুন — সাধারণত এক-দুই দিনের মধ্যে উত্তর দিই।</em></span>
+        <button class="btn" id="support-new"><i data-ic="edit"></i>সাপোর্টে লিখুন</button>
+      </div>
+
+      <div id="support-body" hidden>
+        <div class="label">আপনার অনুরোধ</div>
+        <div id="support-list"></div>
+      </div>
+      <div class="foot hub-foot">জরুরি বিপদে ৯৯৯-এ কল করুন। BD Map সাপোর্ট জরুরি সেবা নয়।</div>
+    </div>
+  </section>
+
+  <!-- Messenger -->
+  <section class="page" id="page-chat">
+    <div class="chat-gate" id="chat-gate">
+      <div class="gate-art"><i></i><i></i><i></i><span data-ic="chat"></span></div>
+      <h2>বন্ধুদের সাথে কথা বলতে লগইন করুন</h2>
+      <p>মেসেজ, জায়গা শেয়ার, ভয়েস ও ভিডিও কল — সব এক জায়গায়।</p>
+      <button class="btn" id="chat-login"><i data-ic="user"></i>লগইন করুন</button>
+    </div>
+    <div class="chat" id="chat" hidden>
+      <aside class="chat-side">
+        <div class="chat-top">
+          <h2>মেসেজ</h2>
+          <button class="icon-btn" id="chat-blocked" title="ব্লক করা মানুষ" aria-label="ব্লক করা মানুষ"><i data-ic="shield"></i></button>
+          <button class="icon-btn accent" id="chat-add" title="মানুষ খুঁজুন" aria-label="মানুষ খুঁজুন"><i data-ic="search"></i></button>
+        </div>
+        <div class="chat-scroll">
+          <div id="chat-requests"></div>
+          <div id="chat-list"></div>
+        </div>
+      </aside>
+      <div class="chat-main">
+        <div class="chat-empty" id="chat-empty">
+          <div class="gate-art"><i></i><i></i><i></i><span data-ic="chat"></span></div>
+          <b>একটি কথোপকথন বেছে নিন</b>
+          <span>বন্ধুকে মেসেজ দিন, জায়গা পাঠান, ভয়েস বা ভিডিও কল করুন।</span>
+        </div>
+        <div class="chat-thread" id="chat-thread" hidden>
+          <header class="chat-head">
+            <button class="icon-btn" id="chat-back" title="ফিরে যান" aria-label="ফিরে যান"><i data-ic="back"></i></button>
+            <div class="who" id="chat-who"></div>
+            <button class="icon-btn" id="chat-voice" title="ভয়েস কল" aria-label="ভয়েস কল"><i data-ic="phone"></i></button>
+            <button class="icon-btn" id="chat-video" title="ভিডিও কল" aria-label="ভিডিও কল"><i data-ic="video"></i></button>
+            <button class="icon-btn" id="chat-more" title="আরও অপশন" aria-label="আরও অপশন"><i data-ic="more"></i></button>
+          </header>
+          <div class="chat-msgs" id="chat-msgs"></div>
+          <form class="chat-compose" id="chat-form">
+            <button type="button" class="icon-btn" id="chat-share" title="জায়গা পাঠান" aria-label="জায়গা পাঠান"><i data-ic="pin"></i></button>
+            <textarea id="chat-input" rows="1" maxlength="2000" placeholder="মেসেজ লিখুন…" aria-label="মেসেজ লিখুন…"></textarea>
+            <button class="send like" id="chat-send" title="পাঠান" aria-label="পাঠান"><i data-ic="send"></i><span>👍</span></button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Trains and launches -->
+  <section class="page" id="page-train">
+    <div class="wrap">
+      <div class="page-head"><h2>ট্রেন</h2><p>দুটি স্টেশন বেছে নিন — কোন ট্রেন, কখন ছাড়ে, ভাড়া কত।</p></div>
+      <div class="card" style="padding: 12px; max-width: 560px">
+        <div class="od">
+          <div class="dots"><i class="a"></i><i class="l"></i><i class="b"></i></div>
+          <div class="inputs">
+            <div class="field"><input id="train-from" autocomplete="off" placeholder="কোন স্টেশন থেকে" aria-label="কোন স্টেশন থেকে"><div class="suggest" id="train-from-suggest" hidden></div></div>
+            <div class="field"><input id="train-to" autocomplete="off" placeholder="কোন স্টেশনে" aria-label="কোন স্টেশনে">
+              <button class="icon-btn" id="train-swap" title="অদলবদল" aria-label="অদলবদল"><i data-ic="swap"></i></button>
+              <div class="suggest" id="train-to-suggest" hidden></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="label note" id="train-note"></div>
+      <div id="train-list" style="margin-top: 20px; max-width: 720px"></div>
+      <div class="foot" id="train-updated" style="text-align: left; max-width: 720px"></div>
+
+      <div class="page-head" style="margin-top: 64px"><h2>লঞ্চ</h2><p>ঢাকার সদরঘাট থেকে নদীপথে। সময় ও ভাড়া বদলায় — যাওয়ার আগে ঘাটে যাচাই করে নিন।</p></div>
+      <div class="grid" id="launch-grid" style="margin-top: 0"></div>
+      <div class="foot" id="launch-note" style="text-align: left"></div>
+    </div>
+  </section>
+
+  <!-- More (phones): the pages that do not fit in the tab bar -->
+  <section class="page" id="page-more">
+    <div class="wrap hub">
+      <div class="page-head"><h2>আরও</h2></div>
+      <button class="card acct-card" id="acct-card"><i class="ic" data-ic="user"></i><span class="t"><b></b><span></span></span><i class="chev" data-ic="chev"></i></button>
+
+      <div class="label">সবাই মিলে</div>
+      <div class="card menu">
+        <button id="people-open"><i class="mi c-blue" data-ic="search"></i><span><b>মানুষ খুঁজুন</b><em>নাম দিয়ে খুঁজে ফলো করুন</em></span><i class="chev" data-ic="chev"></i></button>
+        <a href="#/community"><i class="mi c-amber" data-ic="star"></i><span><b>ভাড়া জানান ও পয়েন্ট</b><em>লিডারবোর্ড, সচেতনতার বার্তা</em></span><i class="chev" data-ic="chev"></i></a>
+      </div>
+
+      <div class="label">যাতায়াত</div>
+      <div class="card menu">
+        <a href="#/buses"><i class="mi c-teal" data-ic="bus"></i><span><b>ঢাকার বাস</b><em>কোন বাস কোথায় যায়</em></span><i class="chev" data-ic="chev"></i></a>
+        <a href="#/train"><i class="mi c-green" data-ic="train"></i><span><b>ট্রেন ও লঞ্চ</b><em>সময়সূচি, ভাড়া, কোন ট্রেনে যাবেন</em></span><i class="chev" data-ic="chev"></i></a>
+        <a href="#/districts"><i class="mi c-blue" data-ic="city"></i><span><b>৬৪ জেলা</b><em>ঢাকা থেকে ভাড়া, বাস ও দর্শনীয় স্থান</em></span><i class="chev" data-ic="chev"></i></a>
+        <a href="#/fares"><i class="mi c-amber" data-ic="tag"></i><span><b>ভাড়ার হিসাব</b><em>কিমি প্রতি কত, মোট কত</em></span><i class="chev" data-ic="chev"></i></a>
+      </div>
+
+      <div class="label">ঘোরাঘুরি</div>
+      <div class="card menu">
+        <a href="#/nearby"><i class="mi c-violet" data-ic="compass"></i><span><b>কাছাকাছি</b><em>হাসপাতাল, থানা, এটিএম, পার্ক…</em></span><i class="chev" data-ic="chev"></i></a>
+        <a href="#/tour"><i class="mi c-pink" data-ic="star"></i><span><b>ট্যুর প্ল্যান</b><em>খরচের হিসাব আর শেয়ার করার কার্ড</em></span><i class="chev" data-ic="chev"></i></a>
+      </div>
+
+      <div class="label">সাহায্য ও সেটিংস</div>
+      <div class="card menu">
+        <a href="#/support"><i class="mi c-teal" data-ic="help"></i><span><b>সাহায্য ও সাপোর্ট</b><em>প্রশ্নের উত্তর, সমস্যা জানান</em></span><em class="nbadge inline" data-support-badge hidden></em><i class="chev" data-ic="chev"></i></a>
+        <a href="admin.html" data-admin-link hidden><i class="mi c-ink" data-ic="shield"></i><span><b>অ্যাডমিন প্যানেল</b><em>ব্যবহারকারী, সাপোর্ট, রিপোর্ট</em></span><i class="chev" data-ic="chev"></i></a>
+        <a href="#/settings"><i class="mi c-gray" data-ic="cog"></i><span><b>সেটিংস</b><em>প্রোফাইল, ভাষা, লগআউট</em></span><i class="chev" data-ic="chev"></i></a>
+      </div>
+      <div class="foot hub-foot">BD Map · বাংলাদেশের যাতায়াত, এক জায়গায়</div>
     </div>
   </section>
 
@@ -178,6 +418,8 @@
             <div><div class="label" style="margin-top: 0">রুম</div><div class="stepper" id="tour-rooms"></div></div>
           </div>
 
+          <div class="label" id="tour-hotels-label" hidden>এই জায়গার কিছু হোটেল (ম্যাপ থেকে)</div>
+          <div class="chips" id="tour-hotels"></div>
           <div class="tour-two">
             <label class="money"><span>খাবার — জনপ্রতি, প্রতিদিন (৳)</span><input id="tour-food" type="number" min="0" step="50" inputmode="numeric"></label>
             <label class="money"><span>অন্যান্য — জনপ্রতি, প্রতিদিন (৳)</span><input id="tour-other" type="number" min="0" step="50" inputmode="numeric"></label>
@@ -233,6 +475,22 @@
   </section>
 </main>
 
+<div class="chat-toast" id="chat-toast"></div>
+<div class="call" id="call" hidden>
+  <video id="call-remote" autoplay playsinline></video>
+  <video id="call-local" autoplay playsinline muted></video>
+  <div class="call-info">
+    <div class="call-avatar"><i></i><i></i><i></i><span id="call-avatar"></span></div>
+    <b class="no-tr" id="call-name"></b>
+    <span id="call-status"></span>
+  </div>
+  <div class="call-actions">
+    <button class="call-btn" id="call-mic" title="মাইক্রোফোন" aria-label="মাইক্রোফোন"><i data-ic="mic"></i></button>
+    <button class="call-btn" id="call-cam" title="ক্যামেরা" aria-label="ক্যামেরা"><i data-ic="video"></i></button>
+    <button class="call-btn accept" id="call-accept" title="কল ধরুন" aria-label="কল ধরুন"><i data-ic="phone"></i></button>
+    <button class="call-btn hang" id="call-hang" title="কল কাটুন" aria-label="কল কাটুন"><i data-ic="phone"></i></button>
+  </div>
+</div>
 <div class="modal" id="modal" hidden>
   <div class="card" role="dialog" aria-modal="true">
     <div class="head">
@@ -261,5 +519,12 @@
 <script src="js/core.js"></script>
 <script src="js/app.js"></script>
 <script src="js/tour.js"></script>
+<script src="js/train.js"></script>
+<script src="js/account.js"></script>
+<script src="js/chat.js"></script>
+<script src="js/support.js"></script>
+<script src="js/community.js"></script>
+<script src="js/explore.js"></script>
+<script src="js/profile.js"></script>
 </body>
 </html>

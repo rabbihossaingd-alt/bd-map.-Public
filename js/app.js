@@ -3,7 +3,7 @@
 for (const n of document.querySelectorAll('[data-ic]')) n.innerHTML = svg(n.dataset.ic);
 
 const BD_LNGLAT = [[87.8, 20.3], [92.9, 26.9]];   // Bangladesh, as [lon, lat] corners
-const PAGES = ['home', 'trip', 'buses', 'districts', 'nearby', 'tour', 'fares'];
+const PAGES = ['home', 'trip', 'buses', 'train', 'districts', 'nearby', 'tour', 'fares', 'more', 'chat', 'support', 'community', 'profile', 'settings', 'explore'];
 const trip = { from: null, to: null };          // each: { lat, lon, label }
 const enter = {};                               // page name -> function run when the page opens
 const searches = [];
@@ -46,12 +46,14 @@ const rateText = rate => '৳' + rate.toLocaleString(NUM_LOCALE, { minimumFracti
 const perKmText = rate => `কিমি প্রতি ${rateText(rate)}`;
 
 // Non-AC fare at the government per-km rate beside the AC estimate (the government does not set AC fares).
-function fareTiles(rule, km) {
-  const fare = busFare(rule, km);
+// With `official` (BRTA's chart fare for this route) the non-AC tile shows that instead of an estimate.
+function fareTiles(rule, km, official) {
+  const fare = official ? official.f51 : busFare(rule, km);
   const [lo, hi] = FARES.bus.acRange;
   const tiles = el('div', 'tiles');
   tiles.append(
-    tile('main', 'নন-এসি · আনুমানিক', taka(fare), perKmText(rule.perKm)),
+    official ? tile('main', 'নন-এসি · বিআরটিএ নির্ধারিত', fareRange(official.f51, official.f40), `৫১ ও ৪০ আসনের বাস · ${official.terminal} থেকে`)
+             : tile('main', 'নন-এসি · আনুমানিক', taka(fare), perKmText(rule.perKm)),
     tile('', 'এসি · আনুমানিক', `${taka(fare * lo)}–${num(Math.ceil(fare * hi))}`, 'কোম্পানি ভেদে আলাদা')
   );
   return tiles;
@@ -80,6 +82,9 @@ function operatorChips(a, b) {
 
 // ---- Modal (one shared dialog: bus routes, district details) ----
 function openModal(title, sub, body, actions = []) {
+  $('modal').classList.remove('post-modal');
+  $('m-title').classList.remove('no-tr');
+  $('m-sub').classList.remove('no-tr');
   $('m-title').textContent = title;
   $('m-sub').textContent = sub || '';
   $('m-body').replaceChildren(...body);
@@ -233,28 +238,36 @@ function setPlace(which, place) {
 // Type-ahead for one place input: known places instantly (any spelling), then the online search.
 function wireSuggest(input, box, onPick, onType) {
   let timer = null, seq = 0;
+  const addItem = (icon, title, sub, lat, lon) => {
+    const s = el('div', 'sug');
+    const t = el('div', 't');
+    t.append(el('b', null, title), el('span', null, sub));
+    s.append(ic(icon), t);
+    // mousedown so the pick lands before the input's blur hides the list
+    s.addEventListener('mousedown', e => { e.preventDefault(); box.hidden = true; onPick({ lat, lon, label: title }); });
+    box.appendChild(s);
+  };
+  // Nothing typed yet: offer the places most people go to.
+  const showPopular = () => {
+    box.replaceChildren(el('div', 'sug-head', 'জনপ্রিয়'));
+    for (const p of popularPlaces()) addItem(p.icon, p.title, p.sub, p.lat, p.lon);
+    box.hidden = false;
+  };
+  input.addEventListener('focus', () => { if (input.value.trim().length < 2) showPopular(); });
   input.addEventListener('input', () => {
     if (onType) onType();
     clearTimeout(timer);
+    const mine = ++seq;                             // any search still on its way is now out of date
     const q = input.value.trim();
     box.replaceChildren();
-    if (q.length < 2) { box.hidden = true; return; }
-    const addItem = (icon, title, sub, lat, lon) => {
-      const s = el('div', 'sug');
-      const t = el('div', 't');
-      t.append(el('b', null, title), el('span', null, sub));
-      s.append(ic(icon), t);
-      // mousedown so the pick lands before the input's blur hides the list
-      s.addEventListener('mousedown', e => { e.preventDefault(); box.hidden = true; onPick({ lat, lon, label: title }); });
-      box.appendChild(s);
-    };
+    if (q.length < 2) { showPopular(); return; }
     for (const p of searchLocal(q)) addItem(p.icon, p.title, p.sub, p.lat, p.lon);
     box.hidden = box.children.length === 0;
-    const mine = ++seq;
     if (q.length < 3) return;
     timer = setTimeout(async () => {
       const list = await searchOnline(q);
-      if (mine !== seq) return;
+      // Late answers are dropped: the text has changed, or the user has already left the field.
+      if (mine !== seq || document.activeElement !== input) return;
       for (const p of list) addItem('pin', p.title, p.sub, p.lat, p.lon);
       if (!box.children.length) box.appendChild(el('div', 'empty', 'কিছু পাওয়া যায়নি — অন্য বানানে লিখে দেখুন, অথবা ম্যাপে চাপ দিয়ে বেছে নিন।'));
       box.hidden = false;
@@ -262,9 +275,9 @@ function wireSuggest(input, box, onPick, onType) {
   });
   input.addEventListener('keydown', e => {
     const first = box.querySelector('.sug');
-    if (e.key === 'Enter' && first && !box.hidden) { e.preventDefault(); first.dispatchEvent(new MouseEvent('mousedown', { cancelable: true })); input.blur(); }
+    if (e.key === 'Enter' && first && !box.hidden && input.value.trim().length >= 2) { e.preventDefault(); first.dispatchEvent(new MouseEvent('mousedown', { cancelable: true })); input.blur(); }
   });
-  input.addEventListener('blur', () => { box.hidden = true; });
+  input.addEventListener('blur', () => { box.hidden = true; seq++; });
 }
 
 // ---- Search box (used on Home and on the map page; both stay in sync through `trip`) ----
@@ -327,6 +340,7 @@ function saveRecent(from, to) {
   const same = r => r.from.label === from.label && r.to.label === to.label;
   const list = [{ from, to }, ...loadRecent().filter(r => !same(r))].slice(0, 4);
   try { localStorage.setItem(RECENT_KEY, JSON.stringify(list)); } catch { /* storage unavailable */ }
+  if (typeof syncAccount === 'function') syncAccount();
 }
 function renderRecent() {
   const box = $('recent'), list = loadRecent();
@@ -388,7 +402,7 @@ function renderRecent() {
 // MapLibre GL with vector tiles: text and roads are drawn on the device, so the map stays sharp on any
 // screen, can tilt into 3D, and can be restyled. Tiles: OpenFreeMap (OpenStreetMap data), no API key.
 let map = null, mapReady = null, driverMarker = null, rideTimer = null, is3D = false, stopPopup = null;
-let lastKey = '', pendingBus = null;
+let lastKey = '', pendingBus = null, pendingPath = null;
 const markers = { from: null, to: null };
 const drawTokens = {};
 const EMPTY = { type: 'FeatureCollection', features: [] };
@@ -687,6 +701,17 @@ function drawBanglaLabels() {
   }));
   bnLabels.items = items;
   placeBanglaLabels();
+
+  // The map spaced these names for its own invisible text; ours can be wider. Keep the important ones
+  // (places, then roads and water, then shops) and hide any name that would print over one already kept.
+  const rank = { country: 0, city: 1, town: 2, state: 3, village: 4, road: 5, water: 6, poi: 7 };
+  const kept = [];
+  for (const it of [...items].sort((a, b) => rank[a.kind] - rank[b.kind])) {
+    const r = it.node.getBoundingClientRect();
+    const clash = kept.some(k => r.left < k.right + 4 && r.right > k.left - 4 && r.top < k.bottom + 2 && r.bottom > k.top - 2);
+    it.node.style.visibility = clash ? 'hidden' : '';
+    if (!clash) kept.push(r);
+  }
 }
 function initBanglaLabels() {
   if (bnLabels.box) return;
@@ -798,6 +823,7 @@ function drawLines(source, lines) {
     type: 'Feature', properties: { color: l.color || '' },
     geometry: { type: 'LineString', coordinates: l.coords.slice(0, Math.max(2, Math.ceil(l.coords.length * part))) } })) });
   const src = map.getSource(source);
+  if (!src) return;                               // the map is still loading; there is nothing drawn to change
   if (!lines.length) { src.setData(EMPTY); return; }
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) { src.setData(data(1)); return; }
   const start = performance.now();
@@ -812,19 +838,22 @@ function drawLines(source, lines) {
 
 function clearBus() {
   drawLines('bus', []);
-  map.getSource('stops').setData(EMPTY);
+  if (map.getSource('stops')) map.getSource('stops').setData(EMPTY);
   if (stopPopup) stopPopup.remove();
 }
 
-function showBusOnMap(segs) {
+// Draws one or two stop-to-stop paths (bus legs, or a train's stations) with a dot at every stop.
+// Each path is a list of { lat, lon, name }.
+function showPathOnMap(paths) {
   const colors = ['#0a8f62', '#6b4de6'];
-  const lines = segs.map((seg, n) => ({ color: colors[n % 2], coords: seg.map(id => [STOPS[id].lon, STOPS[id].lat]) }));
+  const lines = paths.map((pts, n) => ({ color: colors[n % 2], coords: pts.map(p => [p.lon, p.lat]) }));
   fit(lines.flatMap(l => l.coords));
   drawLines('bus', lines);
-  map.getSource('stops').setData({ type: 'FeatureCollection', features: segs.flatMap((seg, n) => seg.map(id => ({
-    type: 'Feature', properties: { name: STOPS[id].bn, color: colors[n % 2] },
-    geometry: { type: 'Point', coordinates: [STOPS[id].lon, STOPS[id].lat] } }))) });
+  map.getSource('stops').setData({ type: 'FeatureCollection', features: paths.flatMap((pts, n) => pts.map(p => ({
+    type: 'Feature', properties: { name: p.name, color: colors[n % 2] },
+    geometry: { type: 'Point', coordinates: [p.lon, p.lat] } }))) });
 }
+const showBusOnMap = segs => showPathOnMap(segs.map(seg => seg.map(id => ({ lat: STOPS[id].lat, lon: STOPS[id].lon, name: STOPS[id].bn }))));
 
 // Tilted view with real relief and 3D buildings, or flat and north-up.
 function set3D(on) {
@@ -854,10 +883,20 @@ function renderBusPane(km) {
         showBusOnMap(t.legs.map(l => l.seg));
       });
       if (t.legs.length > 1) card.querySelector('.t').appendChild(el('span', 'badge v', `${STOPS[last.seg[0]].bn}-এ বাস বদল`));
+      else if (fareIsConfirmed(first.seg[0], first.seg[first.seg.length - 1])) card.querySelector('.t').appendChild(el('span', 'badge g', 'যাচাই করা ভাড়া'));
       list.appendChild(card);
     }
     stagger(list);
     pane.appendChild(list);
+    const direct = trips.find(t => t.legs.length === 1);
+    if (direct) {
+      const seg = direct.legs[0].seg;
+      const fix = el('button', 'text-btn');
+      fix.innerHTML = svg('edit');
+      fix.appendChild(document.createTextNode('ভাড়া ঠিক নয়? আসল ভাড়া জানান'));
+      fix.addEventListener('click', () => askFare(seg[0], seg[seg.length - 1], km));
+      pane.appendChild(fix);
+    }
     return;
   }
 
@@ -867,10 +906,35 @@ function renderBusPane(km) {
     if (rule !== FARES.bus.intercity) pane.appendChild(el('div', 'empty', 'এই পথের বাসের নাম এখনো আমাদের কাছে নেই।'));
     return;
   }
-  pane.appendChild(fareTiles(rule, km));
+  pane.appendChild(fareTiles(rule, km, officialFare(a, b)));
   const counter = counterFare(a, b);
   if (counter) pane.appendChild(counter);
   pane.append(el('div', 'label', `${a.bn} – ${b.bn} রুটের বাস`), operatorChips(a, b));
+}
+
+// A small form: the fare someone really paid between two stops. It is saved on the server and, from then
+// on, shown to everyone in place of the calculated fare.
+function askFare(a, b, km) {
+  const input = el('input');
+  Object.assign(input, { type: 'number', min: 5, max: 2000, step: 5, inputMode: 'numeric', placeholder: '৳' });
+  const field = el('label', 'money');
+  field.append(el('span', null, 'আপনি কত ভাড়া দিয়েছেন? (টাকা)'), input);
+  const note = el('div', 'empty', 'আপনার জানানো ভাড়া সবার জন্য দেখানো হবে।');
+  const send = button('edit', 'জমা দিন', async () => {
+    const fare = Math.round(+input.value);
+    if (!(fare >= 5 && fare <= 2000)) { note.textContent = '৫ থেকে ২০০০ টাকার মধ্যে একটি সংখ্যা লিখুন।'; return; }
+    send.disabled = true;
+    try {
+      await reportFare(a, b, fare);
+      closeModal();
+      renderBusPane(km);
+    } catch {
+      send.disabled = false;
+      note.textContent = 'জমা দেওয়া যায়নি। ইন্টারনেট সংযোগ দেখে আবার চেষ্টা করুন।';
+    }
+  });
+  openModal('আসল ভাড়া জানান', `${STOPS[a].bn} → ${STOPS[b].bn}`, [field, note], [send]);
+  input.focus();
 }
 
 function renderRidePane(km, min) {
@@ -881,9 +945,11 @@ function renderRidePane(km, min) {
     pane.appendChild(item(icon, name, sub, taka(price), node => { selectOnly(node); requestRide(name, price); }));
   };
   if (km <= FARES.cng.maxKm) add('cng', 'সিএনজি', 'মিটার রেট', cngFare(km));
-  for (const r of FARES.rides) if (km <= r.maxKm) add(r.id, r.name, r.sub, rideFare(r, km, min));
+  for (const r of FARES.rides) if (km <= r.maxKm) add(r.id, r.name, r.sub, rideFare(r, km, min, trip.from));
   const any = pane.children.length > 0;
   $('seg').hidden = !any;
+  $('seg').querySelector('[data-pane=ride]').hidden = !any;      // too far for a ride: no empty tab
+  if (!any && !pane.hidden) showPane('bus');
   if (any) {
     stagger(pane);
     const toast = el('div', 'toast');
@@ -915,8 +981,7 @@ function requestRide(name, price) {
 
 function showPane(name) {
   for (const b of $('seg').children) b.classList.toggle('on', b.dataset.pane === name);
-  $('pane-bus').hidden = name !== 'bus';
-  $('pane-ride').hidden = name !== 'ride';
+  for (const p of ['bus', 'ride', 'train']) $('pane-' + p).hidden = name !== p;
 }
 
 async function calculate() {
@@ -939,6 +1004,8 @@ async function calculate() {
   clearBus();
   renderBusPane(km);
   renderRidePane(km, min);
+  renderTrainPane();
+  if (typeof showCommunityFares === 'function') showCommunityFares();
   showPane('bus');
 
   fit(r.geometry.coordinates);
@@ -963,7 +1030,10 @@ enter.trip = async () => {
   try { await ensureMap(); } catch { return; }
   if (current !== 'trip') return;
   drawMarkers();
-  if (pendingBus) {
+  if (pendingPath) {
+    showPathOnMap(pendingPath);
+    pendingPath = null;
+  } else if (pendingBus) {
     showBusOnMap([pendingBus]);
     pendingBus = null;
   } else if (trip.from && trip.to) {
@@ -1055,7 +1125,41 @@ for (const b of $('seg').children) b.addEventListener('click', () => showPane(b.
     });
     $('hubs').appendChild(chip);
   }
-  $('bus-filter').addEventListener('input', render);
+  // Suggestions as you type: buses by name first, then stops and places (any spelling).
+  const filter = $('bus-filter'), sugBox = $('bus-suggest');
+  function suggest() {
+    const q = filter.value.trim();
+    sugBox.replaceChildren();
+    const rows = [];
+    if (q.length < 2) {                              // nothing typed: the busiest stops
+      sugBox.appendChild(el('div', 'sug-head', 'জনপ্রিয় স্টপ'));
+      for (const s of busiestStops(7)) rows.push(['pin', s.bn, `বাস স্টপ · ${num(s.use)} টি বাস`, s.bn]);
+    } else {
+    // A bus whose own name starts with what was typed comes first; then places; then buses that merely match.
+    const low = q.toLowerCase(), named = [], loose = [];
+    for (const r of LOCAL_ROUTES) {
+      if (!matches(r, q)) continue;
+      const row = ['bus', r.bn, `${STOPS[r.stops[0]].bn} – ${STOPS[r.stops[r.stops.length - 1]].bn}`, r.bn];
+      (r.bn.startsWith(q) || (r.en || '').toLowerCase().startsWith(low) ? named : loose).push(row);
+    }
+    rows.push(...named.slice(0, 4));
+    for (const p of searchLocal(q, 5)) rows.push([p.icon === 'bus' ? 'pin' : p.icon, p.title, p.sub, p.title]);
+    rows.push(...loose.slice(0, Math.max(0, 3 - named.length)));
+    }
+    for (const [icon, title, sub, value] of rows) {
+      const row = el('div', 'sug');
+      const t = el('div', 't');
+      t.append(el('b', null, title), el('span', null, sub));
+      row.append(ic(icon), t);
+      row.addEventListener('mousedown', e => { e.preventDefault(); filter.value = tr(value); sugBox.hidden = true; filter.blur(); render(); });
+      sugBox.appendChild(row);
+    }
+    sugBox.hidden = !rows.length;
+  }
+  filter.addEventListener('input', () => { suggest(); render(); });
+  filter.addEventListener('focus', suggest);
+  filter.addEventListener('blur', () => { sugBox.hidden = true; });
+  filter.addEventListener('keydown', e => { if (e.key === 'Enter') { sugBox.hidden = true; filter.blur(); } });
   render();
 })();
 
@@ -1100,7 +1204,7 @@ for (const b of $('seg').children) b.addEventListener('click', () => showPane(b.
     const btn = button('route', 'ম্যাপে দেখুন', () => { trip.from = asPlace(a); setPlace('to', asPlace(b)); }, true);
     const actions = el('div', 'actions');
     actions.appendChild(btn);
-    box.append(head, fareTiles(busRule(a, b), km));
+    box.append(head, fareTiles(busRule(a, b), km, officialFare(a, b)));
     const counter = counterFare(a, b);
     if (counter) box.appendChild(counter);
     box.append(el('div', 'label', 'এই রুটের বাস'), operatorChips(a, b), actions);
@@ -1133,10 +1237,16 @@ for (const b of $('seg').children) b.addEventListener('click', () => showPane(b.
 
   function openDistrict(d) {
     const body = [photoStrip(asPlace(d), 3000)];
-    const f = MARKET_FARES[d.id];
+    const f = MARKET_FARES[d.id], official = officialFare(dhaka, d);
+    if (official) {
+      const tiles = el('div', 'tiles');
+      tiles.append(tile('main', 'নন-এসি · বিআরটিএ নির্ধারিত', taka(official.f51), `৫১ আসনের বাস · ${official.terminal} থেকে`),
+                   tile('', '৪০ আসনের বাস', taka(official.f40), `${num(official.km)} কিমি · টোলসহ`));
+      body.push(tiles);
+    }
     if (f) {
       const tiles = el('div', 'tiles');
-      tiles.appendChild(tile('main', 'নন-এসি · কাউন্টারে', fareRange(f[0], f[1]), 'ঢাকা থেকে'));
+      tiles.appendChild(tile(official ? '' : 'main', 'নন-এসি · কাউন্টারে', fareRange(f[0], f[1]), 'অনানুষ্ঠানিক তালিকা'));
       tiles.appendChild(f.length > 2 ? tile('', 'এসি · কাউন্টারে', fareRange(f[2], f[3]), 'কোম্পানি ভেদে আলাদা')
                                      : tile('', 'এসি', '—', 'তথ্য নেই'));
       body.push(tiles);
@@ -1175,7 +1285,7 @@ for (const b of $('seg').children) b.addEventListener('click', () => showPane(b.
     (cache.has(key) ? Promise.resolve(cache.get(key)) : getRoute([dhaka, d]).then(r => (cache.set(key, r), r)))
       .then(r => {
         const km = r.distance / 1000;
-        road.textContent = `সড়কপথে ${num(km, 1)} কিমি · প্রায় ${fmtMin(r.duration / 60)} · সরকারি হারে আনুমানিক ${taka(busFare(busRule(dhaka, d), km))}`;
+        road.textContent = `সড়কপথে ${num(km, 1)} কিমি · প্রায় ${fmtMin(r.duration / 60)}` + (official ? '' : ` · সরকারি হারে আনুমানিক ${taka(busFare(busRule(dhaka, d), km))}`);
       })
       .catch(() => { road.textContent = 'দূরত্ব বের করা যায়নি।'; });
   }
@@ -1191,8 +1301,8 @@ for (const b of $('seg').children) b.addEventListener('click', () => showPane(b.
       const grid = el('div', 'grid');
       for (const d of list) {
         const card = el('button', 'card district-card');
-        const f = MARKET_FARES[d.id];
-        card.append(el('b', null, d.bn), el('span', null, f ? `ঢাকা থেকে ${fareRange(f[0], f[1])}` : d.id === 'dhaka' ? 'রাজধানী' : 'ভাড়া দেখুন'));
+        const f = MARKET_FARES[d.id], official = BRTA_FARES[d.id];
+        card.append(el('b', null, d.bn), el('span', null, official ? `ঢাকা থেকে ${taka(official[2])}` : f ? `ঢাকা থেকে ${fareRange(f[0], f[1])}` : d.id === 'dhaka' ? 'রাজধানী' : 'ভাড়া দেখুন'));
         card.addEventListener('click', () => openDistrict(d));
         grid.appendChild(card);
       }
@@ -1216,7 +1326,8 @@ let nearbyAt = () => {};
   const input = $('near-input'), note = $('near-note'), list = $('near-list');
 
   // Facts OpenStreetMap holds about a place, as short labels.
-  const facts = p => [p.x.em && 'জরুরি বিভাগ', p.x.gov && 'সরকারি', p.x.pvt && 'বেসরকারি', p.x.beds && `${num(p.x.beds)} শয্যা`].filter(Boolean);
+  const facts = p => [p.x.kind, p.x.em && 'জরুরি বিভাগ', p.x.gov && 'সরকারি', p.x.pvt && 'বেসরকারি', p.x.beds && `${num(p.x.beds)} শয্যা`,
+                      p.x.hours === '24/7' && '২৪ ঘণ্টা খোলা', p.x.ph && 'ফোন আছে'].filter(Boolean);
 
   function openPlace(p) {
     const body = [photoStrip({ lat: p.lat, lon: p.lon, label: p.title })];
@@ -1224,9 +1335,10 @@ let nearbyAt = () => {};
     if (f.length || p.sub) {
       const chips = el('div', 'chips');
       if (p.sub) chips.appendChild(el('div', 'chip', p.sub));
-      chips.append(...f.map(t => el('div', 'chip', t)));
+      chips.append(...f.filter(t => t !== 'ফোন আছে').map(t => el('div', 'chip', t)));
       body.push(chips);
     }
+    if (p.x.hours && p.x.hours !== '24/7') body.push(el('div', 'label', 'খোলা থাকে'), el('div', 'empty no-tr', p.x.hours));
     body.push(el('div', 'label', 'রেটিং দিন'), ratingStars(placeKey(p), draw),
       el('div', 'empty', RATINGS_ONLINE ? 'আপনার রেটিং সবার রেটিংয়ের সাথে যোগ হয়।' : 'সার্ভার ছাড়া চলছে — রেটিং শুধু এই ডিভাইসে থাকছে।'));
     const actions = [button('route', 'রুট দেখুন', () => { closeModal(); goTo({ lat: p.lat, lon: p.lon, label: p.title }); })];
@@ -1237,6 +1349,13 @@ let nearbyAt = () => {};
       call.appendChild(document.createTextNode(p.x.ph));
       actions.push(call);
     }
+    const g = el('a', 'btn quiet');                    // Google's own page for the spot: reviews, photos, live hours
+    g.href = `https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lon}`;
+    g.target = '_blank';
+    g.rel = 'noopener';
+    g.innerHTML = svg('pin');
+    g.appendChild(document.createTextNode('Google Maps'));
+    actions.push(g);
     openModal(p.title, `${cat.bn} · ${distText(p.km)} দূরে`, body, actions);
   }
 
@@ -1247,7 +1366,7 @@ let nearbyAt = () => {};
     const rows = byRating && rated
       ? [...found].sort((a, b) => ratingScore(placeKey(b)) - ratingScore(placeKey(a)) || a.km - b.km)
       : found;
-    for (const p of rows.slice(0, 30)) {
+    for (const p of rows.slice(0, 48)) {
       const sub = [ratingText(placeKey(p)), p.sub, ...facts(p)].filter(Boolean).join(' · ');
       list.appendChild(item(cat.icon, p.title, sub, distText(p.km), () => openPlace(p)));
     }
@@ -1265,7 +1384,8 @@ let nearbyAt = () => {};
     const mine = ++seq;
     list.replaceChildren(el('div', 'skeleton'));
     note.textContent = `${center.label}-এর কাছের ${cat.bn} খোঁজা হচ্ছে…`;
-    try { found = await searchNearby(center, cat.tag); }
+    const count = () => { note.textContent = `${center.label}-এর কাছে ${num(found.length)} টি ${cat.bn} · চাপ দিলে বিস্তারিত`; };
+    try { found = await searchNearby(center, cat.tag, more => { if (mine === seq && more.length >= found.length) { found = more; count(); draw(); } }); }
     catch {
       if (mine === seq) { found = []; list.replaceChildren(); note.textContent = 'খোঁজা যায়নি। ইন্টারনেট সংযোগ দেখে আবার চেষ্টা করুন।'; }
       return;
@@ -1320,7 +1440,7 @@ let nearbyAt = () => {};
     // A city bus trip longer than the metro area makes no sense, so it drops out past the CNG range too.
     const rows = [];
     if (km <= cng.maxKm) rows.push(['bus', 'শহরের বাস', taka(busFare(bus.metro, km)), bus.metro.perKm]);
-    rows.push(['send', 'দূরপাল্লার বাস', taka(busFare(bus.intercity, km)), bus.intercity.perKm]);
+    if (km >= 40) rows.push(['send', 'দূরপাল্লার বাস', taka(busFare(bus.intercity, km)), bus.intercity.perKm]);   // the shortest route in BRTA's charts is 42 km
     if (km <= cng.maxKm) rows.push(['cng', 'সিএনজি', taka(cngFare(km)), cng.perKm]);
     for (const r of rides) if (km <= r.maxKm) rows.push([r.id, r.name, taka(rideFare(r, km, min)), r.perKm]);
     tiles.replaceChildren(...rows.map(([icon, label, value, rate], i) => {
@@ -1360,6 +1480,7 @@ let nearbyAt = () => {};
     $('rules').appendChild(card);
   }
   stagger($('rules'));
+  $('rules').lastChild.appendChild(el('div', 'foot', FARES.rideSource));
   $('rules-foot').textContent = `কিমি-প্রতি হার সরকার নির্ধারিত, ${FARES.effective} থেকে। অ্যাপের ভাড়া এই হার × আনুমানিক দূরত্ব — ` +
     'বিআরটিএর রুটভিত্তিক তালিকার সাথে কিছু কমবেশি হতে পারে (সেতুর টোল ধরা নেই)। এসি বাসের ভাড়া কোম্পানি ঠিক করে।';
 })();
@@ -1372,6 +1493,7 @@ startTranslating();
 route();
 setTimeout(() => getMapStyle().catch(() => {}), 1200);   // warm the map style while the user is still on Home
 // Shared ratings arrive after first paint; cards drawn earlier pick up the averages on their next draw.
+loadFareReports();
 loadRatings().then(() => { for (const box of document.querySelectorAll('#op-grid .rate')) box.dispatchEvent(new Event('refresh')); });
 loadIndex().then(n => {
   const stat = document.querySelector('[data-count=places]');
