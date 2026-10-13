@@ -138,8 +138,7 @@ async function drawProfile() {
   if (mine) actions.append(button('edit', 'প্রোফাইল এডিট', () => openProfile(), true), button('plus', 'নতুন পোস্ট', openNewPost));
   else {
     actions.appendChild(followButton(u, drawProfile, true));
-    if (u.relation === 'mutual') actions.appendChild(button('chat', 'মেসেজ', () => { go('chat'); openThread(u.id); }, true));
-    else if (u.relation === 'following') actions.appendChild(el('span', 'prof-hint', 'তিনি ফলো ব্যাক করলে মেসেজ করা যাবে'));
+    actions.appendChild(button('chat', 'মেসেজ', () => openThreadWith(u), true));
   }
   card.append(top, info, actions);
 
@@ -148,6 +147,7 @@ async function drawProfile() {
   const show = which => {
     for (const t of tabs.children) t.classList.toggle('on', t.dataset.tab === which);
     if (which === 'posts') postGrid(pane, u.id, mine ? 'এখনো কিছু পোস্ট করেননি। ঘুরে আসা জায়গার একটি ছবি দিন।' : 'এখনো কোনো পোস্ট নেই।');
+    else if (which === 'saved') postGrid(pane, 0, 'এখনো কিছু সেভ করেননি। পোস্টের নিচের বুকমার্ক চিহ্নে চাপ দিন।', '', true);
     else {
       const rows = d.fares.map(f => { const row = item(FARE_MODE_ICONS[f.mode], `${f.from} → ${f.to}`, FARE_MODE_NAMES[f.mode], taka(f.fare)); row.querySelector('.t b').classList.add('no-tr'); return row; });
       const none = el('div', 'prof-none');
@@ -156,7 +156,7 @@ async function drawProfile() {
       pane.replaceChildren(...(rows.length ? rows : [none]));
     }
   };
-  for (const [which, icon, text] of [['posts', 'grid', 'পোস্ট'], ['fares', 'tag', `জানানো ভাড়া · ${num(d.fares.length)}`]]) {
+  for (const [which, icon, text] of [['posts', 'grid', 'পোস্ট'], ...(mine ? [['saved', 'bookmark', 'সেভ করা']] : []), ['fares', 'tag', `ভাড়া · ${num(d.fares.length)}`]]) {
     const t = el('button');
     t.dataset.tab = which;
     t.innerHTML = svg(icon);
@@ -171,6 +171,14 @@ async function drawProfile() {
 // ---- settings ----
 (function initSettings() {
   $('set-edit').addEventListener('click', () => (ME ? openProfile() : openLogin()));
+  // Theme: dark unless the person chose otherwise. The choice is read before the page draws, so changing it reloads.
+  let theme = 'dark';
+  try { theme = localStorage.getItem('bdmap.theme') || 'dark'; } catch { /* storage unavailable */ }
+  for (const b of $('theme-pick').children) {
+    b.classList.toggle('on', b.dataset.themeSet === theme);
+    b.addEventListener('click', () => { try { localStorage.setItem('bdmap.theme', b.dataset.themeSet); } catch { /* storage unavailable */ } location.reload(); });
+  }
+  document.querySelector('meta[name=theme-color]').content = document.documentElement.dataset.theme === 'dark' ? '#000000' : '#f5f5f7';
   $('set-logout').addEventListener('click', logOut);
   $('set-delete').addEventListener('click', confirmDelete);
   $('people-open').addEventListener('click', openPeopleSearch);

@@ -6,11 +6,9 @@
   --shadow: 0 1px 2px rgba(11, 15, 20, .04), 0 6px 20px rgba(11, 15, 20, .06); --shadow-2: 0 18px 60px rgba(11, 15, 20, .18);
   --ease: cubic-bezier(.2, .8, .2, 1); --side: 252px;
 }
-@media (prefers-color-scheme: dark) {
-  :root { --bg: #000; --surface: #131416; --raised: #1c1d21; --ink: #f5f5f7; --ink-2: #b4b9c2; --muted: #7d8591; --line: rgba(255, 255, 255, .1);
+:root[data-theme=dark] { --bg: #000; --surface: #131416; --raised: #1c1d21; --ink: #f5f5f7; --ink-2: #b4b9c2; --muted: #7d8591; --line: rgba(255, 255, 255, .1);
           --accent: #2fd39a; --accent-soft: #0f2a21; --violet: #9d86ff; --violet-soft: #1d1836; --warn: #ffb648; --warn-soft: #2e2110; --bad: #ff6b5e; --bad-soft: #2e1512;
           --shadow: 0 1px 2px rgba(0, 0, 0, .5); --shadow-2: 0 18px 60px rgba(0, 0, 0, .7); }
-}
 * { box-sizing: border-box; }
 html, body { height: 100%; }
 body { margin: 0; background: var(--bg); color: var(--ink); font: 400 16px/1.5 'Anek Bangla', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }

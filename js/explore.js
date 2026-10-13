@@ -20,6 +20,22 @@ const agoText = ts => {
 };
 const svgEl = (name, cls) => Object.assign(el('i', cls || ''), { innerHTML: svg(name) });
 
+function exploreNote(text) { chatToast(ME || { id: 0, name: 'BD Map' }, text); }
+// Share a post: the phone's own share sheet where there is one, otherwise the link is copied.
+async function sharePost(p) {
+  const url = `${location.origin}${location.pathname}?post=${p.id}#/explore`;
+  try {
+    if (navigator.share) await navigator.share({ title: 'BD Map', text: p.caption || p.user.name, url });
+    else { await navigator.clipboard.writeText(url); exploreNote('লিংক কপি হয়েছে।'); }
+  } catch { /* the share sheet was closed */ }
+}
+async function toggleSave(p, repaint) {
+  if (!ME) { openLogin(); return; }
+  p.saved = !p.saved;
+  repaint();
+  try { Object.assign(p, await exploreApi('save', { id: p.id })); repaint(); if (p.saved) exploreNote('সেভ করা হয়েছে — প্রোফাইলে পাবেন।'); } catch { /* keeps what was shown */ }
+}
+
 // Like or unlike. The heart and the count change at once; the server's answer then settles the number.
 async function toggleLike(p, repaint) {
   if (!ME) { openLogin(); return; }
@@ -72,7 +88,10 @@ function feedCard(p, onGone) {
   like.innerHTML = svg('heart');
   like.setAttribute('aria-label', 'লাইক');
   like.addEventListener('click', () => toggleLike(p, paint));
-  if (p.kind === 'video') {
+  if (p.kind === 'text') {
+    media.className = 'fc-text g' + (p.id % 5) + (p.caption.length > 140 ? ' long' : '');
+    media.appendChild(Object.assign(el('p', 'no-tr'), { textContent: p.caption }));
+  } else if (p.kind === 'video') {
     const v = el('video');
     Object.assign(v, { src: p.src, poster: p.poster, muted: true, loop: true, playsInline: true, preload: 'metadata' });
     const speaker = el('button', 'fc-sound' + (feedSound ? ' on' : ''));
@@ -111,7 +130,17 @@ function feedCard(p, onGone) {
   talk.innerHTML = svg('chat');
   talk.setAttribute('aria-label', 'মন্তব্য');
   talk.addEventListener('click', () => openPost(p.id, onGone));
-  bar.append(like, talk);
+  const send = el('button', 'fc-btn');
+  send.innerHTML = svg('share');
+  send.setAttribute('aria-label', 'শেয়ার');
+  send.addEventListener('click', () => sharePost(p));
+  const keep = el('button', 'fc-btn keep');
+  keep.innerHTML = svg('bookmark');
+  keep.setAttribute('aria-label', 'সেভ');
+  const paintKeep = () => keep.classList.toggle('on', p.saved);
+  paintKeep();
+  keep.addEventListener('click', () => toggleSave(p, paintKeep));
+  bar.append(like, talk, send);
   if (p.place) {
     const pin = el('button', 'fc-btn');
     pin.innerHTML = svg('pin');
@@ -119,9 +148,10 @@ function feedCard(p, onGone) {
     pin.addEventListener('click', () => goTo(p.place));
     bar.appendChild(pin);
   }
+  bar.appendChild(keep);
   const body = el('div', 'fc-body');
   body.appendChild(count);
-  if (p.caption) {
+  if (p.caption && p.kind !== 'text') {
     const cap = el('p', 'fc-cap no-tr');
     cap.append(el('b', null, p.user.name), document.createTextNode(' ' + p.caption));
     body.appendChild(cap);
@@ -138,7 +168,8 @@ function feedCard(p, onGone) {
 function postTile(p, onGone, user) {
   const tile = el('button', 'tile-post');
   const img = Object.assign(el('img'), { loading: 'lazy', alt: p.caption || '', src: p.kind === 'video' ? p.poster : p.src });
-  if (p.kind === 'video' && !p.poster) tile.classList.add('blank'); else tile.appendChild(img);
+  if (p.kind === 'text') { tile.classList.add('texty', 'g' + (p.id % 5)); tile.appendChild(Object.assign(el('span', 'tt no-tr'), { textContent: p.caption })); }
+  else if (p.kind === 'video' && !p.poster) tile.classList.add('blank'); else tile.appendChild(img);
   if (p.kind === 'video') tile.appendChild(svgEl('play', 'play'));
   const meta = el('span', 'meta');
   meta.append(svgEl('heart'), document.createTextNode(num(p.likes)));
@@ -148,14 +179,14 @@ function postTile(p, onGone, user) {
 }
 
 // A grid of one person's posts (or of a search), a page at a time.
-function postGrid(box, user, emptyText, query) {
+function postGrid(box, user, emptyText, query, saved) {
   const grid = el('div', 'post-grid'), more = el('button', 'btn quiet more-posts', 'আরও দেখুন');
   let last = 0, busy = false;
   async function load() {
     if (busy) return;
     busy = true;
     let posts = [];
-    try { posts = (await exploreApi(`feed?user=${user}${last ? '&before=' + last : ''}${query ? '&q=' + encodeURIComponent(query) : ''}`)).posts; } catch { /* shows what is there */ }
+    try { posts = (await exploreApi(`feed?user=${user}${last ? '&before=' + last : ''}${query ? '&q=' + encodeURIComponent(query) : ''}${saved ? '&saved=1' : ''}`)).posts; } catch { /* shows what is there */ }
     for (const p of posts) grid.appendChild(postTile(p, reload, user));
     if (posts.length) last = posts[posts.length - 1].id;
     more.hidden = posts.length < 30;
@@ -179,7 +210,8 @@ async function openPost(id, onGone) {
   try { data = await exploreApi('post?id=' + id); } catch { return; }
   const p = data.post;
   const media = el('div', 'post-media');
-  if (p.kind === 'video') media.appendChild(Object.assign(el('video'), { src: p.src, poster: p.poster, controls: true, playsInline: true, preload: 'metadata' }));
+  if (p.kind === 'text') { media.className = 'fc-text g' + (p.id % 5); media.appendChild(Object.assign(el('p', 'no-tr'), { textContent: p.caption })); }
+  else if (p.kind === 'video') media.appendChild(Object.assign(el('video'), { src: p.src, poster: p.poster, controls: true, playsInline: true, preload: 'metadata' }));
   else media.appendChild(Object.assign(el('img'), { src: p.src, alt: p.caption }));
 
   const who = el('div', 'person tap post-who');
@@ -228,7 +260,7 @@ async function openPost(id, onGone) {
     try { addComment((await exploreApi('comment', { id, body: text })).comment); $('m-body').scrollTop = $('m-body').scrollHeight; } catch { input.value = text; }
   });
   const caption = Object.assign(el('p', 'post-caption no-tr'), { textContent: p.caption });
-  openModal('', '', [media, who, bar, ...(p.caption ? [caption] : []), list], [form]);
+  openModal('', '', [media, who, bar, ...(p.caption && p.kind !== 'text' ? [caption] : []), list], [form]);
   $('modal').classList.add('post-modal');
 }
 
@@ -314,6 +346,108 @@ async function openReels(startId, user) {
 }
 addEventListener('hashchange', closeReels);
 
+// ---- stories: a photo or video that stays for 24 hours ----
+const seenStories = () => { try { return JSON.parse(localStorage.getItem('bdmap.stories')) || {}; } catch { return {}; } };
+function markStorySeen(userId, storyId) {
+  const seen = seenStories();
+  if ((seen[userId] || 0) >= storyId) return;
+  seen[userId] = storyId;
+  try { localStorage.setItem('bdmap.stories', JSON.stringify(seen)); } catch { /* storage unavailable */ }
+}
+async function loadStories(row) {
+  let groups = [];
+  try { groups = (await exploreApi('stories')).stories; } catch { /* the row still offers to add one */ }
+  const seen = seenStories();
+  row.replaceChildren();
+  const add = el('button', 'face add');
+  add.append(avatar(ME || { id: 0, name: '+' }, 'lg'), svgEl('plus', 'badge'), el('span', null, 'আপনার স্টোরি'));
+  add.addEventListener('click', addStory);
+  row.appendChild(add);
+  groups.forEach((g, i) => {
+    const b = el('button', 'face' + ((seen[g.user.id] || 0) >= g.items.at(-1).id ? ' seen' : ''));
+    b.append(avatar(g.user, 'lg ring'), Object.assign(el('span', 'no-tr'), { textContent: ME && g.user.id === ME.id ? (LANG === 'en' ? 'You' : 'আপনি') : g.user.name }));
+    b.addEventListener('click', () => openStories(groups, i, () => loadStories(row)));
+    row.appendChild(b);
+  });
+  row.hidden = false;
+}
+function addStory() {
+  if (!ME) { openLogin(); return; }
+  const chooser = Object.assign(el('input'), { type: 'file', accept: 'image/*,video/mp4,video/webm,video/quicktime' });
+  chooser.addEventListener('change', async () => {
+    const file = chooser.files[0];
+    if (!file) return;
+    if (file.type.startsWith('video') && file.size > 50e6) { exploreNote('ভিডিওটি ৫০ এমবির বেশি।'); return; }
+    exploreNote('স্টোরি আপলোড হচ্ছে…');
+    try {
+      const video = file.type.startsWith('video');
+      const media = await uploadMedia(video ? file : await shrinkPhoto(file), video ? (file.type || 'video/mp4') : 'image/jpeg', () => {});
+      await exploreApi('story', { media, poster: video ? await videoPoster(file) : '' });
+      exploreNote('স্টোরি দেওয়া হয়েছে — ২৪ ঘণ্টা থাকবে।');
+      loadStories($('explore-people'));
+    } catch { exploreNote('স্টোরি দেওয়া যায়নি। আবার চেষ্টা করুন।'); }
+  });
+  chooser.click();
+}
+// The viewer: one story at a time, bars across the top, tap the right side for the next and the left for the last.
+function openStories(groups, start, onClose) {
+  let g = start, i = 0, timer = null, raf = 0;
+  const box = el('div', 'stories');
+  const bars = el('div', 'st-bars'), stage = el('div', 'st-stage'), head = el('div', 'st-head');
+  const close = () => { clearTimeout(timer); cancelAnimationFrame(raf); for (const v of box.querySelectorAll('video')) v.pause(); box.remove(); document.body.classList.remove('reels-open'); removeEventListener('keydown', key); if (onClose) onClose(); };
+  const step = d => {
+    i += d;
+    if (i < 0) { if (g === 0) { i = 0; } else { g--; i = groups[g].items.length - 1; } }
+    else if (i >= groups[g].items.length) { g++; i = 0; if (g >= groups.length) { close(); return; } }
+    show();
+  };
+  function show() {
+    clearTimeout(timer); cancelAnimationFrame(raf);
+    const group = groups[g], st = group.items[i];
+    markStorySeen(group.user.id, st.id);
+    bars.replaceChildren(...group.items.map((_, n) => { const b = el('i'); b.appendChild(el('b')); if (n < i) b.firstChild.style.width = '100%'; return b; }));
+    const fill = bars.children[i].firstChild;
+    const who = el('button', 'fc-who');
+    who.append(avatar(group.user, 'sm'), Object.assign(el('b', 'no-tr'), { textContent: group.user.name }), el('small', null, agoText(st.created)));
+    who.addEventListener('click', () => { close(); openProfilePage(group.user.id); });
+    const x = el('button', 'st-x');
+    x.innerHTML = svg('close');
+    x.addEventListener('click', close);
+    head.replaceChildren(who);
+    if (ME && (ME.id === group.user.id || ME.role !== 'user')) {
+      const del = el('button', 'st-x');
+      del.innerHTML = svg('trash');
+      del.addEventListener('click', async () => { await exploreApi('story-delete', { id: st.id }).catch(() => {}); close(); });
+      head.appendChild(del);
+    }
+    head.appendChild(x);
+    const run = ms => {
+      const t0 = performance.now();
+      const tick = () => { fill.style.width = Math.min(100, (performance.now() - t0) / ms * 100) + '%'; raf = requestAnimationFrame(tick); };
+      tick();
+      timer = setTimeout(() => step(1), ms);
+    };
+    if (st.kind === 'video') {
+      const v = Object.assign(el('video'), { src: st.src, poster: st.poster, playsInline: true, autoplay: true });
+      v.addEventListener('loadedmetadata', () => run(Math.min(30, v.duration || 15) * 1000));
+      v.play().catch(() => { v.muted = true; v.play().catch(() => {}); });
+      stage.replaceChildren(v);
+    } else { stage.replaceChildren(Object.assign(el('img'), { src: st.src, alt: '' })); run(5000); }
+  }
+  const prev = el('button', 'st-zone left'), next = el('button', 'st-zone right');
+  prev.setAttribute('aria-label', 'আগের'); next.setAttribute('aria-label', 'পরের');
+  prev.addEventListener('click', () => step(-1));
+  next.addEventListener('click', () => step(1));
+  const key = e => { if (e.key === 'Escape') close(); if (e.key === 'ArrowRight') step(1); if (e.key === 'ArrowLeft') step(-1); };
+  addEventListener('keydown', key);
+  const frame = el('div', 'st-frame');
+  frame.append(stage, bars, head, prev, next);
+  box.appendChild(frame);
+  document.body.appendChild(box);
+  document.body.classList.add('reels-open');
+  show();
+}
+
 // ---- a new post ----
 // A photo is redrawn at no more than 1600 px on its long side (a phone photo of 4-8 MB becomes ~300 KB).
 function shrinkPhoto(file) {
@@ -362,7 +496,7 @@ function openNewPost() {
   if (!ME) { openLogin(); return; }
   let file = null, place = null;
   const pick = el('button', 'post-pick');
-  pick.append(ic('image'), el('b', null, 'ছবি বা ভিডিও বেছে নিন'), el('span', null, 'ঘুরে আসা জায়গার একটি ছবি, অথবা ৫০ এমবি পর্যন্ত একটি ভিডিও'));
+  pick.append(ic('image'), el('b', null, 'ছবি বা ভিডিও বেছে নিন'), el('span', null, 'অথবা কিছু না বেছে শুধু লেখা পোস্ট করুন'));
   const chooser = Object.assign(el('input'), { type: 'file', accept: 'image/*,video/mp4,video/webm,video/quicktime', hidden: true });
   pick.addEventListener('click', () => chooser.click());
   const note = el('div', 'form-note');
@@ -377,7 +511,7 @@ function openNewPost() {
     pick.classList.add('has');
     pick.replaceChildren(view);
   });
-  const [capBox, caption] = field('ক্যাপশন', { rows: 2, maxLength: 500, placeholder: 'কোথায় গিয়েছিলেন, কেমন লাগল…' }, 'textarea');
+  const [capBox, caption] = field('লেখা', { rows: 3, maxLength: 1000, placeholder: 'কোথায় গিয়েছিলেন, কেমন লাগল…' }, 'textarea');
   const placeInput = Object.assign(el('input'), { autocomplete: 'off', placeholder: 'যেমন: কক্সবাজার, সাজেক' });
   const sug = el('div', 'suggest');
   sug.hidden = true;
@@ -388,7 +522,13 @@ function openNewPost() {
   bar.appendChild(el('i'));
   bar.hidden = true;
   const share = button('send', 'পোস্ট করুন', async () => {
-    if (!file) { fail('আগে একটি ছবি বা ভিডিও বেছে নিন।'); return; }
+    if (!file) {                                       // words only
+      if (caption.value.trim().length < 2) { fail('একটি ছবি বা ভিডিও বেছে নিন, অথবা কিছু লিখুন।'); return; }
+      share.disabled = true;
+      try { await exploreApi('post', { caption: caption.value }); closeModal(); if (current === 'explore') enter.explore(); else if (current === 'profile') drawProfile(); else go('explore'); }
+      catch { share.disabled = false; fail('পোস্ট করা যায়নি। সংযোগ দেখে আবার চেষ্টা করুন।'); }
+      return;
+    }
     share.disabled = true;
     bar.hidden = false;
     note.className = 'form-note';
@@ -439,8 +579,9 @@ function openNewPost() {
   }
   function start() { last = 0; done = false; busy = false; feed.replaceChildren(); more(); }
 
-  // People worth following: whoever has shared the most, shown as a row of faces above the feed.
-  async function faces() {
+  // Stories: the row of rings above the feed. The first one adds your own.
+  async function faces() { return loadStories(people); }
+  async function oldFaces() {
     let top = [];
     try { top = (await communityApi('top?n=50')).top; } catch { /* the row stays empty */ }
     people.replaceChildren();
@@ -478,7 +619,48 @@ function openNewPost() {
 
   // The next page loads as the end of the feed comes near.
   new IntersectionObserver(entries => { if (entries[0].isIntersecting && current === 'explore' && !feed.hidden && last) more(); }, { rootMargin: '600px' }).observe($('explore-end'));
-  enter.explore = () => { q.value = ''; results.hidden = true; feed.hidden = false; start(); faces(); };
+  enter.explore = () => {
+    q.value = ''; results.hidden = true; feed.hidden = false; start(); faces();
+    const wanted = Number(new URLSearchParams(location.search).get('post'));     // arrived by a shared link
+    if (wanted && !enter.explore.opened) { enter.explore.opened = true; openPost(wanted); }
+  };
   $('explore-new').addEventListener('click', () => openNewPost());
   if (current === 'explore') enter.explore();
+})();
+
+// ---- Home: the newest posts as a row of cards, and the faces of the people who share the most ----
+async function loadHomePosts() {
+  const row = $('home-posts');
+  let posts = [];
+  try { posts = (await exploreApi('feed')).posts.slice(0, 12); } catch { /* the row stays hidden */ }
+  row.replaceChildren();
+  for (const p of posts) {
+    const card = el('button', 'hp');
+    if (p.kind === 'text') { card.classList.add('texty', 'g' + (p.id % 5)); card.appendChild(Object.assign(el('p', 'no-tr'), { textContent: p.caption })); }
+    else if (p.kind === 'video' && !p.poster) card.classList.add('g4');
+    else card.appendChild(Object.assign(el('img'), { src: p.kind === 'video' ? p.poster : p.src, alt: p.caption || '', loading: 'lazy' }));
+    if (p.kind === 'video') card.appendChild(svgEl('play', 'play'));
+    const who = el('span', 'hp-who');
+    who.append(avatar(p.user, 'xs'), Object.assign(el('b', 'no-tr'), { textContent: p.user.name }));
+    card.appendChild(who);
+    card.addEventListener('click', () => (p.kind === 'video' ? openReels(p.id) : openPost(p.id, loadHomePosts)));
+    row.appendChild(card);
+  }
+  row.hidden = $('home-posts-head').hidden = !posts.length;
+  let top = [];
+  try { top = (await communityApi('top?n=50')).top; } catch { /* no faces */ }
+  const faces = $('home-leaders');
+  faces.replaceChildren(...top.slice(0, 5).map(p => avatar(p)));
+  if (top.length) faces.appendChild(el('span', 'more', `${num(top.length)} জন অবদান রেখেছেন`));
+}
+(function hookHome() {
+  dragScroll($('home-posts'));
+  const before = enter.home;
+  enter.home = () => {
+    if (before) before();
+    const h = new Date().getHours();
+    if (ME) $('home-hello').textContent = `${h < 12 ? 'শুভ সকাল' : h < 17 ? 'শুভ দুপুর' : h < 20 ? 'শুভ সন্ধ্যা' : 'শুভ রাত্রি'}, ${ME.name}`;
+    loadHomePosts();
+  };
+  if (current === 'home') enter.home();
 })();

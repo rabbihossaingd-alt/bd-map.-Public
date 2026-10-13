@@ -208,6 +208,25 @@ addEventListener('keydown', e => {
 }
 
 // ---- Router ----
+// Cards below the fold start slightly lowered and faded, and settle as they come into view. Only what is
+// off screen when the page opens is touched, and anything not seen within a few seconds is shown anyway, so
+// nothing can stay hidden.
+const revealer = 'IntersectionObserver' in window ? new IntersectionObserver(entries => {
+  for (const e of entries) if (e.isIntersecting) { e.target.classList.add('in'); revealer.unobserve(e.target); }
+}, { rootMargin: '0px 0px -8% 0px' }) : null;
+function revealOnScroll(root) {
+  if (!revealer) return;
+  const found = [...root.querySelectorAll('.card, .label, .page-head, .division, .tip, .faq, .help-topic')].filter(e => !e.classList.contains('reveal') && !e.closest('.modal, .chat, .sheet, .suggest'));
+  let n = 0;
+  for (const e of found) {
+    if (e.getBoundingClientRect().top < innerHeight * 0.92) continue;
+    e.classList.add('reveal');
+    e.style.transitionDelay = Math.min(n++ % 6, 5) * 45 + 'ms';
+    revealer.observe(e);
+    setTimeout(() => e.classList.add('in'), 4000);
+  }
+}
+
 function route() {
   let name = location.hash.replace(/^#\/?/, '') || 'home';
   if (name === 'intercity') name = 'districts';   // old link
@@ -218,6 +237,7 @@ function route() {
   document.body.dataset.page = current;
   scrollTo(0, 0);
   if (enter[current]) enter[current]();
+  requestAnimationFrame(() => revealOnScroll($('page-' + current)));
 }
 
 function go(name) {
@@ -406,7 +426,7 @@ let lastKey = '', pendingBus = null, pendingPath = null;
 const markers = { from: null, to: null };
 const drawTokens = {};
 const EMPTY = { type: 'FeatureCollection', features: [] };
-const isDark = () => matchMedia('(prefers-color-scheme: dark)').matches;
+const isDark = () => document.documentElement.dataset.theme === 'dark';     // set before the page draws (see index.html)
 const inBangladesh = (lat, lon) => lat >= BD_LNGLAT[0][1] && lat <= BD_LNGLAT[1][1] && lon >= BD_LNGLAT[0][0] && lon <= BD_LNGLAT[1][0];
 const TERRAIN_TILES = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png';
 
@@ -767,8 +787,20 @@ async function createMap() {
   document.querySelector('.maplibregl-ctrl-geolocate').parentElement.style.display = 'none';
   geo.on('trackuserlocationstart', () => $('tool-me').classList.add('on'));
   geo.on('trackuserlocationend', () => $('tool-me').classList.remove('on'));
-  geo.on('error', () => { $('tool-me').classList.remove('on'); setStatus('লোকেশন পাওয়া যায়নি — ব্রাউজারে লোকেশনের অনুমতি দিন।'); });
+  // GPS refused or unavailable: fall back to the rough area the internet connection is in (city level), so
+  // the map still opens near the person. It is labelled as approximate.
+  async function approxLocate(quiet) {
+    try {
+      const r = await (await fetch('https://ipapi.co/json/')).json();
+      if (!(r.latitude > 20 && r.latitude < 27 && r.longitude > 88 && r.longitude < 93)) throw new Error('outside');
+      map.flyTo({ center: [r.longitude, r.latitude], zoom: 12, duration: 1400 });
+      if (!quiet) setStatus(`জিপিএস পাওয়া যায়নি — ইন্টারনেট সংযোগ থেকে আনুমানিক এলাকা দেখানো হচ্ছে${r.city ? ' (' + r.city + ')' : ''}। সঠিক লোকেশনের জন্য ব্রাউজারে লোকেশনের অনুমতি দিন।`);
+    } catch { if (!quiet) setStatus('লোকেশন পাওয়া যায়নি — ব্রাউজারে লোকেশনের অনুমতি দিন।'); }
+  }
+  geo.on('error', () => { $('tool-me').classList.remove('on'); const quiet = quietLocate; quietLocate = false; approxLocate(quiet); });
   $('tool-me').addEventListener('click', () => { setStatus(''); geo.trigger(); });
+  locateMe = () => { quietLocate = true; geo.trigger(); };       // on opening: no complaint if location is refused
+  geo.on('geolocate', () => { quietLocate = false; });
 
   // Stop names: on hover with a mouse, on tap with a finger.
   stopPopup = new maplibregl.Popup({ closeButton: false, offset: 12, className: 'stop-popup' });
@@ -1026,10 +1058,14 @@ function clearTrip() {
   fit(BD_LNGLAT);
 }
 
+// Opening the map with nothing chosen shows where you are, the way a maps app does. Asked once per visit:
+// if the browser's permission prompt is turned down, the map simply stays on Bangladesh.
+let locateMe = () => {}, locatedOnce = false, quietLocate = false;
 enter.trip = async () => {
   try { await ensureMap(); } catch { return; }
   if (current !== 'trip') return;
   drawMarkers();
+  if (!locatedOnce && !pendingPath && !pendingBus && !trip.from && !trip.to && navigator.geolocation) { locatedOnce = true; locateMe(); }
   if (pendingPath) {
     showPathOnMap(pendingPath);
     pendingPath = null;

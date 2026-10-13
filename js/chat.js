@@ -3,7 +3,7 @@
 // pushed to both people over one long-lived stream; calls are peer-to-peer (WebRTC) and the server only passes
 // the set-up messages between the two browsers. Needs an account, and the two people must be friends.
 
-const CHAT = { friends: [], incoming: [], outgoing: [], blocked: [], open: null, msgs: new Map(), stream: null, typing: new Map(), loaded: false };
+const CHAT = { friends: [], requests: [], incoming: [], outgoing: [], blocked: [], open: null, msgs: new Map(), stream: null, typing: new Map(), loaded: false };
 
 async function chatApi(path, body) {
   const res = await fetch('api/chat/' + path, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {});
@@ -32,15 +32,16 @@ function callText(m, mine) {
   if (c.result === 'declined') return `${what} · ধরা হয়নি`;
   return mine ? `${what} · উত্তর মেলেনি` : `মিসড ${what}`;
 }
-const preview = (m, mine) => m.kind === 'text' ? m.body : m.kind === 'place' ? `📍 ${m.body.label}` : callText(m, mine);
+const sizeText = n => n >= 1048576 ? `${num(n / 1048576, 1)} MB` : `${num(Math.max(1, Math.round(n / 1024)))} KB`;
+const preview = (m, mine) => m.kind === 'text' ? m.body : m.kind === 'place' ? `📍 ${m.body.label}` : m.kind === 'photo' ? '📷 ছবি' : m.kind === 'video' ? '🎬 ভিডিও' : m.kind === 'file' ? `📎 ${m.body.name}` : callText(m, mine);
 const friendById = id => CHAT.friends.find(f => f.id === id);
 
 let toastTimer = null;
 function chatToast(person, text, onClick) {
   const box = $('chat-toast');
-  box.replaceChildren(avatar(person, 'sm'), Object.assign(el('span', 't no-tr'), { textContent: '' }));
+  box.replaceChildren(avatar(person, 'sm'), el('span', 't'));
   const t = box.querySelector('.t');
-  t.append(el('b', null, person.name), el('span', null, text));
+  t.append(Object.assign(el('b', 'no-tr'), { textContent: person.name }), el('span', null, text));
   box.onclick = () => { box.classList.remove('on'); if (onClick) onClick(); };
   box.classList.add('on');
   clearTimeout(toastTimer);
@@ -48,7 +49,7 @@ function chatToast(person, text, onClick) {
 }
 
 function setBadges() {
-  const n = CHAT.friends.reduce((sum, f) => sum + f.unread, 0) + CHAT.incoming.length;
+  const n = CHAT.friends.reduce((sum, f) => sum + f.unread, 0) + CHAT.incoming.length + CHAT.requests.length;
   for (const b of document.querySelectorAll('[data-chat-badge]')) {
     b.textContent = n > 99 ? '99+' : num(n);
     b.hidden = !n;
@@ -56,9 +57,34 @@ function setBadges() {
 }
 
 // ---- the list of people ----
+// The inbox has two tabs: conversations, and requests (people who wrote first, and people who follow you).
+// A search box narrows the conversations by name.
+const inbox = { tab: 'all', q: '' };
 function renderList() {
   const reqBox = $('chat-requests'), list = $('chat-list');
+  const waiting = CHAT.requests.length + CHAT.incoming.length;
+  $('chat-me').textContent = ME ? ME.name : '';
+  for (const t of $('chat-tabs').children) {
+    t.classList.toggle('on', t.dataset.tab === inbox.tab);
+    if (t.dataset.tab === 'requests') t.lastChild.textContent = waiting ? ` ${num(waiting)}` : '';
+  }
   reqBox.replaceChildren();
+  list.replaceChildren();
+  reqBox.hidden = inbox.tab !== 'requests';
+  list.hidden = $('chat-find').hidden = inbox.tab !== 'all';
+
+  if (CHAT.requests.length) reqBox.appendChild(el('div', 'label', 'মেসেজ রিকোয়েস্ট'));
+  for (const p of CHAT.requests) {
+    const row = el('div', 'person req');
+    const t = el('div', 't no-tr');
+    t.append(el('b', null, p.name), el('span', null, p.last ? preview(p.last, false) : ''));
+    t.addEventListener('click', () => openProfilePage(p.id));
+    const yes = el('button', 'pill-btn', 'গ্রহণ'), no = el('button', 'pill-btn quiet', 'মুছুন');
+    yes.addEventListener('click', () => chatApi('accept', { id: p.id }).then(loadChat).then(() => { inbox.tab = 'all'; openThread(p.id); }));
+    no.addEventListener('click', () => chatApi('decline', { id: p.id }).then(loadChat));
+    row.append(avatar(p), t, yes, no);
+    reqBox.appendChild(row);
+  }
   if (CHAT.incoming.length) reqBox.appendChild(el('div', 'label', 'আপনাকে ফলো করছেন'));
   for (const p of CHAT.incoming) {
     const row = el('div', 'person req');
@@ -71,39 +97,32 @@ function renderList() {
     row.append(avatar(p), t, yes, no);
     reqBox.appendChild(row);
   }
-  list.replaceChildren();
-  const sorted = [...CHAT.friends].sort((a, b) => (b.last ? b.last.sent : b.since) - (a.last ? a.last.sent : a.since));
+  if (!waiting) reqBox.appendChild(el('div', 'chat-none small', 'কোনো রিকোয়েস্ট নেই।'));
+
+  const q = inbox.q.trim().toLowerCase();
+  const sorted = [...CHAT.friends].filter(f => !q || f.name.toLowerCase().includes(q))
+    .sort((a, b) => (b.last ? b.last.sent : b.since) - (a.last ? a.last.sent : a.since));
   for (const f of sorted) {
-    const row = el('button', 'person' + (CHAT.open === f.id ? ' on' : ''));
-    const av = avatar(f);
+    const row = el('button', 'person' + (CHAT.open === f.id ? ' on' : '') + (f.unread ? ' unread' : ''));
+    const av = avatar(f, 'lg');
     if (f.online) av.classList.add('online');
     const t = el('div', 't');
     const typing = CHAT.typing.has(f.id);
-    const sub = el('span', typing ? 'typing' : 'no-tr', typing ? 'লিখছে…' : f.last ? (f.last.sender === f.id ? '' : '↗ ') + preview(f.last, f.last.sender !== f.id) : 'বন্ধু হয়েছেন — হাই বলুন 👋');
+    const mine = f.last && f.last.sender !== f.id;
+    const sub = el('span', typing ? 'typing' : 'no-tr', typing ? 'লিখছে…' : f.last ? preview(f.last, mine) : 'হাই বলুন 👋');
+    if (!typing && mine && f.last.kind !== 'call') sub.prepend(Object.assign(el('span', 'tr'), { textContent: (LANG === 'en' ? 'You: ' : 'আপনি: ') }));
     if (f.last && f.last.kind === 'call') sub.classList.remove('no-tr');
+    if (f.last && !typing) sub.appendChild(el('time', null, ` · ${timeOf(f.last.sent)}`));
     t.append(Object.assign(el('b', 'no-tr'), { textContent: f.name }), sub);
-    const side = el('div', 'pside');
-    if (f.last) side.appendChild(el('time', null, timeOf(f.last.sent)));
-    if (f.unread) side.appendChild(el('span', 'count', num(f.unread)));
-    row.append(av, t, side);
+    row.append(av, t);
+    if (f.unread) row.appendChild(el('i', 'dot'));
     row.addEventListener('click', () => openThread(f.id));
     list.appendChild(row);
   }
-  for (const p of CHAT.outgoing) {
-    const row = el('div', 'person wait');
-    const t = el('div', 't');
-    t.append(Object.assign(el('b', 'no-tr'), { textContent: p.name }), el('span', null, 'ফলো করছেন · ফলো ব্যাকের অপেক্ষায়'));
-    t.addEventListener('click', () => openProfilePage(p.id));
-    const cancel = el('button', 'pill-btn quiet', 'আনফলো');
-    cancel.addEventListener('click', () => chatApi('unfollow', { id: p.id }).then(loadChat));
-    row.append(avatar(p), t, cancel);
-    list.appendChild(row);
-  }
-  if (!CHAT.friends.length && !CHAT.outgoing.length && !CHAT.incoming.length) {
+  if (!sorted.length) {
     const empty = el('div', 'chat-none');
-    empty.append(ic('chat'), el('b', null, 'এখনো কোনো কথোপকথন নেই'), el('span', null, 'নাম দিয়ে মানুষ খুঁজে ফলো করুন। দুজনই দুজনকে ফলো করলে মেসেজ ও কল করা যাবে।'));
-    const add = button('search', 'মানুষ খুঁজুন', () => openPeopleSearch());
-    empty.appendChild(add);
+    if (q) empty.append(ic('search'), el('b', null, 'এই নামে কোনো কথোপকথন নেই'));
+    else empty.append(ic('chat'), el('b', null, 'এখনো কোনো কথোপকথন নেই'), el('span', null, 'নাম দিয়ে মানুষ খুঁজে মেসেজ পাঠান। তিনি গ্রহণ করলে কথা ও কল শুরু হবে।'), button('edit', 'নতুন মেসেজ', () => openPeopleSearch()));
     list.appendChild(empty);
   }
   setBadges();
@@ -113,7 +132,9 @@ async function loadChat() {
   if (!ME) return;
   try {
     const data = await chatApi('list');
+    const fresh = CHAT.friends.filter(f => !f.last && f.id === CHAT.open && !data.friends.some(x => x.id === f.id));
     Object.assign(CHAT, data, { loaded: true });
+    CHAT.friends.push(...fresh);
     if (CHAT.open && !friendById(CHAT.open)) closeThread();
     renderList();
     if (CHAT.open) renderHead();
@@ -129,8 +150,9 @@ function renderHead() {
   if (f.online) av.classList.add('online');
   const t = el('div', 't');
   t.append(Object.assign(el('b', 'no-tr'), { textContent: f.name }),
-    el('span', CHAT.typing.has(f.id) ? 'typing' : '', CHAT.typing.has(f.id) ? 'লিখছে…' : f.online ? 'অনলাইন' : 'অফলাইন'));
+    el('span', CHAT.typing.has(f.id) ? 'typing' : '', CHAT.typing.has(f.id) ? 'লিখছে…' : !f.ok ? 'রিকোয়েস্ট পাঠানো হয়েছে' : f.online ? 'অনলাইন' : 'অফলাইন'));
   who.replaceChildren(av, t);
+  $('chat-voice').hidden = $('chat-video').hidden = $('chat-attach').hidden = !f.ok;
 }
 
 function bubble(m, f) {
@@ -144,6 +166,19 @@ function bubble(m, f) {
     t.append(Object.assign(el('b', 'no-tr'), { textContent: m.body.label }), el('span', null, 'ম্যাপে দেখুন'));
     b.append(ic('pin'), t);
     b.addEventListener('click', () => goTo({ lat: m.body.lat, lon: m.body.lon, label: m.body.label }));
+  } else if (m.kind === 'photo') {
+    b = el('a', 'bubble media');
+    b.href = m.body.src; b.target = '_blank'; b.rel = 'noopener';
+    b.appendChild(Object.assign(el('img'), { src: m.body.src, alt: m.body.name, loading: 'lazy' }));
+  } else if (m.kind === 'video') {
+    b = el('div', 'bubble media');
+    b.appendChild(Object.assign(el('video'), { src: m.body.src, controls: true, playsInline: true, preload: 'metadata' }));
+  } else if (m.kind === 'file') {
+    b = el('a', 'bubble file');
+    b.href = m.body.src; b.download = m.body.name;
+    const t = el('span', 't');
+    t.append(Object.assign(el('b', 'no-tr'), { textContent: m.body.name }), el('span', null, sizeText(m.body.size)));
+    b.append(ic('file'), t);
   } else if (m.kind === 'call') {
     b = el('div', 'bubble call-log');      // not 'call': that class is the full-screen call overlay
     b.append(ic(m.body.video ? 'video' : 'phone'), el('span', null, callText(m, mine)));
@@ -164,21 +199,32 @@ function renderMsgs(scroll = true) {
   if (!f) return;
   const msgs = CHAT.msgs.get(f.id) || [];
   box.replaceChildren();
+  // The conversation opens with who this is, and a way to their profile.
+  const intro = el('div', 'chat-intro');
+  const see = el('button', 'pill-btn quiet', 'প্রোফাইল দেখুন');
+  see.addEventListener('click', () => openProfilePage(f.id));
+  intro.append(avatar(f, 'xl'), Object.assign(el('b', 'no-tr'), { textContent: f.name }), Object.assign(el('span', 'no-tr'), { textContent: f.bio || 'BD Map' }), see);
+  box.appendChild(intro);
   let day = '', prev = null;
   for (const m of msgs) {
     const d = dayOf(m.sent);
-    if (d !== day) { day = d; box.appendChild(el('div', 'day', d)); prev = null; }
+    if (d !== day) { day = d; box.appendChild(el('div', 'day', `${d} · ${timeOf(m.sent)}`)); prev = null; }
+    if (m.kind === 'call') {                           // a call is a line in the middle, not a bubble
+      const line = el('div', 'sys');
+      line.dataset.id = m.id;
+      line.append(ic(m.body.video ? 'video' : 'phone'), el('span', null, callText(m, m.sender !== f.id)));
+      box.appendChild(line);
+      prev = null;
+      continue;
+    }
     const row = bubble(m, f);
     // Messages from the same person within two minutes sit together, with the time shown on the last one only.
     if (prev && prev.m.sender === m.sender && m.sent - prev.m.sent < 120_000) { prev.row.classList.add('joined'); row.classList.add('follows'); }
+    if (m.sender === f.id) row.prepend(avatar(f, 'xs mini'));       // not 'who': that class is the conversation header
     box.appendChild(row);
     prev = { m, row };
   }
-  if (!msgs.length) {
-    const hello = el('div', 'chat-hello');
-    hello.append(avatar(f, 'lg'), Object.assign(el('b', 'no-tr'), { textContent: f.name }), el('span', null, 'আপনারা একে অপরকে ফলো করছেন। প্রথম মেসেজটি পাঠান।'));
-    box.appendChild(hello);
-  }
+  if (!f.ok && msgs.length) box.appendChild(el('div', 'chat-wait', 'মেসেজ রিকোয়েস্ট পাঠানো হয়েছে। তিনি গ্রহণ করলে পুরো কথোপকথন, ছবি ও কল চালু হবে।'));
   if (CHAT.typing.has(f.id)) {
     const dots = el('div', 'msg them');
     dots.appendChild(Object.assign(el('div', 'bubble dots'), { innerHTML: '<i></i><i></i><i></i>' }));
@@ -196,14 +242,50 @@ async function openThread(id) {
   renderList();
   renderMsgs();
   try {
-    const { messages } = await chatApi('messages?with=' + id);
+    const { messages, ok } = await chatApi('messages?with=' + id);
     if (CHAT.open !== id) return;
+    const f = friendById(id);
+    if (f) f.ok = ok;
+    renderHead();
     CHAT.msgs.set(id, messages);
     renderMsgs();
     markRead(id);
   } catch { /* shown from what is already loaded */ }
   if (matchMedia('(min-width: 761px)').matches) $('chat-input').focus();
 }
+// Start (or open) a conversation with someone who may not be in the list yet — from a profile, for example.
+function openThreadWith(person) {
+  if (!ME) { openLogin(); return; }
+  if (!friendById(person.id)) CHAT.friends.push({ id: person.id, name: person.name, bio: person.bio || '', pic: person.pic || 0, online: false, since: Date.now(), last: null, unread: 0, ok: person.relation === 'mutual', mutual: person.relation === 'mutual' });
+  go('chat');
+  openThread(person.id);
+}
+
+// Send a photo, a video or any other file: it is uploaded first, then goes out as a message.
+function sendFile(file) {
+  const to = CHAT.open, f = friendById(to);
+  if (!file || !f) return;
+  if (file.size > 25e6) { chatToast(f, 'ফাইলটি ২৫ এমবির বেশি।'); return; }
+  const bar = $('chat-upload');
+  bar.hidden = false;
+  bar.firstChild.style.width = '0';
+  const x = new XMLHttpRequest();
+  x.open('POST', 'api/chat/upload');
+  x.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+  x.setRequestHeader('X-Name', encodeURIComponent(file.name));
+  x.upload.onprogress = e => { if (e.lengthComputable) bar.firstChild.style.width = Math.round(e.loaded / e.total * 100) + '%'; };
+  const done = () => { bar.hidden = true; };
+  x.onerror = () => { done(); chatToast(f, 'ফাইলটি পাঠানো যায়নি।'); };
+  x.onload = async () => {
+    done();
+    let d = {};
+    try { d = JSON.parse(x.responseText); } catch { /* handled below */ }
+    if (x.status !== 200) { chatToast(f, d.error === 'big' ? 'ফাইলটি ২৫ এমবির বেশি।' : 'ফাইলটি পাঠানো যায়নি।'); return; }
+    if (CHAT.open === to) sendMessage(d.kind, { media: d.media, name: d.name, size: d.size });
+  };
+  x.send(file);
+}
+
 function closeThread() {
   CHAT.open = null;
   $('chat').classList.remove('open');
@@ -250,7 +332,8 @@ async function sendMessage(kind, body) {
     const { message } = await chatApi('send', { to, kind, body });
     addMessage(message);
   } catch (e) {
-    chatToast(friendById(to) || { id: 0, name: '!' }, e.message === 'slow' ? 'একটু ধীরে — অনেক মেসেজ একসাথে গেছে।' : 'মেসেজটি পাঠানো যায়নি। সংযোগ দেখে আবার চেষ্টা করুন।');
+    chatToast(friendById(to) || { id: 0, name: '!' }, e.message === 'slow' ? 'একটু ধীরে — অনেক মেসেজ একসাথে গেছে।'
+      : e.message === 'request' ? 'তিনি রিকোয়েস্ট গ্রহণ না করা পর্যন্ত আর মেসেজ পাঠানো যাবে না।' : 'মেসেজটি পাঠানো যায়নি। সংযোগ দেখে আবার চেষ্টা করুন।');
   }
 }
 
@@ -281,7 +364,7 @@ function refreshTyping(id) {
 }
 function disconnectChat() {
   if (CHAT.stream) CHAT.stream.close();
-  Object.assign(CHAT, { stream: null, friends: [], incoming: [], outgoing: [], blocked: [], open: null, loaded: false });
+  Object.assign(CHAT, { stream: null, friends: [], requests: [], incoming: [], outgoing: [], blocked: [], open: null, loaded: false });
   CHAT.msgs.clear();
 }
 
@@ -552,6 +635,21 @@ function hangUp() {
   input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && matchMedia('(min-width: 761px)').matches) { e.preventDefault(); submit(); } });
   refreshSend();
 
+  // Attach, and a small emoji tray.
+  const chooser = $('chat-file');
+  $('chat-attach').addEventListener('click', () => chooser.click());
+  chooser.addEventListener('change', () => { sendFile(chooser.files[0]); chooser.value = ''; });
+  const tray = $('chat-emoji-tray');
+  for (const e of '😀 😂 🥰 😍 😎 😢 😡 👍 🙏 👏 🔥 ❤️ 🎉 💯 🤔 😴 🤝 🚌 🚆 ✈️ 🏖️ 🏞️ 🌧️ ☀️ 🍛 ☕ 📍 ✅'.split(' ')) {
+    const b = el('button', null, e);
+    b.type = 'button';
+    b.addEventListener('click', () => { input.setRangeText(e, input.selectionStart, input.selectionEnd, 'end'); input.dispatchEvent(new Event('input')); input.focus(); });
+    tray.appendChild(b);
+  }
+  $('chat-emoji').addEventListener('click', () => { tray.hidden = !tray.hidden; });
+  input.addEventListener('focus', () => { if (matchMedia('(max-width: 760px)').matches) tray.hidden = true; });
+  for (const t of $('chat-tabs').children) t.addEventListener('click', () => { inbox.tab = t.dataset.tab; renderList(); });
+  $('chat-q').addEventListener('input', e => { inbox.q = e.target.value; renderList(); });
   $('chat-back').addEventListener('click', closeThread);
   $('chat-add').addEventListener('click', () => openPeopleSearch());   // defined in a later file: looked up when clicked
   $('chat-blocked').addEventListener('click', openBlocked);

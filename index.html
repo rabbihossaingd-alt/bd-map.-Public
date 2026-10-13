@@ -2,9 +2,9 @@
 <html lang="bn">
 <head>
 <meta charset="utf-8">
+<script>try{var t=localStorage.getItem('bdmap.theme')||'dark';if(t==='auto')t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme='dark'}</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#f5f5f7" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#000000">
 <title>BD Map - Bhara o Ride</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
@@ -18,9 +18,9 @@
   <a class="brand" href="#/"><span class="logo"></span>BD Map</a>
   <div class="links">
     <a href="#/" data-nav="home"><i data-ic="home"></i><span>হোম</span></a>
+    <a href="#/explore" data-nav="explore"><i data-ic="image"></i><span>এক্সপ্লোর</span></a>
     <a href="#/trip" data-nav="trip"><i data-ic="route"></i><span>ম্যাপ</span></a>
     <a href="#/buses" data-nav="buses" class="desk-only"><i data-ic="bus"></i><span>ঢাকার বাস</span></a>
-    <a href="#/explore" data-nav="explore"><i data-ic="image"></i><span>এক্সপ্লোর</span></a>
     <a href="#/train" data-nav="train" class="desk-only"><i data-ic="train"></i><span>ট্রেন</span></a>
     <a href="#/chat" data-nav="chat" class="phone-only"><i data-ic="chat"></i><span>মেসেজ</span><em class="nbadge" data-chat-badge hidden></em></a>
     <a href="#/districts" data-nav="districts" class="desk-only"><i data-ic="city"></i><span>জেলা</span></a>
@@ -38,36 +38,65 @@
   <!-- Home -->
   <section class="page" id="page-home">
     <div class="hero">
+      <canvas class="hero-scene" id="hero-scene" aria-hidden="true"></canvas>
       <div class="blob one"></div><div class="blob two"></div><div class="blob three"></div>
-      <p class="eyebrow">৬৪ জেলার যাতায়াত, এক জায়গায়</p>
+      <p class="eyebrow" id="home-hello">৬৪ জেলার যাতায়াত, এক জায়গায়</p>
       <h1>কোথায় <em>যাবেন?</em></h1>
       <p class="lead">কোন বাসে যাবেন, ভাড়া কত, কতক্ষণ লাগবে — এক নজরে।</p>
       <div class="card hero-search" id="home-search"></div>
       <div class="chips popular" id="recent" hidden></div>
       <div class="chips popular" id="popular"></div>
     </div>
-    <div class="wrap" style="padding-top: 8px">
-      <a class="card tour-banner" href="#/tour">
-        <div><b>ট্যুর প্ল্যান করুন</b><span>দল নিয়ে ঘুরতে যাচ্ছেন? খরচ হিসাব করুন, সবার ছবি দিয়ে কার্ড বানান।</span></div>
-        <span class="btn">শুরু করুন <i data-ic="arrow"></i></span>
-      </a>
-      <a class="card tour-banner give-banner" href="#/community">
-        <div><b>ভাড়া জানান, পয়েন্ট জিতুন</b><span>আপনি যে পথের ভাড়া জানেন, তা জানিয়ে অন্যদের সাহায্য করুন। সেরা তিনজন থাকেন লিডারবোর্ডে।</span></div>
-        <span class="btn">ভাড়া জানান <i data-ic="arrow"></i></span>
-      </a>
-      <div class="features stagger">
-        <a class="card feature" href="#/buses" style="--i:0"><i class="ic" data-ic="bus"></i><b>ঢাকার বাস</b><span>কোন বাস কোথায় যায়</span><span class="go">দেখুন <i data-ic="arrow"></i></span></a>
-        <a class="card feature" href="#/districts" style="--i:1"><i class="ic" data-ic="city"></i><b>৬৪ জেলা</b><span>ঢাকা থেকে ভাড়া, বাস ও দর্শনীয় স্থান</span><span class="go">দেখুন <i data-ic="arrow"></i></span></a>
-        <a class="card feature" href="#/nearby" style="--i:2"><i class="ic" data-ic="compass"></i><b>কাছাকাছি</b><span>হাসপাতাল, থানা, এটিএম, পার্ক…</span><span class="go">খুঁজুন <i data-ic="arrow"></i></span></a>
-        <a class="card feature" href="#/fares" style="--i:3"><i class="ic" data-ic="tag"></i><b>ভাড়ার হিসাব</b><span>কিমি প্রতি কত, মোট কত</span><span class="go">হিসাব করুন <i data-ic="arrow"></i></span></a>
+
+    <div class="wrap home">
+      <!-- Everything the app does, one tap away -->
+      <div class="apps">
+        <a href="#/trip"><i class="mi c-green" data-ic="route"></i><span>ম্যাপ</span></a>
+        <a href="#/buses"><i class="mi c-teal" data-ic="bus"></i><span>ঢাকার বাস</span></a>
+        <a href="#/train"><i class="mi c-blue" data-ic="train"></i><span>ট্রেন ও লঞ্চ</span></a>
+        <a href="#/nearby"><i class="mi c-violet" data-ic="compass"></i><span>কাছাকাছি</span></a>
+        <a href="#/districts"><i class="mi c-ink" data-ic="city"></i><span>৬৪ জেলা</span></a>
+        <a href="#/community"><i class="mi c-amber" data-ic="star"></i><span>ভাড়া জানান</span></a>
+        <a href="#/tour"><i class="mi c-pink" data-ic="send"></i><span>ট্যুর প্ল্যান</span></a>
+        <a href="#/fares"><i class="mi c-gray" data-ic="tag"></i><span>ভাড়ার হিসাব</span></a>
       </div>
-      <div class="stats">
-        <div class="card stat"><b data-count="64">০</b><span>জেলা</span></div>
-        <div class="card stat"><b data-count="routes">০</b><span>ঢাকার বাস রুট</span></div>
-        <div class="card stat"><b data-count="places">০</b><span>চেনা জায়গা</span></div>
+
+      <!-- What people have been posting -->
+      <div class="home-head" id="home-posts-head" hidden><h3>বাংলাদেশ, সবার চোখে</h3><a href="#/explore">সব দেখুন <i data-ic="arrow"></i></a></div>
+      <div class="home-posts" id="home-posts" hidden></div>
+
+      <!-- Two large doors and two small ones -->
+      <div class="bento">
+        <a class="card b-tour" href="#/tour">
+          <span class="tag">ট্যুর প্ল্যান</span>
+          <b>দল নিয়ে ঘুরতে যাচ্ছেন?</b>
+          <span>খরচ হিসাব করুন, সবার ছবি দিয়ে শেয়ার করার কার্ড বানান।</span>
+          <span class="btn">শুরু করুন <i data-ic="arrow"></i></span>
+        </a>
+        <a class="card b-give" href="#/community">
+          <span class="tag">সবাই মিলে</span>
+          <b>ভাড়া জানান, পয়েন্ট জিতুন</b>
+          <span>আপনার জানা ভাড়াটি একজন যাত্রীকে ঠকা থেকে বাঁচায়।</span>
+          <div class="b-faces" id="home-leaders"></div>
+        </a>
+        <a class="card b-small" href="#/fares"><i class="mi soft" data-ic="tag"></i><b>ভাড়ার হিসাব</b><span>কিমি প্রতি কত, মোট কত</span></a>
+        <a class="card b-small" href="#/support"><i class="mi soft" data-ic="help"></i><b>সাহায্য কেন্দ্র</b><span>প্রশ্নের উত্তর ও সাপোর্ট</span></a>
       </div>
-      <div class="label" style="margin-top: 44px">জরুরি নম্বর — চাপ দিলে কল হবে</div>
+
+      <div class="card stats-band">
+        <div class="stat"><b data-count="64">০</b><span>জেলা</span></div>
+        <div class="stat"><b data-count="routes">০</b><span>ঢাকার বাস রুট</span></div>
+        <div class="stat"><b data-count="places">০</b><span>চেনা জায়গা</span></div>
+      </div>
+
+      <div class="home-head"><h3>জরুরি নম্বর</h3><span>চাপ দিলে কল হবে</span></div>
       <div class="grid" id="helplines" style="margin-top: 0"></div>
+
+      <footer class="site-foot">
+        <div class="brand-line"><span class="logo-dot"></span><b>BD Map</b><span>বাংলাদেশের যাতায়াত, এক জায়গায়</span></div>
+        <nav><a href="#/support">সাহায্য</a><a href="#/settings">সেটিংস</a><a href="#/community">লিডারবোর্ড</a><a href="#/explore">এক্সপ্লোর</a></nav>
+        <p>ভাড়া: বিআরটিএ · ম্যাপ: OpenStreetMap ও OpenFreeMap · ট্রেন ও লঞ্চ: খোলা তথ্যভান্ডার। তথ্য বদলাতে পারে — যাত্রার আগে মিলিয়ে নিন।</p>
+      </footer>
     </div>
   </section>
 
@@ -193,6 +222,8 @@
       <div class="card menu">
         <button id="set-edit"><i class="mi soft" data-ic="user"></i><span><b>প্রোফাইল এডিট</b><em id="set-email"></em></span><i class="chev" data-ic="chev"></i></button>
         <div class="row"><i class="mi soft" data-ic="globe"></i><span><b>ভাষা</b><em>বাংলা · English</em></span><button class="lang-btn in-page"></button></div>
+        <div class="row"><i class="mi soft" data-ic="moon2"></i><span><b>থিম</b><em>অ্যাপের রং</em></span>
+          <span class="theme-pick" id="theme-pick"><button data-theme-set="dark">ডার্ক</button><button data-theme-set="light">লাইট</button><button data-theme-set="auto">ফোনের মতো</button></span></div>
       </div>
       <div class="label">সাহায্য</div>
       <div class="card menu">
@@ -247,12 +278,17 @@
     <div class="chat" id="chat" hidden>
       <aside class="chat-side">
         <div class="chat-top">
-          <h2>মেসেজ</h2>
+          <h2 class="no-tr" id="chat-me"></h2>
           <button class="icon-btn" id="chat-blocked" title="ব্লক করা মানুষ" aria-label="ব্লক করা মানুষ"><i data-ic="shield"></i></button>
-          <button class="icon-btn accent" id="chat-add" title="মানুষ খুঁজুন" aria-label="মানুষ খুঁজুন"><i data-ic="search"></i></button>
+          <button class="icon-btn" id="chat-add" title="নতুন মেসেজ" aria-label="নতুন মেসেজ"><i data-ic="edit"></i></button>
         </div>
+        <div class="chat-tabs" id="chat-tabs">
+          <button data-tab="all" class="on"><span>মেসেজ</span><em></em></button>
+          <button data-tab="requests"><span>রিকোয়েস্ট</span><em></em></button>
+        </div>
+        <label class="chat-find" id="chat-find"><i data-ic="search"></i><input id="chat-q" type="search" autocomplete="off" placeholder="খুঁজুন" aria-label="খুঁজুন"></label>
         <div class="chat-scroll">
-          <div id="chat-requests"></div>
+          <div id="chat-requests" hidden></div>
           <div id="chat-list"></div>
         </div>
       </aside>
@@ -271,9 +307,16 @@
             <button class="icon-btn" id="chat-more" title="আরও অপশন" aria-label="আরও অপশন"><i data-ic="more"></i></button>
           </header>
           <div class="chat-msgs" id="chat-msgs"></div>
+          <div class="upload-bar" id="chat-upload" hidden><i></i></div>
+          <div class="emoji-tray" id="chat-emoji-tray" hidden></div>
           <form class="chat-compose" id="chat-form">
+            <button type="button" class="icon-btn" id="chat-attach" title="ছবি, ভিডিও বা ফাইল" aria-label="ছবি, ভিডিও বা ফাইল"><i data-ic="clip"></i></button>
             <button type="button" class="icon-btn" id="chat-share" title="জায়গা পাঠান" aria-label="জায়গা পাঠান"><i data-ic="pin"></i></button>
-            <textarea id="chat-input" rows="1" maxlength="2000" placeholder="মেসেজ লিখুন…" aria-label="মেসেজ লিখুন…"></textarea>
+            <input type="file" id="chat-file" hidden>
+            <div class="compose-box">
+              <textarea id="chat-input" rows="1" maxlength="2000" placeholder="মেসেজ লিখুন…" aria-label="মেসেজ লিখুন…"></textarea>
+              <button type="button" class="emoji-btn" id="chat-emoji" title="ইমোজি" aria-label="ইমোজি">🙂</button>
+            </div>
             <button class="send like" id="chat-send" title="পাঠান" aria-label="পাঠান"><i data-ic="send"></i><span>👍</span></button>
           </form>
         </div>
@@ -519,6 +562,7 @@
 <script src="js/core.js"></script>
 <script src="js/app.js"></script>
 <script src="js/tour.js"></script>
+<script src="js/scene.js"></script>
 <script src="js/train.js"></script>
 <script src="js/account.js"></script>
 <script src="js/chat.js"></script>

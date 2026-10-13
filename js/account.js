@@ -82,6 +82,7 @@ function authChanged() {
   loadFareReports();
   if (typeof chatAuthChanged === 'function') chatAuthChanged();
   if (typeof supportAuthChanged === 'function') supportAuthChanged();
+  if (current === 'home' && enter.home) enter.home();
   if (typeof drawProfile === 'function' && current === 'profile') { if (!ME) PROFILE.id = null; drawProfile(); }
   if (enter.settings && current === 'settings') enter.settings();
 }

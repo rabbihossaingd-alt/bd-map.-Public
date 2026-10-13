@@ -255,7 +255,9 @@ setInterval(() => {
 function deleteUser(id) {
   aq.endAll.run(id);
   for (const sql of ['DELETE FROM friends WHERE a = ?1 OR b = ?1', 'DELETE FROM messages WHERE a = ?1 OR b = ?1', 'DELETE FROM reports WHERE reporter = ?1 OR about = ?1',
-                     'DELETE FROM ticket_msgs WHERE ticket IN (SELECT id FROM tickets WHERE user = ?1)', 'DELETE FROM tickets WHERE user = ?1', 'DELETE FROM contributions WHERE user = ?1', 'DELETE FROM post_likes WHERE user = ?1', 'DELETE FROM post_comments WHERE user = ?1']) db.prepare(sql).run(id);
+                     'DELETE FROM ticket_msgs WHERE ticket IN (SELECT id FROM tickets WHERE user = ?1)', 'DELETE FROM tickets WHERE user = ?1', 'DELETE FROM contributions WHERE user = ?1', 'DELETE FROM post_likes WHERE user = ?1', 'DELETE FROM post_saves WHERE user = ?1', 'DELETE FROM post_comments WHERE user = ?1',
+                     'DELETE FROM chat_ok WHERE a = ?1 OR b = ?1']) db.prepare(sql).run(id);
+  for (const st of db.prepare('SELECT * FROM stories WHERE user = ?').all(id)) deleteStory(st);
   for (const p of db.prepare('SELECT * FROM posts WHERE user = ?').all(id)) deletePost(p);
   aq.dropRatings.run('u' + id);
   aq.dropFares.run('u' + id);
@@ -418,7 +420,12 @@ const cq = {
   seen:    db.prepare('UPDATE messages SET seen = 1 WHERE a = ? AND b = ? AND sender = ? AND seen = 0'),
   report:  db.prepare('INSERT INTO reports (reporter, about, reason, made) VALUES (?, ?, ?, ?)')
 };
+// Two people who do not follow each other can still talk: the first message arrives as a request, and the
+// conversation opens fully (unlimited messages, calls) once the other person accepts it.
+db.exec('CREATE TABLE IF NOT EXISTS chat_ok (a INTEGER NOT NULL, b INTEGER NOT NULL, PRIMARY KEY (a, b))');
 const pair = (x, y) => x < y ? [x, y] : [y, x];
+const chatOpen = (x, y) => areFriends(x, y) || !!db.prepare('SELECT 1 FROM chat_ok WHERE a = ? AND b = ?').get(...pair(x, y));
+const REQUEST_LIMIT = 5;                               // messages allowed before a request is accepted
 const linkOf = (x, y) => cq.link.get(...pair(x, y));
 const areFriends = (x, y) => (linkOf(x, y) || {}).state === 'friends';
 const shown = m => ({ id: m.id, sender: m.sender, kind: m.kind, body: m.kind === 'text' ? m.body : JSON.parse(m.body), sent: m.sent, seen: m.seen });
@@ -455,7 +462,8 @@ if (process.env.TURN_URL) ICE.push({ urls: process.env.TURN_URL, username: proce
 //   GET  /api/chat/messages?with=id[&before=id]
 //   GET  /api/chat/ice               -> { iceServers }
 //   POST /api/chat/friend | unfriend | block | unblock {id}      POST /api/chat/report {id, reason}
-//   POST /api/chat/send {to, kind, body}   kind: text | place | call
+//   POST /api/chat/send {to, kind, body}   kind: text | place | call | photo | video | file
+//   POST /api/chat/upload (file as the body, X-Name header)     POST /api/chat/accept | decline {id}
 //   POST /api/chat/read {with}       POST /api/chat/typing {to}       POST /api/chat/signal {to, data}
 async function chatApi(req, res, action, query) {
   const me = userOf(req);
@@ -476,14 +484,26 @@ async function chatApi(req, res, action, query) {
       return;
     }
     if (action === 'list') {
-      const out = { friends: [], incoming: [], outgoing: [], blocked: [] };
+      // friends: every conversation I am part of (`ok` false while my request waits to be accepted);
+      // requests: people who wrote to me first and whom I have not accepted; incoming / outgoing: follows.
+      const out = { friends: [], requests: [], incoming: [], outgoing: [], blocked: [] }, seen = new Set(), blocked = new Set();
+      const talk = (who, since, mutual) => {
+        if (seen.has(who.id)) return;
+        seen.add(who.id);
+        const [a, b] = pair(me.id, who.id), last = cq.last.get(a, b), ok = mutual || chatOpen(me.id, who.id);
+        const row = { ...who, online: ok && isOnline(who.id), since, last: last ? shown(last) : null, unread: cq.unread.get(a, b, me.id).n, ok, mutual };
+        if (ok || count('SELECT COUNT(*) AS n FROM messages WHERE a = ? AND b = ? AND sender = ?', a, b, me.id)) out.friends.push(row);
+        else if (last) out.requests.push(row);
+      };
       for (const l of cq.links.all(me.id)) {
         const who = { id: l.id, name: l.name, bio: l.bio, pic: l.pic };
-        if (l.state === 'friends') {
-          const [a, b] = pair(me.id, l.id), last = cq.last.get(a, b);
-          out.friends.push({ ...who, online: isOnline(l.id), since: l.updated, last: last ? shown(last) : null, unread: cq.unread.get(a, b, me.id).n });
-        } else if (l.state === 'pending') (l.actor === me.id ? out.outgoing : out.incoming).push(who);
-        else if (l.actor === me.id) out.blocked.push(who);
+        if (l.state === 'friends') talk(who, l.updated, true);
+        else if (l.state === 'pending') (l.actor === me.id ? out.outgoing : out.incoming).push(who);
+        else { blocked.add(l.id); if (l.actor === me.id) out.blocked.push(who); }
+      }
+      for (const { other } of db.prepare('SELECT DISTINCT CASE WHEN a = ?1 THEN b ELSE a END AS other FROM messages WHERE a = ?1 OR b = ?1').all(me.id)) {
+        const u = aq.byId.get(other);
+        if (u && !u.banned && !blocked.has(other)) talk({ id: u.id, name: u.name, bio: u.bio, pic: u.pic_v }, 0, false);
       }
       return json(res, 200, out);
     }
@@ -500,14 +520,37 @@ async function chatApi(req, res, action, query) {
     }
     if (action === 'messages') {
       const other = Number(query.get('with')), before = Number(query.get('before')) || Number.MAX_SAFE_INTEGER;
-      if (!Number.isInteger(other) || !areFriends(me.id, other)) return json(res, 403, { error: 'friends' });
-      return json(res, 200, { messages: cq.history.all(...pair(me.id, other), before).reverse().map(shown) });
+      if (!Number.isInteger(other) || (linkOf(me.id, other) || {}).state === 'blocked') return json(res, 403, { error: 'friends' });
+      return json(res, 200, { messages: cq.history.all(...pair(me.id, other), before).reverse().map(shown), ok: chatOpen(me.id, other) });
     }
     if (action === 'ice') return json(res, 200, { iceServers: ICE });
     return json(res, 404, { error: 'not found' });
   }
 
   if (req.method !== 'POST') return json(res, 405, { error: 'method not allowed' });
+  // A photo, video or any other file for a conversation: the file itself is the body, its name is in X-Name.
+  if (action === 'upload') {
+    const limit = 25e6, given = decodeURIComponent(String(req.headers['x-name'] || 'file')).slice(0, 80);
+    if (Number(req.headers['content-length']) > limit) { req.resume(); return json(res, 413, { error: 'big' }); }
+    if (count('SELECT COUNT(*) AS n FROM uploads WHERE user = ? AND created > ?', me.id, Date.now() - 864e5) >= 80) { req.resume(); return json(res, 429, { error: 'slow' }); }
+    const type = MEDIA_TYPES[(req.headers['content-type'] || '').split(';')[0].trim()];
+    const ext = type ? type[0] : '.' + ((/\.([A-Za-z0-9]{1,5})$/.exec(given) || [, 'bin'])[1]).toLowerCase();
+    const kind = type ? type[1] : 'file', name = crypto.randomBytes(12).toString('hex') + ext, file = path.join(MEDIA_DIR, name);
+    const out = fs.createWriteStream(file);
+    let size = 0, failed = false;
+    const fail = (status, error) => { if (failed) return; failed = true; out.destroy(); fs.unlink(file, () => {}); req.resume(); json(res, status, { error }); };
+    req.on('data', chunk => { size += chunk.length; if (size > limit) fail(413, 'big'); else if (!failed) out.write(chunk); });
+    req.on('error', () => fail(400, 'bad request'));
+    req.on('end', () => {
+      if (failed) return;
+      out.end(() => {
+        if (!size) return fail(400, 'bad request');
+        db.prepare('INSERT INTO uploads (name, user, kind, created) VALUES (?, ?, ?, ?)').run(name, me.id, kind, Date.now());
+        json(res, 200, { media: name, kind, name: given, size });
+      });
+    });
+    return;
+  }
   if (!(req.headers['content-type'] || '').startsWith('application/json')) return json(res, 400, { error: 'bad request' });
   let body;
   try { body = JSON.parse(await readBody(req, 40_000)) || {}; } catch { return json(res, 400, { error: 'bad request' }); }
@@ -546,10 +589,28 @@ async function chatApi(req, res, action, query) {
     return json(res, 200, { ok: true });
   }
 
-  // Everything below is between friends only.
-  if (!link || link.state !== 'friends') return json(res, 403, { error: 'friends' });
+  if (link && link.state === 'blocked') return json(res, 403, { error: 'friends' });
+  const open = chatOpen(me.id, other);
+  if (action === 'accept') {                         // accept a message request
+    if (count('SELECT COUNT(*) AS n FROM messages WHERE a = ? AND b = ? AND sender = ?', a, b, other)) db.prepare('INSERT OR IGNORE INTO chat_ok (a, b) VALUES (?, ?)').run(a, b);
+    refresh();
+    return json(res, 200, { ok: true });
+  }
+  if (action === 'decline') {                        // turn a request down: the messages go
+    if (!open) { db.prepare('DELETE FROM messages WHERE a = ? AND b = ?').run(a, b); refresh(); }
+    return json(res, 200, { ok: true });
+  }
+  if (action === 'read' || action === 'typing') {
+    if (action === 'read' && cq.seen.run(a, b, other).changes && open) push(other, 'read', { by: me.id });
+    if (action === 'typing' && open) push(other, 'typing', { from: me.id });
+    return json(res, 200, { ok: true });
+  }
+  // Calls need an open conversation. A message does not: until it is accepted it is a request, and limited.
+  if (action !== 'send' && !open) return json(res, 403, { error: 'friends' });
   if (action === 'send') {
     if (!allowSend(me.id)) return json(res, 429, { error: 'slow' });
+    if (!open && count('SELECT COUNT(*) AS n FROM messages WHERE a = ? AND b = ? AND sender = ?', a, b, me.id) >= REQUEST_LIMIT) return json(res, 403, { error: 'request' });
+    if (!open && body.kind !== 'text') return json(res, 403, { error: 'request' });
     const kind = body.kind, v = body.body;
     let text;
     if (kind === 'text') {
@@ -563,20 +624,17 @@ async function chatApi(req, res, action, query) {
       const ok = v && ['missed', 'declined', 'ended'].includes(v.result) && Number.isInteger(v.secs) && v.secs >= 0 && v.secs < 86400;
       if (!ok) return json(res, 400, { error: 'bad request' });
       text = JSON.stringify({ video: !!v.video, result: v.result, secs: v.secs });
+    } else if (kind === 'photo' || kind === 'video' || kind === 'file') {
+      const up = db.prepare('SELECT * FROM uploads WHERE name = ? AND user = ? AND used = 0').get(String(v && v.media), me.id);
+      if (!up || up.kind !== kind) return json(res, 400, { error: 'bad request' });
+      db.prepare('UPDATE uploads SET used = 1 WHERE name = ?').run(up.name);
+      text = JSON.stringify({ src: 'media/' + up.name, name: cleanText(v.name, 80) || 'file', size: Number(v.size) || 0 });
     } else return json(res, 400, { error: 'bad request' });
     const { lastInsertRowid } = cq.add.run(a, b, me.id, kind, text, now);
     const message = { ...shown({ id: Number(lastInsertRowid), sender: me.id, kind, body: text, sent: now, seen: 0 }), to: other };
     push(other, 'message', message);
     push(me.id, 'message', message);                 // the sender's other devices
     return json(res, 200, { message });
-  }
-  if (action === 'read') {
-    if (cq.seen.run(a, b, other).changes) push(other, 'read', { by: me.id });
-    return json(res, 200, { ok: true });
-  }
-  if (action === 'typing') {
-    push(other, 'typing', { from: me.id });
-    return json(res, 200, { ok: true });
   }
   if (action === 'signal') {                         // call set-up, passed straight to the other person
     if (!body.data || typeof body.data !== 'object') return json(res, 400, { error: 'bad request' });
@@ -699,27 +757,34 @@ db.exec(`CREATE TABLE IF NOT EXISTS posts (
 )`);
 db.exec('CREATE INDEX IF NOT EXISTS posts_user ON posts (user, id)');
 db.exec(`CREATE TABLE IF NOT EXISTS post_likes (post INTEGER NOT NULL, user INTEGER NOT NULL, PRIMARY KEY (post, user))`);
+db.exec(`CREATE TABLE IF NOT EXISTS post_saves (post INTEGER NOT NULL, user INTEGER NOT NULL, made INTEGER NOT NULL, PRIMARY KEY (post, user))`);
+// A story is a photo or video that shows for 24 hours and is then deleted, file and all.
+db.exec(`CREATE TABLE IF NOT EXISTS stories (id INTEGER PRIMARY KEY, user INTEGER NOT NULL, kind TEXT NOT NULL, file TEXT NOT NULL, poster TEXT NOT NULL DEFAULT '', created INTEGER NOT NULL)`);
+function deleteStory(st) { unlinkMedia(st.file); unlinkMedia(st.poster); db.prepare('DELETE FROM stories WHERE id = ?').run(st.id); }
 db.exec(`CREATE TABLE IF NOT EXISTS post_comments (id INTEGER PRIMARY KEY, post INTEGER NOT NULL, user INTEGER NOT NULL, body TEXT NOT NULL, created INTEGER NOT NULL)`);
 const unlinkMedia = name => { if (name) fs.unlink(path.join(MEDIA_DIR, path.basename(name)), () => {}); };
 function deletePost(p) {
   unlinkMedia(p.file); unlinkMedia(p.poster);
-  for (const sql of ['DELETE FROM post_likes WHERE post = ?', 'DELETE FROM post_comments WHERE post = ?', 'DELETE FROM posts WHERE id = ?']) db.prepare(sql).run(p.id);
+  for (const sql of ['DELETE FROM post_likes WHERE post = ?', 'DELETE FROM post_saves WHERE post = ?', 'DELETE FROM post_comments WHERE post = ?', 'DELETE FROM posts WHERE id = ?']) db.prepare(sql).run(p.id);
 }
 setInterval(() => {
+  for (const st of db.prepare('SELECT * FROM stories WHERE created < ?').all(Date.now() - 864e5)) deleteStory(st);
   for (const u of db.prepare('SELECT name FROM uploads WHERE used = 0 AND created < ?').all(Date.now() - 36e5)) { unlinkMedia(u.name); db.prepare('DELETE FROM uploads WHERE name = ?').run(u.name); }
 }, 15 * 60_000).unref();
 
 const POST_SELECT = `SELECT p.*, u.name, u.pic_v, (SELECT COUNT(*) FROM post_likes l WHERE l.post = p.id) AS likes,
-  (SELECT COUNT(*) FROM post_comments c WHERE c.post = p.id) AS comments, EXISTS (SELECT 1 FROM post_likes l WHERE l.post = p.id AND l.user = ?1) AS liked
+  (SELECT COUNT(*) FROM post_comments c WHERE c.post = p.id) AS comments, EXISTS (SELECT 1 FROM post_likes l WHERE l.post = p.id AND l.user = ?1) AS liked,
+  EXISTS (SELECT 1 FROM post_saves s WHERE s.post = p.id AND s.user = ?1) AS saved
   FROM posts p JOIN users u ON u.id = p.user WHERE u.banned = 0`;
-const shownPost = p => ({ id: p.id, kind: p.kind, src: 'media/' + p.file, poster: p.poster ? 'media/' + p.poster : '', caption: p.caption,
+const shownPost = p => ({ id: p.id, kind: p.kind, src: p.file ? 'media/' + p.file : '', poster: p.poster ? 'media/' + p.poster : '', caption: p.caption, saved: !!p.saved,
   place: p.place ? { label: p.place, lat: p.lat, lon: p.lon } : null, created: p.created, likes: p.likes, comments: p.comments, liked: !!p.liked,
   user: { id: p.user, name: p.name, pic: p.pic_v } });
 
 //   POST /api/explore/media   (the file itself as the body, Content-Type image/* or video/*) -> { media }
 //   POST /api/explore/post    {media, poster?: data URL, caption, place?: {label, lat, lon}}  -> { post }
 //   GET  /api/explore/feed?before=&user=&kind=video&q=   -> { posts }          GET /api/explore/post?id= -> { post, comments }
-//   POST /api/explore/like {id}   /comment {id, body}   /delete {id}   /report {id, reason}
+//   POST /api/explore/like {id}   /save {id}   /comment {id, body}   /delete {id}   /report {id, reason}
+//   GET  /api/explore/stories    POST /api/explore/story {media, poster?}    POST /api/explore/story-delete {id}
 async function exploreApi(req, res, action, query) {
   const me = userOf(req), meId = me ? me.id : 0, now = Date.now();
   if (req.method === 'GET') {
@@ -727,8 +792,21 @@ async function exploreApi(req, res, action, query) {
       const before = Number(query.get('before')) || Number.MAX_SAFE_INTEGER, user = Number(query.get('user')) || 0;
       const kind = query.get('kind') === 'video' ? 'video' : '', q = (query.get('q') || '').trim().toLowerCase().replace(/[%_]/g, '');
       const rows = db.prepare(`${POST_SELECT} AND p.id < ?2 AND (?3 = 0 OR p.user = ?3) AND (?4 = '' OR p.kind = ?4)
-                               AND (?5 = '' OR lower(p.caption) LIKE ?5 OR lower(p.place) LIKE ?5) ORDER BY p.id DESC LIMIT 30`).all(meId, before, user, kind, q ? '%' + q + '%' : '');
+                               AND (?5 = '' OR lower(p.caption) LIKE ?5 OR lower(p.place) LIKE ?5)
+                               AND (?6 = 0 OR EXISTS (SELECT 1 FROM post_saves s WHERE s.post = p.id AND s.user = ?1)) ORDER BY p.id DESC LIMIT 30`)
+        .all(meId, before, user, kind, q ? '%' + q + '%' : '', query.get('saved') && meId ? 1 : 0);
       return json(res, 200, { posts: rows.map(shownPost) });
+    }
+    if (action === 'stories') {
+      // Everyone's stories from the last 24 hours, grouped by person: mine first, then the newest.
+      const rows = db.prepare(`SELECT s.*, u.name, u.pic_v FROM stories s JOIN users u ON u.id = s.user WHERE u.banned = 0 AND s.created > ? ORDER BY s.id`).all(now - 864e5);
+      const by = new Map();
+      for (const r of rows) {
+        if (!by.has(r.user)) by.set(r.user, { user: { id: r.user, name: r.name, pic: r.pic_v }, items: [] });
+        by.get(r.user).items.push({ id: r.id, kind: r.kind, src: 'media/' + r.file, poster: r.poster ? 'media/' + r.poster : '', created: r.created });
+      }
+      const list = [...by.values()].sort((x, y) => (y.user.id === meId) - (x.user.id === meId) || y.items.at(-1).created - x.items.at(-1).created);
+      return json(res, 200, { stories: list });
     }
     if (action === 'post') {
       const p = db.prepare(`${POST_SELECT} AND p.id = ?2`).get(meId, Number(query.get('id')));
@@ -767,13 +845,25 @@ async function exploreApi(req, res, action, query) {
   let body;
   try { body = JSON.parse(await readBody(req, 600_000)) || {}; } catch { return json(res, 400, { error: 'bad request' }); }
 
-  if (action === 'post') {
+  if (action === 'post' && !body.media) {              // words only
+    const text = cleanText(body.caption, 1000);
+    if (text.length < 2) return json(res, 400, { error: 'short' });
+    if (count('SELECT COUNT(*) AS n FROM posts WHERE user = ? AND created > ?', me.id, now - 864e5) >= 40) return json(res, 429, { error: 'slow' });
+    const id = Number(db.prepare("INSERT INTO posts (user, kind, file, caption, created) VALUES (?, 'text', '', ?, ?)").run(me.id, text, now).lastInsertRowid);
+    return json(res, 200, { post: shownPost(db.prepare(`${POST_SELECT} AND p.id = ?2`).get(me.id, id)) });
+  }
+  if (action === 'post' || action === 'story') {
     const up = db.prepare('SELECT * FROM uploads WHERE name = ? AND user = ? AND used = 0').get(String(body.media), me.id);
-    if (!up) return json(res, 400, { error: 'media' });
+    if (!up || up.kind === 'file') return json(res, 400, { error: 'media' });
     let poster = '';
     if (up.kind === 'video' && typeof body.poster === 'string') {
       const m = /^data:image\/jpeg;base64,([A-Za-z0-9+/=]+)$/.exec(body.poster), buf = m && Buffer.from(m[1], 'base64');
       if (buf && buf.length > 200 && buf.length < 400_000) { poster = crypto.randomBytes(12).toString('hex') + '.jpg'; fs.writeFileSync(path.join(MEDIA_DIR, poster), buf); }
+    }
+    if (action === 'story') {
+      db.prepare('INSERT INTO stories (user, kind, file, poster, created) VALUES (?, ?, ?, ?, ?)').run(me.id, up.kind, up.name, poster, now);
+      db.prepare('UPDATE uploads SET used = 1 WHERE name = ?').run(up.name);
+      return json(res, 200, { ok: true });
     }
     const place = body.place && inBangladesh(body.place) ? body.place : null;
     const { lastInsertRowid } = db.prepare('INSERT INTO posts (user, kind, file, poster, caption, place, lat, lon, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
@@ -781,8 +871,18 @@ async function exploreApi(req, res, action, query) {
     db.prepare('UPDATE uploads SET used = 1 WHERE name = ?').run(up.name);
     return json(res, 200, { post: shownPost(db.prepare(`${POST_SELECT} AND p.id = ?2`).get(me.id, Number(lastInsertRowid))) });
   }
+  if (action === 'story-delete') {
+    const st = db.prepare('SELECT * FROM stories WHERE id = ?').get(Number(body.id));
+    if (st && (st.user === me.id || me.role !== 'user')) deleteStory(st);
+    return json(res, 200, { ok: true });
+  }
   const p = db.prepare('SELECT * FROM posts WHERE id = ?').get(Number(body.id));
   if (!p) return json(res, 404, { error: 'not found' });
+  if (action === 'save') {
+    const saved = !db.prepare('DELETE FROM post_saves WHERE post = ? AND user = ?').run(p.id, me.id).changes;
+    if (saved) db.prepare('INSERT INTO post_saves (post, user, made) VALUES (?, ?, ?)').run(p.id, me.id, now);
+    return json(res, 200, { saved });
+  }
   if (action === 'like') {
     const liked = !db.prepare('DELETE FROM post_likes WHERE post = ? AND user = ?').run(p.id, me.id).changes;
     if (liked) db.prepare('INSERT INTO post_likes (post, user) VALUES (?, ?)').run(p.id, me.id);
@@ -815,7 +915,8 @@ function serveMedia(req, res, name) {
   fs.stat(file, (err, stat) => {
     if (err || !stat.isFile() || !/^[a-f0-9]{24}\.\w+$/.test(path.basename(name))) { res.writeHead(404).end(); return; }
     const type = Object.entries(MEDIA_TYPES).find(([, v]) => v[0] === path.extname(file));
-    const head = { 'Content-Type': type ? type[0] : 'application/octet-stream', 'Accept-Ranges': 'bytes', 'Cache-Control': 'public, max-age=31536000, immutable' };
+    const head = { 'Content-Type': type ? type[0] : 'application/octet-stream', 'Accept-Ranges': 'bytes', 'Cache-Control': 'public, max-age=31536000, immutable', 'X-Content-Type-Options': 'nosniff' };
+    if (!type) head['Content-Disposition'] = 'attachment';
     const m = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || '');
     if (m && (m[1] || m[2])) {
       const start = m[1] ? Number(m[1]) : Math.max(0, stat.size - Number(m[2])), end = m[1] && m[2] ? Math.min(Number(m[2]), stat.size - 1) : stat.size - 1;
