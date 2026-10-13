@@ -7,7 +7,8 @@
 //   DATA_DIR=/data node server.js   keep the database somewhere else (a host's persistent disk)
 //
 //   ADMIN_EMAILS=you@example.com    who may open /admin.html (comma separated)
-//   SMTP_HOST, SMTP_USER, SMTP_PASS mail account that sends the sign-in codes (see "Mail" below)
+//   SMTP_HOST, SMTP_USER, SMTP_PASS mail account that sends the sign-in codes (see "Mail" below),
+//   or BREVO_API_KEY + MAIL_FROM   where the host blocks SMTP
 //
 // Ratings live in db/ratings.db (or DATA_DIR). Back that file up; deleting it deletes every rating.
 
@@ -74,9 +75,22 @@ const q = {
 const MAIL = { host: process.env.SMTP_HOST, port: Number(process.env.SMTP_PORT) || 465, user: process.env.SMTP_USER,
                pass: process.env.SMTP_PASS, from: process.env.MAIL_FROM || process.env.SMTP_USER, tls: process.env.SMTP_SECURE !== '0' };
 if (MAIL.pass && /gmail|google/i.test(MAIL.host || '')) MAIL.pass = MAIL.pass.replace(/\s+/g, '');   // Google shows its app passwords in four groups
-const mailReady = !!(MAIL.host && MAIL.user && MAIL.pass);
+// Some hosts (Render's free plan among them) block the SMTP ports. There a mail service's web API is used
+// instead: set BREVO_API_KEY (and MAIL_FROM, an address verified as a sender in Brevo) or RESEND_API_KEY.
+const BREVO = process.env.BREVO_API_KEY, RESEND = process.env.RESEND_API_KEY;
+const mailReady = !!((MAIL.host && MAIL.user && MAIL.pass) || ((BREVO || RESEND) && MAIL.from));
+
+async function sendByApi(to, subject, text) {
+  const res = BREVO
+    ? await fetch('https://api.brevo.com/v3/smtp/email', { method: 'POST', headers: { 'api-key': BREVO, 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ sender: { name: 'BD Map', email: MAIL.from }, to: [{ email: to }], subject, textContent: text }) })
+    : await fetch('https://api.resend.com/emails', { method: 'POST', headers: { Authorization: 'Bearer ' + RESEND, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from: `BD Map <${MAIL.from}>`, to: [to], subject, text }) });
+  if (!res.ok) throw new Error(`mail service said ${res.status}: ${(await res.text()).slice(0, 200)}`);
+}
 
 function sendMail(to, subject, text) {
+  if (BREVO || RESEND) return sendByApi(to, subject, text);
   return new Promise((resolve, reject) => {
     const socket = MAIL.tls ? require('node:tls').connect(MAIL.port, MAIL.host, { servername: MAIL.host }) : require('node:net').connect(MAIL.port, MAIL.host);
     const b64 = v => Buffer.from(v, 'utf8').toString('base64');
@@ -91,7 +105,7 @@ function sendMail(to, subject, text) {
     let buffer = '', step = 0;
     const fail = why => { socket.destroy(); reject(new Error(why)); };
     socket.setTimeout(15_000, () => fail('mail server did not answer'));
-    socket.on('error', e => reject(e));
+    socket.on('error', e => reject(Object.assign(new Error(e.message || e.code || 'could not reach the mail server'), { code: e.code })));
     socket.on('data', chunk => {
       buffer += chunk;
       const lines = buffer.split('\r\n');
@@ -282,7 +296,7 @@ async function authApi(req, res, action) {
     try {
       await sendMail(email, `${code} — BD Map কোড`, `আপনার BD Map কোড: ${code}\n\nকোডটি ১০ মিনিট পর্যন্ত চলবে। আপনি না চেয়ে থাকলে এই ই-মেইলটি উপেক্ষা করুন।\n\nYour BD Map code is ${code}. It is valid for 10 minutes. If you did not ask for it, ignore this e-mail.`);
     } catch (e) {
-      console.error('mail failed:', e.message);
+      console.error('mail failed:', e.code || '', e.message || String(e));
       aq.dropCode.run(email);
       return json(res, 502, { error: 'mail' });
     }
