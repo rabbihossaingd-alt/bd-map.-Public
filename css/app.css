@@ -578,8 +578,8 @@ button.person:active { transform: scale(.985); }
 .them.joined .bubble { border-bottom-left-radius: 22px; } .them.follows .bubble { border-top-left-radius: 7px; }
 .me.joined .bubble { border-bottom-right-radius: 22px; } .me.follows .bubble { border-top-right-radius: 7px; }
 .bubble.emoji { background: none !important; box-shadow: none !important; padding: 0 2px; font-size: 44px; line-height: 1.15; }
-.bubble.place, .bubble.call { display: flex; align-items: center; gap: 11px; }
-.bubble.place > svg, .bubble.call > svg { flex: none; width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.bubble.place, .bubble.call-log { display: flex; align-items: center; gap: 11px; }
+.bubble.place > svg, .bubble.call-log > svg { flex: none; width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
 .bubble.place { cursor: pointer; transition: transform .15s; }
 .bubble.place:active { transform: scale(.97); }
 .bubble.place b { display: block; font-weight: 600; }
@@ -1169,3 +1169,11 @@ body.reels-open { overflow: hidden; }
   .reel-side { right: 10px; }
   #explore-results { padding: 0 12px; }
 }
+
+/* Feed video: the speaker. Off (crossed) until pressed, because a browser will not start sound on its own. */
+.fc-sound { position: absolute; right: 12px; bottom: 12px; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: rgba(0, 0, 0, .55); color: #fff; transition: transform .2s var(--ease), background .2s; }
+.fc-sound:active { transform: scale(.88); }
+.fc-sound svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.fc-sound::after { content: ''; position: absolute; width: 22px; height: 2px; border-radius: 2px; background: #fff; transform: rotate(-45deg); transition: opacity .2s, transform .2s; }
+.fc-sound.on::after { opacity: 0; transform: rotate(-45deg) scaleX(0); }
+.fc-sound.on { background: rgba(0, 0, 0, .7); }

@@ -145,7 +145,7 @@ function bubble(m, f) {
     b.append(ic('pin'), t);
     b.addEventListener('click', () => goTo({ lat: m.body.lat, lon: m.body.lon, label: m.body.label }));
   } else if (m.kind === 'call') {
-    b = el('div', 'bubble call');
+    b = el('div', 'bubble call-log');      // not 'call': that class is the full-screen call overlay
     b.append(ic(m.body.video ? 'video' : 'phone'), el('span', null, callText(m, mine)));
   } else {
     // A message of one to three emoji is shown large, without a bubble.

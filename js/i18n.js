@@ -95,7 +95,7 @@ const EXACT = {
   // explore
   'খুঁজুন — মানুষ, জায়গা, পোস্ট': 'Search — people, places, posts', 'লাইক': 'Like', 'মন্তব্য': 'Comment', 'প্রথম মন্তব্যটি করুন': 'Be the first to comment', 'মানুষ': 'People',
   'জায়গাটি ম্যাপে দেখুন': 'Show the place on the map', 'পোস্টটি মুছে ফেলুন': 'Delete this post', 'এই খোঁজে কোনো পোস্ট পাওয়া যায়নি।': 'No posts matched that search.', 'মানুষ খুঁজতে লগইন করুন।': 'Log in to search for people.',
-  'বন্ধ করুন': 'Close',
+  'বন্ধ করুন': 'Close', 'শব্দ': 'Sound',
   'এক্সপ্লোর': 'Explore', 'বাংলাদেশ, সবার চোখে': 'Bangladesh, through everyone\'s eyes', 'ঘুরে আসা জায়গার ছবি ও ভিডিও। আপনিও দিন।': 'Photos and videos of places people have been. Add yours.',
   'নতুন পোস্ট': 'New post', 'পোস্ট': 'Posts', 'পোস্ট করুন': 'Post', 'আরও দেখুন': 'Show more', 'মুছে ফেলুন': 'Delete', 'রিপোর্ট': 'Report', 'রিপোর্ট পাঠানো হয়েছে': 'Report sent',
   'মন্তব্য লিখুন…': 'Write a comment…', 'ছবি বা ভিডিও বেছে নিন': 'Choose a photo or video', 'ঘুরে আসা জায়গার একটি ছবি, অথবা ৫০ এমবি পর্যন্ত একটি ভিডিও': 'A photo of a place you visited, or a video up to 50 MB',

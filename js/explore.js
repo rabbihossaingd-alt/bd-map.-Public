@@ -41,7 +41,8 @@ function postMenu(p, onGone) {
 }
 
 // ---- one post in the feed ----
-let feedWatcher = null;      // plays a feed video (muted) while it is on screen, pauses it when it leaves
+let feedWatcher = null;      // plays a feed video while it is on screen, pauses it when it leaves
+let feedSound = false;       // browsers only allow sound after a tap, so videos start silent until the speaker is pressed
 function feedCard(p, onGone) {
   const card = el('article', 'fc');
   const head = el('header', 'fc-head');
@@ -74,9 +75,20 @@ function feedCard(p, onGone) {
   if (p.kind === 'video') {
     const v = el('video');
     Object.assign(v, { src: p.src, poster: p.poster, muted: true, loop: true, playsInline: true, preload: 'metadata' });
-    media.append(v, svgEl('play', 'reel-mark'));
+    const speaker = el('button', 'fc-sound' + (feedSound ? ' on' : ''));
+    speaker.innerHTML = svg('sound');
+    speaker.setAttribute('aria-label', 'শব্দ');
+    speaker.addEventListener('click', e => {
+      e.stopPropagation();
+      feedSound = !feedSound;
+      for (const b of document.querySelectorAll('.fc-sound')) b.classList.toggle('on', feedSound);
+      for (const x of document.querySelectorAll('.fc-media video')) x.muted = !feedSound;
+      if (feedSound) v.play().catch(() => {});
+    });
+    v.muted = !feedSound;
+    media.append(v, svgEl('play', 'reel-mark'), speaker);
     media.classList.add('video');
-    media.addEventListener('click', () => openReels(p.id));
+    media.addEventListener('click', () => { v.pause(); openReels(p.id); });
     if (feedWatcher) feedWatcher.observe(v);
   } else {
     const img = Object.assign(el('img'), { src: p.src, alt: p.caption || '', loading: 'lazy' });
@@ -404,7 +416,10 @@ function openNewPost() {
   const feed = $('explore-feed'), results = $('explore-results'), people = $('explore-people'), q = $('explore-q');
   let last = 0, busy = false, done = false;
   feedWatcher = new IntersectionObserver(entries => {
-    for (const e of entries) { if (e.isIntersecting && e.intersectionRatio > 0.6) e.target.play().catch(() => {}); else e.target.pause(); }
+    for (const e of entries) {
+      const v = e.target;
+      if (e.isIntersecting && e.intersectionRatio > 0.6) { v.muted = !feedSound; v.play().catch(() => { v.muted = true; v.play().catch(() => {}); }); } else v.pause();
+    }
   }, { threshold: [0, 0.6] });
 
   async function more() {
