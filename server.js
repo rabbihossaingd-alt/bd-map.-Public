@@ -36,6 +36,8 @@ const PORT = Number(process.env.PORT) || 8765;
 const DATA_DIR = process.env.DATA_DIR || path.join(ROOT, 'db');
 fs.mkdirSync(DATA_DIR, { recursive: true });
 const db = new DatabaseSync(path.join(DATA_DIR, 'ratings.db'));
+// Write-ahead logging: readers never wait for a writer, and a write costs one disk flush at checkpoints instead of every time.
+db.exec('PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA busy_timeout = 4000');
 db.exec(`CREATE TABLE IF NOT EXISTS ratings (
   key     TEXT NOT NULL,
   device  TEXT NOT NULL,
@@ -160,7 +162,9 @@ db.exec(`CREATE TABLE IF NOT EXISTS codes (
   sent    INTEGER NOT NULL
 )`);
 if (!db.prepare("SELECT COUNT(*) AS n FROM pragma_table_info('users') WHERE name = 'points'").get().n) db.exec('ALTER TABLE users ADD COLUMN points INTEGER NOT NULL DEFAULT 0');
-const USER_COLS = 'id, email, name, bio, pic_v, role, banned, data, created, seen, points';
+for (const [col, def] of [['verified', 'INTEGER NOT NULL DEFAULT 0'], ['prefs', "TEXT NOT NULL DEFAULT '{}'"]])
+  if (!db.prepare("SELECT COUNT(*) AS n FROM pragma_table_info('users') WHERE name = ?").get(col).n) db.exec(`ALTER TABLE users ADD COLUMN ${col} ${def}`);
+const USER_COLS = 'id, email, name, bio, pic_v, role, banned, data, created, seen, points, verified, prefs';
 const aq = {
   byEmail:    db.prepare(`SELECT ${USER_COLS} FROM users WHERE email = ?`),
   byId:       db.prepare(`SELECT ${USER_COLS} FROM users WHERE id = ?`),
@@ -226,7 +230,10 @@ function startSession(req, res, user, device) {
     aq.adoptFares.run(voter, device);   aq.dropFares.run(device);
   }
 }
-const publicUser = u => ({ user: { id: u.id, name: u.name, email: u.email, bio: u.bio, pic: u.pic_v, role: u.role, points: u.points }, data: JSON.parse(u.data || '{}') });
+// Privacy choices: `active` shows when you are online (and lets you see others'); `dm` is who may send you a
+// message request: 'all', or only 'following' (people you follow).
+const prefsOf = u => ({ active: true, dm: 'all', ...JSON.parse((u && u.prefs) || '{}') });
+const publicUser = u => ({ user: { id: u.id, name: u.name, email: u.email, bio: u.bio, pic: u.pic_v, role: u.role, points: u.points, verified: !!u.verified, prefs: prefsOf(u) }, data: JSON.parse(u.data || '{}') });
 
 function cleanEmail(e) {
   if (typeof e !== 'string') return null;
@@ -254,7 +261,8 @@ setInterval(() => {
 // Everything an account owns goes with it.
 function deleteUser(id) {
   aq.endAll.run(id);
-  for (const sql of ['DELETE FROM friends WHERE a = ?1 OR b = ?1', 'DELETE FROM messages WHERE a = ?1 OR b = ?1', 'DELETE FROM reports WHERE reporter = ?1 OR about = ?1',
+  for (const g of db.prepare('SELECT grp FROM group_members WHERE user = ?').all(id)) leaveGroup(g.grp, id);
+  for (const sql of ['DELETE FROM friends WHERE a = ?1 OR b = ?1', 'DELETE FROM messages WHERE a = ?1 OR b = ?1 OR sender = ?1', 'DELETE FROM notes WHERE user = ?1', 'DELETE FROM chat_prefs WHERE user = ?1', 'DELETE FROM earnings WHERE user = ?1', 'DELETE FROM payouts WHERE user = ?1', 'DELETE FROM reports WHERE reporter = ?1 OR about = ?1',
                      'DELETE FROM ticket_msgs WHERE ticket IN (SELECT id FROM tickets WHERE user = ?1)', 'DELETE FROM tickets WHERE user = ?1', 'DELETE FROM contributions WHERE user = ?1', 'DELETE FROM post_likes WHERE user = ?1', 'DELETE FROM post_saves WHERE user = ?1', 'DELETE FROM post_comments WHERE user = ?1',
                      'DELETE FROM chat_ok WHERE a = ?1 OR b = ?1']) db.prepare(sql).run(id);
   for (const st of db.prepare('SELECT * FROM stories WHERE user = ?').all(id)) deleteStory(st);
@@ -348,6 +356,14 @@ async function authApi(req, res, action) {
     tellFriends(me.id, 'friends', {});
     return json(res, 200, publicUser(aq.byId.get(me.id)));
   }
+  if (action === 'prefs') {
+    const p = prefsOf(me);
+    if (typeof body.active === 'boolean') p.active = body.active;
+    if (['all', 'following'].includes(body.dm)) p.dm = body.dm;
+    db.prepare('UPDATE users SET prefs = ? WHERE id = ?').run(JSON.stringify({ active: p.active, dm: p.dm }), me.id);
+    tellFriends(me.id, 'presence', { id: me.id, online: p.active && isOnline(me.id) });
+    return json(res, 200, publicUser(aq.byId.get(me.id)));
+  }
   if (action === 'data') {
     const text = JSON.stringify(body.data);
     if (!body.data || typeof body.data !== 'object' || Array.isArray(body.data) || text.length > 8000) return json(res, 400, { error: 'bad request' });
@@ -398,6 +414,14 @@ db.exec(`CREATE TABLE IF NOT EXISTS messages (
   seen   INTEGER NOT NULL DEFAULT 0
 )`);
 db.exec('CREATE INDEX IF NOT EXISTS messages_pair ON messages (a, b, id)');
+// grp: the group a message belongs to (0 for a conversation between two people, whose a and b are then 0);
+// reply: the message it answers; reacts: {user id: emoji}; gone: unsent by its sender (kept as a marker only).
+for (const [col, def] of [['grp', 'INTEGER NOT NULL DEFAULT 0'], ['reply', 'INTEGER NOT NULL DEFAULT 0'], ['reacts', "TEXT NOT NULL DEFAULT '{}'"], ['gone', 'INTEGER NOT NULL DEFAULT 0'], ['edited', 'INTEGER NOT NULL DEFAULT 0']])
+  if (!db.prepare("SELECT COUNT(*) AS n FROM pragma_table_info('messages') WHERE name = ?").get(col).n) db.exec(`ALTER TABLE messages ADD COLUMN ${col} ${def}`);
+db.exec('CREATE INDEX IF NOT EXISTS messages_grp ON messages (grp, id)');
+const MSG_COLS = 'id, sender, kind, body, sent, seen, grp, reply, reacts, gone, edited';
+const EDIT_MINUTES = 15;                                // a text can be changed this long after it was sent
+const REACTIONS = ['❤️', '😂', '😮', '😢', '😡', '👍'];
 db.exec(`CREATE TABLE IF NOT EXISTS reports (
   id       INTEGER PRIMARY KEY,
   reporter INTEGER NOT NULL,
@@ -411,12 +435,12 @@ const cq = {
   setLink: db.prepare(`INSERT INTO friends (a, b, state, actor, updated) VALUES (?, ?, ?, ?, ?)
                        ON CONFLICT (a, b) DO UPDATE SET state = excluded.state, actor = excluded.actor, updated = excluded.updated`),
   drop:    db.prepare('DELETE FROM friends WHERE a = ? AND b = ?'),
-  links:   db.prepare(`SELECT f.state, f.actor, f.updated, u.id, u.name, u.bio, u.pic_v AS pic FROM friends f
+  links:   db.prepare(`SELECT f.state, f.actor, f.updated, u.id, u.name, u.bio, u.pic_v AS pic, u.verified, u.prefs FROM friends f
                        JOIN users u ON u.id = CASE WHEN f.a = ?1 THEN f.b ELSE f.a END WHERE f.a = ?1 OR f.b = ?1`),
-  last:    db.prepare('SELECT id, sender, kind, body, sent, seen FROM messages WHERE a = ? AND b = ? ORDER BY id DESC LIMIT 1'),
-  unread:  db.prepare('SELECT COUNT(*) AS n FROM messages WHERE a = ? AND b = ? AND sender <> ? AND seen = 0'),
-  history: db.prepare('SELECT id, sender, kind, body, sent, seen FROM messages WHERE a = ? AND b = ? AND id < ? ORDER BY id DESC LIMIT 60'),
-  add:     db.prepare('INSERT INTO messages (a, b, sender, kind, body, sent) VALUES (?, ?, ?, ?, ?, ?)'),
+  last:    db.prepare(`SELECT ${MSG_COLS} FROM messages WHERE a = ? AND b = ? ORDER BY id DESC LIMIT 1`),
+  unread:  db.prepare('SELECT COUNT(*) AS n FROM messages WHERE a = ? AND b = ? AND sender <> ? AND seen = 0 AND gone = 0'),
+  history: db.prepare(`SELECT ${MSG_COLS} FROM messages WHERE a = ? AND b = ? AND id < ? ORDER BY id DESC LIMIT 60`),
+  add:     db.prepare('INSERT INTO messages (a, b, sender, kind, body, sent, grp, reply) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'),
   seen:    db.prepare('UPDATE messages SET seen = 1 WHERE a = ? AND b = ? AND sender = ? AND seen = 0'),
   report:  db.prepare('INSERT INTO reports (reporter, about, reason, made) VALUES (?, ?, ?, ?)')
 };
@@ -428,7 +452,119 @@ const chatOpen = (x, y) => areFriends(x, y) || !!db.prepare('SELECT 1 FROM chat_
 const REQUEST_LIMIT = 5;                               // messages allowed before a request is accepted
 const linkOf = (x, y) => cq.link.get(...pair(x, y));
 const areFriends = (x, y) => (linkOf(x, y) || {}).state === 'friends';
-const shown = m => ({ id: m.id, sender: m.sender, kind: m.kind, body: m.kind === 'text' ? m.body : JSON.parse(m.body), sent: m.sent, seen: m.seen });
+// What a reply shows of the message it answers: a line of its text, or what kind of thing it was.
+function quoteOf(id) {
+  const r = id ? db.prepare('SELECT id, sender, kind, body, gone FROM messages WHERE id = ?').get(id) : null;
+  if (!r) return null;
+  return { id: r.id, sender: r.sender, kind: r.gone ? 'gone' : r.kind, text: r.gone ? '' : r.kind === 'text' ? r.body.slice(0, 140) : r.kind === 'file' ? JSON.parse(r.body).name : '' };
+}
+function shown(m) {
+  const out = { id: m.id, sender: m.sender, kind: m.gone ? 'gone' : m.kind, body: m.gone ? '' : m.kind === 'text' ? m.body : JSON.parse(m.body), sent: m.sent, seen: m.seen };
+  if (m.grp) out.group = m.grp;
+  if (!m.gone && m.edited) out.edited = m.edited;
+  if (!m.gone && m.reply) out.reply = quoteOf(m.reply);
+  const reacts = JSON.parse(m.reacts || '{}');
+  if (!m.gone && Object.keys(reacts).length) out.reacts = reacts;
+  return out;
+}
+
+// ---- group conversations ----
+// Up to 32 people. Whoever makes a group is its admin (when the admin leaves, the longest member takes over).
+// Any member can add people they are connected with (either follows the other) and rename the group; only an
+// admin removes someone. Changes appear in the conversation as a line in the middle ("sys" messages).
+db.exec(`CREATE TABLE IF NOT EXISTS chat_groups (id INTEGER PRIMARY KEY, name TEXT NOT NULL DEFAULT '', owner INTEGER NOT NULL, created INTEGER NOT NULL)`);
+db.exec(`CREATE TABLE IF NOT EXISTS group_members (grp INTEGER NOT NULL, user INTEGER NOT NULL, role TEXT NOT NULL DEFAULT 'member', joined INTEGER NOT NULL, last_read INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (grp, user))`);
+db.exec('CREATE INDEX IF NOT EXISTS group_members_user ON group_members (user)');
+// One person's setting for one conversation (muted); a conversation's colours, shared by everyone in it; notes.
+db.exec(`CREATE TABLE IF NOT EXISTS chat_prefs (user INTEGER NOT NULL, thread TEXT NOT NULL, muted INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (user, thread))`);
+db.exec(`CREATE TABLE IF NOT EXISTS chat_theme (thread TEXT PRIMARY KEY, theme TEXT NOT NULL)`);
+db.exec(`CREATE TABLE IF NOT EXISTS notes (user INTEGER PRIMARY KEY, body TEXT NOT NULL, created INTEGER NOT NULL)`);
+const GROUP_MAX = 32, NOTE_HOURS = 24, THEMES = ['default', 'ocean', 'sunset', 'berry', 'forest', 'grape', 'mono'];
+const gq = {
+  group:   db.prepare('SELECT * FROM chat_groups WHERE id = ?'),
+  member:  db.prepare('SELECT * FROM group_members WHERE grp = ? AND user = ?'),
+  members: db.prepare('SELECT m.user AS id, m.role, m.last_read, u.name, u.bio, u.pic_v AS pic, u.verified FROM group_members m JOIN users u ON u.id = m.user WHERE m.grp = ? ORDER BY m.joined, m.user'),
+  mine:    db.prepare('SELECT g.*, m.last_read FROM group_members m JOIN chat_groups g ON g.id = m.grp WHERE m.user = ?'),
+  join:    db.prepare('INSERT OR IGNORE INTO group_members (grp, user, role, joined) VALUES (?, ?, ?, ?)'),
+  last:    db.prepare(`SELECT ${MSG_COLS} FROM messages WHERE grp = ? ORDER BY id DESC LIMIT 1`),
+  unread:  db.prepare("SELECT COUNT(*) AS n FROM messages WHERE grp = ? AND id > ? AND sender <> ? AND gone = 0 AND kind <> 'sys'"),
+  history: db.prepare(`SELECT ${MSG_COLS} FROM messages WHERE grp = ? AND id < ? ORDER BY id DESC LIMIT 60`)
+};
+const groupKey = id => 'g' + id, pairKey = (x, y) => 'p' + pair(x, y).join('-');
+const themeOf = key => (db.prepare('SELECT theme FROM chat_theme WHERE thread = ?').get(key) || {}).theme || 'default';
+const mutedOf = (user, key) => !!(db.prepare('SELECT muted FROM chat_prefs WHERE user = ? AND thread = ?').get(user, key) || {}).muted;
+const memberCard = m => ({ id: m.id, name: m.name, bio: m.bio, pic: m.pic, role: m.role, verified: !!m.verified });
+function tellGroup(gid, event, data, except = 0) { for (const m of gq.members.all(gid)) if (m.id !== except) push(m.id, event, data); }
+// A line in the middle of a conversation: "X added Y", "the theme changed", ...
+function sysLine(a, b, gid, sender, what) {
+  const now = Date.now(), body = JSON.stringify(what);
+  const id = Number(cq.add.run(a, b, sender, 'sys', body, now, gid, 0).lastInsertRowid);
+  const message = shown({ id, sender, kind: 'sys', body, sent: now, seen: 0, grp: gid, reply: 0, reacts: '{}', gone: 0 });
+  if (gid) tellGroup(gid, 'message', message);
+  else { const to = a === sender ? b : a; push(to, 'message', { ...message, to }); push(sender, 'message', { ...message, to }); }
+}
+function leaveGroup(gid, uid) {
+  leaveGroupCall(gid, uid);
+  db.prepare('DELETE FROM group_members WHERE grp = ? AND user = ?').run(gid, uid);
+  db.prepare('DELETE FROM chat_prefs WHERE user = ? AND thread = ?').run(uid, groupKey(gid));
+  const left = gq.members.all(gid);
+  if (!left.length) {
+    for (const sql of ['DELETE FROM messages WHERE grp = ?', 'DELETE FROM chat_groups WHERE id = ?']) db.prepare(sql).run(gid);
+    db.prepare('DELETE FROM chat_theme WHERE thread = ?').run(groupKey(gid));
+  } else if (!left.some(m => m.role === 'admin')) db.prepare("UPDATE group_members SET role = 'admin' WHERE grp = ? AND user = ?").run(gid, left[0].id);
+}
+// Group calls: who is in each group's call right now. Calls are peer-to-peer between every two people in it
+// (a mesh), so they are kept small; the server only passes the set-up messages along.
+const GROUP_CALL_MAX = 8;
+const groupCalls = new Map();   // group id -> { video, by, started, people: Set of user ids }
+const callOf = gid => { const c = groupCalls.get(gid); return c ? { video: c.video, by: c.by, started: c.started, people: [...c.people] } : null; };
+function leaveGroupCall(gid, uid) {
+  const c = groupCalls.get(gid);
+  if (!c || !c.people.delete(uid)) return;
+  if (!c.people.size) {
+    groupCalls.delete(gid);
+    if (gq.group.get(gid)) sysLine(0, 0, gid, c.by, { t: 'call', video: c.video, secs: Math.round((Date.now() - c.started) / 1000) });
+  }
+  if (gq.group.get(gid)) tellGroup(gid, 'gcall', { group: gid, call: callOf(gid) });
+}
+// Who may put whom in a group: two people with a follow between them either way, and no block.
+const connected = (x, y) => { const l = linkOf(x, y); return !!l && l.state !== 'blocked'; };
+// The `where` that picks one conversation's messages, if this person is in it.
+function threadWhere(meId, query) {
+  const gid = Number(query.get('group'));
+  if (gid) return gq.member.get(gid, meId) ? { sql: 'grp = ?', args: [gid] } : null;
+  const other = Number(query.get('with'));
+  if (!Number.isInteger(other) || other === meId || (linkOf(meId, other) || {}).state === 'blocked') return null;
+  return { sql: 'a = ? AND b = ?', args: pair(meId, other) };
+}
+// The stored form of a new message, or null when it is not acceptable.
+function messageText(me, kind, v) {
+  if (kind === 'text') {
+    const text = typeof v === 'string' ? v.trim() : '';
+    return text && text.length <= 2000 ? text : null;
+  }
+  if (kind === 'place') {
+    const ok = v && typeof v.label === 'string' && v.label.trim() && Number.isFinite(v.lat) && Number.isFinite(v.lon) && Math.abs(v.lat) <= 90 && Math.abs(v.lon) <= 180;
+    return ok ? JSON.stringify({ lat: +v.lat.toFixed(6), lon: +v.lon.toFixed(6), label: v.label.trim().slice(0, 120) }) : null;
+  }
+  if (kind === 'call') {
+    const ok = v && ['missed', 'declined', 'ended'].includes(v.result) && Number.isInteger(v.secs) && v.secs >= 0 && v.secs < 86400;
+    return ok ? JSON.stringify({ video: !!v.video, result: v.result, secs: v.secs }) : null;
+  }
+  if (kind === 'photo' || kind === 'video' || kind === 'file' || kind === 'audio') {
+    const up = db.prepare('SELECT * FROM uploads WHERE name = ? AND user = ? AND used = 0').get(String(v && v.media), me.id);
+    if (!up || up.kind !== kind) return null;
+    db.prepare('UPDATE uploads SET used = 1 WHERE name = ?').run(up.name);
+    const out = { src: 'media/' + up.name, name: cleanText(v.name, 80) || 'file', size: Number(v.size) || 0 };
+    if (kind === 'audio') out.secs = Math.max(1, Math.min(600, Math.round(Number(v.secs) || 1)));
+    return JSON.stringify(out);
+  }
+  return null;
+}
+// People who should hear about a change to someone: friends, and those who follow them.
+function tellFollowers(userId, event, data) {
+  for (const l of cq.links.all(userId)) if (l.state === 'friends' || (l.state === 'pending' && l.actor !== userId)) push(l.id, event, data);
+}
 
 // Live delivery: every open app holds one event stream; a user can have several (phone and computer).
 const streams = new Map();   // user id -> Set of responses
@@ -476,10 +612,14 @@ async function chatApi(req, res, action, query) {
       if (!streams.has(me.id)) streams.set(me.id, new Set());
       const set = streams.get(me.id);
       set.add(res);
-      if (set.size === 1) tellFriends(me.id, 'presence', { id: me.id, online: true });
+      if (set.size === 1 && prefsOf(me).active) tellFriends(me.id, 'presence', { id: me.id, online: true });
       req.on('close', () => {
         set.delete(res);
-        if (!set.size) { streams.delete(me.id); tellFriends(me.id, 'presence', { id: me.id, online: false }); }
+        if (!set.size) {
+          streams.delete(me.id);
+          if (prefsOf(me).active) tellFriends(me.id, 'presence', { id: me.id, online: false });
+          for (const gid of [...groupCalls.keys()]) leaveGroupCall(gid, me.id);   // the app was closed mid-call
+        }
       });
       return;
     }
@@ -487,24 +627,41 @@ async function chatApi(req, res, action, query) {
       // friends: every conversation I am part of (`ok` false while my request waits to be accepted);
       // requests: people who wrote to me first and whom I have not accepted; incoming / outgoing: follows.
       const out = { friends: [], requests: [], incoming: [], outgoing: [], blocked: [] }, seen = new Set(), blocked = new Set();
+      const meActive = prefsOf(me).active;
       const talk = (who, since, mutual) => {
         if (seen.has(who.id)) return;
         seen.add(who.id);
         const [a, b] = pair(me.id, who.id), last = cq.last.get(a, b), ok = mutual || chatOpen(me.id, who.id);
-        const row = { ...who, online: ok && isOnline(who.id), since, last: last ? shown(last) : null, unread: cq.unread.get(a, b, me.id).n, ok, mutual };
+        // Online is shown only between two people who both share their activity.
+        const active = meActive && prefsOf(who).active;
+        delete who.prefs;
+        const row = { ...who, verified: !!who.verified, online: ok && active && isOnline(who.id), since, last: last ? shown(last) : null, unread: cq.unread.get(a, b, me.id).n, ok, mutual,
+                      muted: mutedOf(me.id, 'u' + who.id), theme: themeOf(pairKey(me.id, who.id)) };
         if (ok || count('SELECT COUNT(*) AS n FROM messages WHERE a = ? AND b = ? AND sender = ?', a, b, me.id)) out.friends.push(row);
         else if (last) out.requests.push(row);
       };
       for (const l of cq.links.all(me.id)) {
-        const who = { id: l.id, name: l.name, bio: l.bio, pic: l.pic };
+        const who = { id: l.id, name: l.name, bio: l.bio, pic: l.pic, verified: l.verified, prefs: l.prefs };
         if (l.state === 'friends') talk(who, l.updated, true);
         else if (l.state === 'pending') (l.actor === me.id ? out.outgoing : out.incoming).push(who);
         else { blocked.add(l.id); if (l.actor === me.id) out.blocked.push(who); }
       }
       for (const { other } of db.prepare('SELECT DISTINCT CASE WHEN a = ?1 THEN b ELSE a END AS other FROM messages WHERE a = ?1 OR b = ?1').all(me.id)) {
         const u = aq.byId.get(other);
-        if (u && !u.banned && !blocked.has(other)) talk({ id: u.id, name: u.name, bio: u.bio, pic: u.pic_v }, 0, false);
+        if (u && !u.banned && !blocked.has(other)) talk({ id: u.id, name: u.name, bio: u.bio, pic: u.pic_v, verified: u.verified, prefs: u.prefs }, 0, false);
       }
+      for (const list of [out.incoming, out.outgoing, out.blocked]) for (const p of list) { p.verified = !!p.verified; delete p.prefs; }
+      out.groups = gq.mine.all(me.id).map(g => {
+        const last = gq.last.get(g.id), key = groupKey(g.id);
+        return { id: g.id, name: g.name, created: g.created, members: gq.members.all(g.id).map(memberCard), last: last ? shown(last) : null,
+                 unread: gq.unread.get(g.id, g.last_read, me.id).n, muted: mutedOf(me.id, key), theme: themeOf(key), call: callOf(g.id) };
+      });
+      // Notes from the last day: mine, and those of people I follow.
+      out.notes = db.prepare(`SELECT n.body, n.created, u.id, u.name, u.pic_v AS pic FROM notes n JOIN users u ON u.id = n.user
+                              WHERE n.created > ?2 AND u.banned = 0 AND (n.user = ?1 OR EXISTS (SELECT 1 FROM friends f WHERE f.a = MIN(?1, n.user) AND f.b = MAX(?1, n.user)
+                              AND (f.state = 'friends' OR (f.state = 'pending' AND f.actor = ?1)))) ORDER BY (n.user = ?1) DESC, n.created DESC LIMIT 30`)
+        .all(me.id, Date.now() - NOTE_HOURS * 36e5).map(n => ({ user: { id: n.id, name: n.name, pic: n.pic }, body: n.body, created: n.created }));
+      out.prefs = prefsOf(me);
       return json(res, 200, out);
     }
     if (action === 'find') {
@@ -517,6 +674,24 @@ async function chatApi(req, res, action, query) {
       if (!user || (link && link.state === 'blocked')) return json(res, 404, { error: 'none' });
       const state = !link ? 'none' : link.state === 'friends' ? 'friends' : link.actor === me.id ? 'sent' : 'received';
       return json(res, 200, { user: { id: user.id, name: user.name, bio: user.bio, pic: user.pic_v, state } });
+    }
+    if (action === 'messages' && query.get('group')) {
+      const gid = Number(query.get('group')), before = Number(query.get('before')) || Number.MAX_SAFE_INTEGER;
+      if (!gq.member.get(gid, me.id)) return json(res, 403, { error: 'group' });
+      const members = gq.members.all(gid);
+      return json(res, 200, { messages: gq.history.all(gid, before).reverse().map(shown), ok: true, reads: Object.fromEntries(members.map(m => [m.id, m.last_read])) });
+    }
+    if (action === 'media' || action === 'search') {         // a conversation's photos, videos and files; or its words
+      const where = threadWhere(me.id, query);
+      if (!where) return json(res, 403, { error: 'friends' });
+      if (action === 'media') {
+        const rows = db.prepare(`SELECT ${MSG_COLS} FROM messages WHERE ${where.sql} AND gone = 0 AND kind IN ('photo', 'video', 'file') ORDER BY id DESC LIMIT 90`).all(...where.args);
+        return json(res, 200, { items: rows.map(shown) });
+      }
+      const q = (query.get('q') || '').trim().toLowerCase().replace(/[%_]/g, '');
+      if (q.length < 2) return json(res, 200, { items: [] });
+      const rows = db.prepare(`SELECT ${MSG_COLS} FROM messages WHERE ${where.sql} AND gone = 0 AND kind = 'text' AND lower(body) LIKE ? ORDER BY id DESC LIMIT 40`).all(...where.args, '%' + q + '%');
+      return json(res, 200, { items: rows.map(shown) });
     }
     if (action === 'messages') {
       const other = Number(query.get('with')), before = Number(query.get('before')) || Number.MAX_SAFE_INTEGER;
@@ -554,6 +729,60 @@ async function chatApi(req, res, action, query) {
   if (!(req.headers['content-type'] || '').startsWith('application/json')) return json(res, 400, { error: 'bad request' });
   let body;
   try { body = JSON.parse(await readBody(req, 40_000)) || {}; } catch { return json(res, 400, { error: 'bad request' }); }
+  if (action === 'note') {                           // a short line over your picture in the inbox, for a day
+    const text = cleanText(body.body, 60);
+    if (!text) db.prepare('DELETE FROM notes WHERE user = ?').run(me.id);
+    else db.prepare('INSERT INTO notes (user, body, created) VALUES (?, ?, ?) ON CONFLICT (user) DO UPDATE SET body = excluded.body, created = excluded.created').run(me.id, text, Date.now());
+    tellFollowers(me.id, 'friends', {});
+    push(me.id, 'friends', {});
+    return json(res, 200, { ok: true });
+  }
+  if (action === 'mute') {
+    const key = String(body.thread || '');
+    if (!/^[ug]\d+$/.test(key)) return json(res, 400, { error: 'bad request' });
+    db.prepare('INSERT INTO chat_prefs (user, thread, muted) VALUES (?, ?, ?) ON CONFLICT (user, thread) DO UPDATE SET muted = excluded.muted').run(me.id, key, body.on ? 1 : 0);
+    return json(res, 200, { ok: true });
+  }
+  if (action === 'react' || action === 'unsend' || action === 'edit') {
+    const m = db.prepare(`SELECT ${MSG_COLS}, a, b FROM messages WHERE id = ?`).get(Number(body.msg));
+    const inIt = m && !m.gone && (m.grp ? !!gq.member.get(m.grp, me.id) : (m.a === me.id || m.b === me.id));
+    if (!inIt || m.kind === 'sys' || m.kind === 'call') return json(res, 404, { error: 'not found' });
+    if (!m.grp && (linkOf(m.a, m.b) || {}).state === 'blocked') return json(res, 403, { error: 'friends' });
+    if (action === 'edit') {
+      const text = typeof body.body === 'string' ? body.body.trim() : '';
+      if (m.sender !== me.id || m.kind !== 'text') return json(res, 403, { error: 'forbidden' });
+      if (Date.now() - m.sent > EDIT_MINUTES * 60_000) return json(res, 403, { error: 'late' });
+      if (!text || text.length > 2000) return json(res, 400, { error: 'bad request' });
+      db.prepare('UPDATE messages SET body = ?, edited = ? WHERE id = ?').run(text, Date.now(), m.id);
+    } else if (action === 'unsend') {
+      if (m.sender !== me.id) return json(res, 403, { error: 'forbidden' });
+      if (['photo', 'video', 'file', 'audio'].includes(m.kind)) unlinkMedia(JSON.parse(m.body).src);
+      db.prepare("UPDATE messages SET gone = 1, body = '', reacts = '{}' WHERE id = ?").run(m.id);
+    } else {
+      const emoji = typeof body.emoji === 'string' ? body.emoji : '';
+      if (emoji && !REACTIONS.includes(emoji)) return json(res, 400, { error: 'bad request' });
+      const r = JSON.parse(m.reacts || '{}');
+      if (!emoji || r[me.id] === emoji) delete r[me.id]; else r[me.id] = emoji;
+      db.prepare('UPDATE messages SET reacts = ? WHERE id = ?').run(JSON.stringify(r), m.id);
+    }
+    const update = shown(db.prepare(`SELECT ${MSG_COLS} FROM messages WHERE id = ?`).get(m.id));
+    if (m.grp) tellGroup(m.grp, 'update', update);
+    else { update.to = m.a === m.sender ? m.b : m.a; push(m.a, 'update', update); push(m.b, 'update', update); }
+    return json(res, 200, { message: update });
+  }
+  if (action === 'theme') {                          // the conversation's colours, for everyone in it
+    if (!THEMES.includes(body.theme)) return json(res, 400, { error: 'bad request' });
+    const gid = Number(body.group) || 0, other = Number(body.with) || 0;
+    if (gid ? !gq.member.get(gid, me.id) : (!aq.byId.get(other) || other === me.id || !chatOpen(me.id, other))) return json(res, 403, { error: 'friends' });
+    const key = gid ? groupKey(gid) : pairKey(me.id, other);
+    db.prepare('INSERT INTO chat_theme (thread, theme) VALUES (?, ?) ON CONFLICT (thread) DO UPDATE SET theme = excluded.theme').run(key, body.theme);
+    const [a, b] = gid ? [0, 0] : pair(me.id, other);
+    sysLine(a, b, gid, me.id, { t: 'theme', theme: body.theme });
+    if (gid) tellGroup(gid, 'friends', {}); else { push(me.id, 'friends', {}); push(other, 'friends', {}); }
+    return json(res, 200, { ok: true });
+  }
+  if (action.startsWith('group-')) return groupAction(res, me, action, body);
+
   const other = Number(body.id ?? body.to ?? body.with);
   if (!Number.isInteger(other) || other === me.id || !aq.byId.get(other)) return json(res, 400, { error: 'bad request' });
   const [a, b] = pair(me.id, other), link = cq.link.get(a, b), now = Date.now();
@@ -611,27 +840,14 @@ async function chatApi(req, res, action, query) {
     if (!allowSend(me.id)) return json(res, 429, { error: 'slow' });
     if (!open && count('SELECT COUNT(*) AS n FROM messages WHERE a = ? AND b = ? AND sender = ?', a, b, me.id) >= REQUEST_LIMIT) return json(res, 403, { error: 'request' });
     if (!open && body.kind !== 'text') return json(res, 403, { error: 'request' });
-    const kind = body.kind, v = body.body;
-    let text;
-    if (kind === 'text') {
-      text = typeof v === 'string' ? v.trim() : '';
-      if (!text || text.length > 2000) return json(res, 400, { error: 'bad request' });
-    } else if (kind === 'place') {
-      const ok = v && typeof v.label === 'string' && v.label.trim() && Number.isFinite(v.lat) && Number.isFinite(v.lon) && Math.abs(v.lat) <= 90 && Math.abs(v.lon) <= 180;
-      if (!ok) return json(res, 400, { error: 'bad request' });
-      text = JSON.stringify({ lat: +v.lat.toFixed(6), lon: +v.lon.toFixed(6), label: v.label.trim().slice(0, 120) });
-    } else if (kind === 'call') {
-      const ok = v && ['missed', 'declined', 'ended'].includes(v.result) && Number.isInteger(v.secs) && v.secs >= 0 && v.secs < 86400;
-      if (!ok) return json(res, 400, { error: 'bad request' });
-      text = JSON.stringify({ video: !!v.video, result: v.result, secs: v.secs });
-    } else if (kind === 'photo' || kind === 'video' || kind === 'file') {
-      const up = db.prepare('SELECT * FROM uploads WHERE name = ? AND user = ? AND used = 0').get(String(v && v.media), me.id);
-      if (!up || up.kind !== kind) return json(res, 400, { error: 'bad request' });
-      db.prepare('UPDATE uploads SET used = 1 WHERE name = ?').run(up.name);
-      text = JSON.stringify({ src: 'media/' + up.name, name: cleanText(v.name, 80) || 'file', size: Number(v.size) || 0 });
-    } else return json(res, 400, { error: 'bad request' });
-    const { lastInsertRowid } = cq.add.run(a, b, me.id, kind, text, now);
-    const message = { ...shown({ id: Number(lastInsertRowid), sender: me.id, kind, body: text, sent: now, seen: 0 }), to: other };
+    // Someone who takes requests only from people they follow.
+    if (!open && prefsOf(aq.byId.get(other)).dm === 'following' && !(link && link.state === 'pending' && link.actor === other)) return json(res, 403, { error: 'closed' });
+    const kind = body.kind, text = messageText(me, kind, body.body);
+    if (text == null) return json(res, 400, { error: 'bad request' });
+    const reply = Number(body.reply) || 0;
+    if (reply && !db.prepare('SELECT 1 FROM messages WHERE id = ? AND a = ? AND b = ?').get(reply, a, b)) return json(res, 400, { error: 'bad request' });
+    const { lastInsertRowid } = cq.add.run(a, b, me.id, kind, text, now, 0, reply);
+    const message = { ...shown({ id: Number(lastInsertRowid), sender: me.id, kind, body: text, sent: now, seen: 0, grp: 0, reply, reacts: '{}', gone: 0 }), to: other };
     push(other, 'message', message);
     push(me.id, 'message', message);                 // the sender's other devices
     return json(res, 200, { message });
@@ -640,6 +856,102 @@ async function chatApi(req, res, action, query) {
     if (!body.data || typeof body.data !== 'object') return json(res, 400, { error: 'bad request' });
     push(other, 'signal', { from: me.id, data: body.data });
     return json(res, 200, { online: isOnline(other) });
+  }
+  json(res, 404, { error: 'not found' });
+}
+
+//   POST /api/chat/group-new {ids, name}   group-add {group, ids}   group-remove {group, id}   group-leave {group}
+//   POST /api/chat/group-name {group, name}   group-send {group, kind, body, reply}   group-read {group}   group-typing {group}
+function groupAction(res, me, action, body) {
+  const now = Date.now();
+  const ids = Array.isArray(body.ids) ? [...new Set(body.ids.map(Number))].filter(id => Number.isInteger(id) && id !== me.id) : [];
+  const people = ids.filter(id => { const u = aq.byId.get(id); return u && !u.banned && connected(me.id, id); });
+  const brief = id => { const u = aq.byId.get(id); return { id, name: u ? u.name : '' }; };
+  if (action === 'group-new') {
+    if (people.length < 2) return json(res, 400, { error: 'few' });
+    if (people.length + 1 > GROUP_MAX) return json(res, 400, { error: 'big' });
+    if (count('SELECT COUNT(*) AS n FROM chat_groups WHERE owner = ? AND created > ?', me.id, now - 864e5) >= 10) return json(res, 429, { error: 'slow' });
+    const name = cleanText(body.name, 50);
+    const gid = Number(db.prepare('INSERT INTO chat_groups (name, owner, created) VALUES (?, ?, ?)').run(name, me.id, now).lastInsertRowid);
+    gq.join.run(gid, me.id, 'admin', now);
+    for (const id of people) gq.join.run(gid, id, 'member', now);
+    sysLine(0, 0, gid, me.id, { t: 'create', name });
+    tellGroup(gid, 'friends', {});
+    return json(res, 200, { group: gid });
+  }
+  const gid = Number(body.group), mem = gq.member.get(gid, me.id);
+  if (!mem) return json(res, 403, { error: 'group' });
+  if (action === 'group-send') {
+    if (!allowSend(me.id)) return json(res, 429, { error: 'slow' });
+    if (body.kind === 'call') return json(res, 400, { error: 'bad request' });
+    const text = messageText(me, body.kind, body.body);
+    if (text == null) return json(res, 400, { error: 'bad request' });
+    const reply = Number(body.reply) || 0;
+    if (reply && !db.prepare('SELECT 1 FROM messages WHERE id = ? AND grp = ?').get(reply, gid)) return json(res, 400, { error: 'bad request' });
+    const id = Number(cq.add.run(0, 0, me.id, body.kind, text, now, gid, reply).lastInsertRowid);
+    db.prepare('UPDATE group_members SET last_read = ? WHERE grp = ? AND user = ?').run(id, gid, me.id);
+    const message = shown({ id, sender: me.id, kind: body.kind, body: text, sent: now, seen: 0, grp: gid, reply, reacts: '{}', gone: 0 });
+    tellGroup(gid, 'message', message);
+    return json(res, 200, { message });
+  }
+  if (action === 'group-read') {
+    const last = gq.last.get(gid);
+    if (last && last.id > mem.last_read) {
+      db.prepare('UPDATE group_members SET last_read = ? WHERE grp = ? AND user = ?').run(last.id, gid, me.id);
+      tellGroup(gid, 'gread', { group: gid, by: me.id, id: last.id }, me.id);
+    }
+    return json(res, 200, { ok: true });
+  }
+  if (action === 'group-typing') { tellGroup(gid, 'typing', { from: me.id, group: gid }, me.id); return json(res, 200, { ok: true }); }
+  if (action === 'group-call') {                     // start the group's call, or join the one going on
+    let c = groupCalls.get(gid);
+    const ring = !c;
+    if (!c) { c = { video: !!body.video, by: me.id, started: now, people: new Set() }; groupCalls.set(gid, c); }
+    if (!c.people.has(me.id) && c.people.size >= GROUP_CALL_MAX) return json(res, 409, { error: 'full' });
+    const already = [...c.people].filter(id => id !== me.id);
+    c.people.add(me.id);
+    tellGroup(gid, 'gcall', { group: gid, call: callOf(gid), ring, by: me.id });
+    return json(res, 200, { call: callOf(gid), peers: already });
+  }
+  if (action === 'group-call-leave') { leaveGroupCall(gid, me.id); return json(res, 200, { ok: true }); }
+  if (action === 'group-signal') {                   // call set-up between two people in the same group call
+    const c = groupCalls.get(gid), to = Number(body.to);
+    if (!c || !c.people.has(me.id) || !c.people.has(to) || !body.data || typeof body.data !== 'object') return json(res, 400, { error: 'bad request' });
+    push(to, 'gsignal', { group: gid, from: me.id, data: body.data });
+    return json(res, 200, { ok: true });
+  }
+  if (action === 'group-add') {
+    const have = new Set(gq.members.all(gid).map(m => m.id)), add = people.filter(id => !have.has(id));
+    if (!add.length) return json(res, 400, { error: 'few' });
+    if (have.size + add.length > GROUP_MAX) return json(res, 400, { error: 'big' });
+    for (const id of add) gq.join.run(gid, id, 'member', now);
+    sysLine(0, 0, gid, me.id, { t: 'add', who: add.map(brief) });
+    tellGroup(gid, 'friends', {});
+    return json(res, 200, { ok: true });
+  }
+  if (action === 'group-remove') {
+    const id = Number(body.id);
+    if (mem.role !== 'admin') return json(res, 403, { error: 'forbidden' });
+    if (id === me.id || !gq.member.get(gid, id)) return json(res, 400, { error: 'bad request' });
+    sysLine(0, 0, gid, me.id, { t: 'remove', who: [brief(id)] });
+    leaveGroup(gid, id);
+    push(id, 'friends', {});
+    tellGroup(gid, 'friends', {});
+    return json(res, 200, { ok: true });
+  }
+  if (action === 'group-leave') {
+    sysLine(0, 0, gid, me.id, { t: 'leave' });
+    leaveGroup(gid, me.id);
+    push(me.id, 'friends', {});
+    tellGroup(gid, 'friends', {});
+    return json(res, 200, { ok: true });
+  }
+  if (action === 'group-name') {
+    const name = cleanText(body.name, 50);
+    db.prepare('UPDATE chat_groups SET name = ? WHERE id = ?').run(name, gid);
+    sysLine(0, 0, gid, me.id, { t: 'rename', name });
+    tellGroup(gid, 'friends', {});
+    return json(res, 200, { ok: true });
   }
   json(res, 404, { error: 'not found' });
 }
@@ -675,7 +987,7 @@ db.exec(`CREATE TABLE IF NOT EXISTS audit (
 )`);
 db.exec(`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)`);
 if (!db.prepare("SELECT COUNT(*) AS n FROM pragma_table_info('reports') WHERE name = 'status'").get().n) db.exec("ALTER TABLE reports ADD COLUMN status TEXT NOT NULL DEFAULT 'open'");
-const TICKET_KINDS = ['account', 'fare', 'route', 'chat', 'person', 'other'];
+const TICKET_KINDS = ['account', 'fare', 'route', 'chat', 'person', 'other', 'verify'];
 const sq = {
   mine:     db.prepare('SELECT id, category, subject, status, created, updated, unread FROM tickets WHERE user = ? ORDER BY updated DESC LIMIT 50'),
   one:      db.prepare('SELECT * FROM tickets WHERE id = ?'),
@@ -742,7 +1054,9 @@ async function supportApi(req, res, action, query) {
 const MEDIA_DIR = path.join(DATA_DIR, 'media');
 fs.mkdirSync(MEDIA_DIR, { recursive: true });
 const MEDIA_TYPES = { 'image/jpeg': ['.jpg', 'photo', 4e6], 'image/png': ['.png', 'photo', 4e6], 'image/webp': ['.webp', 'photo', 4e6],
-                      'video/mp4': ['.mp4', 'video', 50e6], 'video/webm': ['.webm', 'video', 50e6], 'video/quicktime': ['.mov', 'video', 50e6] };
+                      'video/mp4': ['.mp4', 'video', 50e6], 'video/webm': ['.webm', 'video', 50e6], 'video/quicktime': ['.mov', 'video', 50e6],
+                      // voice messages, recorded in the browser (Chrome and Firefox make webm or ogg, Safari makes mp4)
+                      'audio/webm': ['.weba', 'audio', 10e6], 'audio/ogg': ['.ogg', 'audio', 10e6], 'audio/mp4': ['.m4a', 'audio', 10e6], 'audio/mpeg': ['.mp3', 'audio', 10e6] };
 db.exec(`CREATE TABLE IF NOT EXISTS uploads (name TEXT PRIMARY KEY, user INTEGER NOT NULL, kind TEXT NOT NULL, created INTEGER NOT NULL, used INTEGER NOT NULL DEFAULT 0)`);
 db.exec(`CREATE TABLE IF NOT EXISTS posts (
   id      INTEGER PRIMARY KEY,
@@ -757,6 +1071,8 @@ db.exec(`CREATE TABLE IF NOT EXISTS posts (
 )`);
 db.exec('CREATE INDEX IF NOT EXISTS posts_user ON posts (user, id)');
 db.exec(`CREATE TABLE IF NOT EXISTS post_likes (post INTEGER NOT NULL, user INTEGER NOT NULL, PRIMARY KEY (post, user))`);
+if (!db.prepare("SELECT COUNT(*) AS n FROM pragma_table_info('post_likes') WHERE name = 'made'").get().n) db.exec('ALTER TABLE post_likes ADD COLUMN made INTEGER NOT NULL DEFAULT 0');
+if (!db.prepare("SELECT COUNT(*) AS n FROM pragma_table_info('posts') WHERE name = 'views'").get().n) db.exec('ALTER TABLE posts ADD COLUMN views INTEGER NOT NULL DEFAULT 0');
 db.exec(`CREATE TABLE IF NOT EXISTS post_saves (post INTEGER NOT NULL, user INTEGER NOT NULL, made INTEGER NOT NULL, PRIMARY KEY (post, user))`);
 // A story is a photo or video that shows for 24 hours and is then deleted, file and all.
 db.exec(`CREATE TABLE IF NOT EXISTS stories (id INTEGER PRIMARY KEY, user INTEGER NOT NULL, kind TEXT NOT NULL, file TEXT NOT NULL, poster TEXT NOT NULL DEFAULT '', created INTEGER NOT NULL)`);
@@ -772,19 +1088,21 @@ setInterval(() => {
   for (const u of db.prepare('SELECT name FROM uploads WHERE used = 0 AND created < ?').all(Date.now() - 36e5)) { unlinkMedia(u.name); db.prepare('DELETE FROM uploads WHERE name = ?').run(u.name); }
 }, 15 * 60_000).unref();
 
-const POST_SELECT = `SELECT p.*, u.name, u.pic_v, (SELECT COUNT(*) FROM post_likes l WHERE l.post = p.id) AS likes,
+const POST_SELECT = `SELECT p.*, u.name, u.pic_v, u.verified, (SELECT COUNT(*) FROM post_likes l WHERE l.post = p.id) AS likes,
   (SELECT COUNT(*) FROM post_comments c WHERE c.post = p.id) AS comments, EXISTS (SELECT 1 FROM post_likes l WHERE l.post = p.id AND l.user = ?1) AS liked,
   EXISTS (SELECT 1 FROM post_saves s WHERE s.post = p.id AND s.user = ?1) AS saved
   FROM posts p JOIN users u ON u.id = p.user WHERE u.banned = 0`;
 const shownPost = p => ({ id: p.id, kind: p.kind, src: p.file ? 'media/' + p.file : '', poster: p.poster ? 'media/' + p.poster : '', caption: p.caption, saved: !!p.saved,
   place: p.place ? { label: p.place, lat: p.lat, lon: p.lon } : null, created: p.created, likes: p.likes, comments: p.comments, liked: !!p.liked,
-  user: { id: p.user, name: p.name, pic: p.pic_v } });
+  views: p.views || 0, user: { id: p.user, name: p.name, pic: p.pic_v, verified: !!p.verified } });
 
 //   POST /api/explore/media   (the file itself as the body, Content-Type image/* or video/*) -> { media }
 //   POST /api/explore/post    {media, poster?: data URL, caption, place?: {label, lat, lon}}  -> { post }
 //   GET  /api/explore/feed?before=&user=&kind=video&q=   -> { posts }          GET /api/explore/post?id= -> { post, comments }
 //   POST /api/explore/like {id}   /save {id}   /comment {id, body}   /delete {id}   /report {id, reason}
 //   GET  /api/explore/stories    POST /api/explore/story {media, poster?}    POST /api/explore/story-delete {id}
+const viewed = new Map();
+setInterval(() => { const old = Date.now() - 6 * 36e5; for (const [k, t] of viewed) if (t < old) viewed.delete(k); }, 30 * 60_000).unref();
 async function exploreApi(req, res, action, query) {
   const me = userOf(req), meId = me ? me.id : 0, now = Date.now();
   if (req.method === 'GET') {
@@ -817,11 +1135,23 @@ async function exploreApi(req, res, action, query) {
     return json(res, 404, { error: 'not found' });
   }
   if (req.method !== 'POST') return json(res, 405, { error: 'method not allowed' });
+  if (action === 'view') {                           // posts that came on screen: counted once per viewer in 6 hours
+    let body;
+    try { body = JSON.parse(await readBody(req, 4000)) || {}; } catch { return json(res, 400, { error: 'bad request' }); }
+    const who = me ? 'u' + me.id : (String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress);
+    for (const id of (Array.isArray(body.ids) ? body.ids : []).slice(0, 30).map(Number)) {
+      const key = who + '|' + id;
+      if (!Number.isInteger(id) || viewed.has(key)) continue;
+      viewed.set(key, now);
+      db.prepare('UPDATE posts SET views = views + 1 WHERE id = ? AND user <> ?').run(id, meId);
+    }
+    return json(res, 200, { ok: true });
+  }
   if (!me) { req.resume(); return json(res, 401, { error: 'login' }); }
 
   if (action === 'media') {
     const type = MEDIA_TYPES[(req.headers['content-type'] || '').split(';')[0].trim()];
-    if (!type) { req.resume(); return json(res, 400, { error: 'type' }); }
+    if (!type || type[1] === 'audio') { req.resume(); return json(res, 400, { error: 'type' }); }
     const [ext, kind, limit] = type;
     if (Number(req.headers['content-length']) > limit) { req.resume(); return json(res, 413, { error: 'big' }); }
     if (count('SELECT COUNT(*) AS n FROM uploads WHERE user = ? AND created > ?', me.id, now - 864e5) >= 40) { req.resume(); return json(res, 429, { error: 'slow' }); }
@@ -854,7 +1184,7 @@ async function exploreApi(req, res, action, query) {
   }
   if (action === 'post' || action === 'story') {
     const up = db.prepare('SELECT * FROM uploads WHERE name = ? AND user = ? AND used = 0').get(String(body.media), me.id);
-    if (!up || up.kind === 'file') return json(res, 400, { error: 'media' });
+    if (!up || (up.kind !== 'photo' && up.kind !== 'video')) return json(res, 400, { error: 'media' });
     let poster = '';
     if (up.kind === 'video' && typeof body.poster === 'string') {
       const m = /^data:image\/jpeg;base64,([A-Za-z0-9+/=]+)$/.exec(body.poster), buf = m && Buffer.from(m[1], 'base64');
@@ -885,7 +1215,7 @@ async function exploreApi(req, res, action, query) {
   }
   if (action === 'like') {
     const liked = !db.prepare('DELETE FROM post_likes WHERE post = ? AND user = ?').run(p.id, me.id).changes;
-    if (liked) db.prepare('INSERT INTO post_likes (post, user) VALUES (?, ?)').run(p.id, me.id);
+    if (liked) db.prepare('INSERT INTO post_likes (post, user, made) VALUES (?, ?, ?)').run(p.id, me.id, now);
     return json(res, 200, { liked, likes: count('SELECT COUNT(*) AS n FROM post_likes WHERE post = ?', p.id) });
   }
   if (action === 'comment') {
@@ -942,7 +1272,7 @@ function relationOf(meId, otherId) {
 }
 const followers = id => count("SELECT COUNT(*) AS n FROM friends WHERE (a = ?1 OR b = ?1) AND (state = 'friends' OR (state = 'pending' AND actor <> ?1))", id);
 const following = id => count("SELECT COUNT(*) AS n FROM friends WHERE (a = ?1 OR b = ?1) AND (state = 'friends' OR (state = 'pending' AND actor = ?1))", id);
-const card = (u, meId) => ({ id: u.id, name: u.name, bio: u.bio, pic: u.pic_v ?? u.pic, points: u.points, relation: relationOf(meId, u.id) });
+const card = (u, meId) => ({ id: u.id, name: u.name, bio: u.bio, pic: u.pic_v ?? u.pic, points: u.points, verified: !!u.verified, relation: relationOf(meId, u.id) });
 
 //   GET /api/people/search?q=          -> { people: [{ id, name, bio, pic, points, relation }] }   (login needed)
 //   GET /api/people/profile?id=        -> { user, followers, following, rank, fares: [...] }
@@ -958,6 +1288,24 @@ function peopleApi(req, res, action, query) {
     const rows = db.prepare(`SELECT ${USER_COLS} FROM users WHERE banned = 0 AND id <> ?1 AND lower(name) LIKE ?2
                              ORDER BY (lower(name) LIKE ?3) DESC, points DESC, id LIMIT 30`).all(meId, '%' + q + '%', q + '%');
     return json(res, 200, { people: rows.map(u => card(u, meId)).filter(p => p.relation !== 'blocked').slice(0, 20) });
+  }
+  if (action === 'verified') return json(res, 200, { ids: db.prepare('SELECT id FROM users WHERE verified = 1 AND banned = 0').all().map(r => r.id) });
+  if (action === 'insights') {                       // a person's own dashboard: reach and response to their posts
+    if (!me) return json(res, 401, { error: 'login' });
+    const days = 14, today = dayOf(Date.now()), since = (today - days + 1) * DAY - TZ;
+    const daily = rows => { const out = Array(days).fill(0); for (const r of rows) { const i = days - 1 - (today - dayOf(r.t)); if (i >= 0 && i < days) out[i]++; } return out; };
+    const likes = db.prepare('SELECT l.made AS t FROM post_likes l JOIN posts p ON p.id = l.post WHERE p.user = ?1 AND l.user <> ?1 AND l.made >= ?2').all(meId, since);
+    const comments = db.prepare('SELECT c.created AS t FROM post_comments c JOIN posts p ON p.id = c.post WHERE p.user = ?1 AND c.user <> ?1 AND c.created >= ?2').all(meId, since);
+    const fol = db.prepare("SELECT updated AS t FROM friends WHERE (a = ?1 OR b = ?1) AND updated >= ?2 AND (state = 'friends' OR (state = 'pending' AND actor <> ?1))").all(meId, since);
+    return json(res, 200, {
+      followers: followers(meId), following: following(meId), posts: count('SELECT COUNT(*) AS n FROM posts WHERE user = ?', meId),
+      likes: count('SELECT COUNT(*) AS n FROM post_likes l JOIN posts p ON p.id = l.post WHERE p.user = ?1 AND l.user <> ?1', meId),
+      comments: count('SELECT COUNT(*) AS n FROM post_comments c JOIN posts p ON p.id = c.post WHERE p.user = ?1 AND c.user <> ?1', meId),
+      saves: count('SELECT COUNT(*) AS n FROM post_saves s JOIN posts p ON p.id = s.post WHERE p.user = ?1 AND s.user <> ?1', meId),
+      views: db.prepare('SELECT COALESCE(SUM(views), 0) AS n FROM posts WHERE user = ?').get(meId).n,
+      points: me.points, fares: count('SELECT COUNT(*) AS n FROM contributions WHERE user = ?', meId), verified: !!me.verified, joined: me.created,
+      series: { likes: daily(likes), comments: daily(comments), followers: daily(fol) },
+      top: db.prepare(`${POST_SELECT} AND p.user = ?2 ORDER BY (likes + comments * 2 + p.views / 10.0) DESC, p.id DESC LIMIT 6`).all(meId, meId).map(shownPost) });
   }
   const u = aq.byId.get(Number(query.get('id')));
   if (!u || u.banned || relationOf(meId, u.id) === 'blocked') return json(res, 404, { error: 'not found' });
@@ -1057,6 +1405,71 @@ async function communityApi(req, res, action, query) {
   json(res, 404, { error: 'not found' });
 }
 
+// ---- Creator program: earnings in taka, paid out to a mobile wallet ----
+// A person who meets the rules (followers, posts, a clean record) applies; an admin approves. From then on the
+// team can credit earnings to them (a creator bonus, a share of sponsorship, a prize) and they can ask for
+// their balance to be paid to bKash, Nagad or Rocket. The payment itself is sent by the team from the
+// business wallet and marked paid here with its transaction ID. The app collects no money from anyone.
+db.exec(`CREATE TABLE IF NOT EXISTS earnings (id INTEGER PRIMARY KEY, user INTEGER NOT NULL, amount INTEGER NOT NULL, note TEXT NOT NULL DEFAULT '', by INTEGER NOT NULL, created INTEGER NOT NULL)`);
+db.exec(`CREATE TABLE IF NOT EXISTS payouts (id INTEGER PRIMARY KEY, user INTEGER NOT NULL, amount INTEGER NOT NULL, method TEXT NOT NULL, account TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending', ref TEXT NOT NULL DEFAULT '', note TEXT NOT NULL DEFAULT '', created INTEGER NOT NULL, updated INTEGER NOT NULL)`);
+if (!db.prepare("SELECT COUNT(*) AS n FROM pragma_table_info('users') WHERE name = 'creator'").get().n) db.exec("ALTER TABLE users ADD COLUMN creator TEXT NOT NULL DEFAULT ''");
+const WALLETS = ['bkash', 'nagad', 'rocket'];
+const creatorRules = () => {
+  const n = (key, d) => { const v = Number((sq.setting.get(key) || {}).value); return Number.isFinite(v) && v >= 0 ? v : d; };
+  return { followers: n('creator_followers', 100), posts: n('creator_posts', 5), payoutMin: n('payout_min', 500) };
+};
+const creatorOf = id => (db.prepare('SELECT creator FROM users WHERE id = ?').get(id) || {}).creator || '';
+function balanceOf(id) {
+  const earned = db.prepare('SELECT COALESCE(SUM(amount), 0) AS n FROM earnings WHERE user = ?').get(id).n;
+  const paid = db.prepare("SELECT COALESCE(SUM(amount), 0) AS n FROM payouts WHERE user = ? AND status = 'paid'").get(id).n;
+  const pending = db.prepare("SELECT COALESCE(SUM(amount), 0) AS n FROM payouts WHERE user = ? AND status = 'pending'").get(id).n;
+  return { earned, paid, pending, balance: earned - paid - pending };
+}
+function creatorStanding(u) {
+  const rules = creatorRules(), f = followers(u.id), p = count('SELECT COUNT(*) AS n FROM posts WHERE user = ?', u.id);
+  const reports = count("SELECT COUNT(*) AS n FROM reports WHERE about = ? AND status = 'open'", u.id);
+  return { rules, followers: f, posts: p, reports, verified: !!u.verified, eligible: f >= rules.followers && p >= rules.posts && !reports };
+}
+const shownPayout = x => ({ id: x.id, amount: x.amount, method: x.method, account: x.account, status: x.status, ref: x.ref, note: x.note, created: x.created, updated: x.updated });
+
+//   GET  /api/creator/me             -> { status, standing, money, earnings, payouts }
+//   POST /api/creator/apply          POST /api/creator/payout {amount, method, account}     POST /api/creator/cancel {id}
+async function creatorApi(req, res, action) {
+  const me = userOf(req);
+  if (!me) return json(res, 401, { error: 'login' });
+  if (req.method === 'GET' && action === 'me') {
+    return json(res, 200, { status: creatorOf(me.id), standing: creatorStanding(me), money: balanceOf(me.id),
+      earnings: db.prepare('SELECT amount, note, created FROM earnings WHERE user = ? ORDER BY id DESC LIMIT 50').all(me.id),
+      payouts: db.prepare('SELECT * FROM payouts WHERE user = ? ORDER BY id DESC LIMIT 50').all(me.id).map(shownPayout) });
+  }
+  if (req.method !== 'POST' || !(req.headers['content-type'] || '').startsWith('application/json')) return json(res, 400, { error: 'bad request' });
+  let body;
+  try { body = JSON.parse(await readBody(req, 4000)) || {}; } catch { return json(res, 400, { error: 'bad request' }); }
+  const now = Date.now(), status = creatorOf(me.id);
+  if (action === 'apply') {
+    if (status === 'approved' || status === 'applied') return json(res, 200, { status });
+    if (!creatorStanding(me).eligible) return json(res, 403, { error: 'rules' });
+    db.prepare("UPDATE users SET creator = 'applied' WHERE id = ?").run(me.id);
+    return json(res, 200, { status: 'applied' });
+  }
+  if (action === 'payout') {
+    if (status !== 'approved') return json(res, 403, { error: 'creator' });
+    const amount = Math.floor(Number(body.amount)), account = String(body.account || '').replace(/[\s-]/g, '').replace(/^\+?88/, '');
+    if (!WALLETS.includes(body.method) || !/^01[3-9]\d{8}$/.test(account)) return json(res, 400, { error: 'account' });
+    const { balance } = balanceOf(me.id), { payoutMin } = creatorRules();
+    if (!Number.isInteger(amount) || amount < payoutMin || amount > balance) return json(res, 400, { error: 'amount' });
+    if (count("SELECT COUNT(*) AS n FROM payouts WHERE user = ? AND status = 'pending'", me.id)) return json(res, 409, { error: 'pending' });
+    db.prepare('INSERT INTO payouts (user, amount, method, account, created, updated) VALUES (?, ?, ?, ?, ?, ?)').run(me.id, amount, body.method, account, now, now);
+    return json(res, 200, { money: balanceOf(me.id) });
+  }
+  if (action === 'cancel') {
+    db.prepare("UPDATE payouts SET status = 'rejected', note = 'নিজে বাতিল করেছেন', updated = ? WHERE id = ? AND user = ? AND status = 'pending'").run(now, Number(body.id), me.id);
+    return json(res, 200, { money: balanceOf(me.id) });
+  }
+  json(res, 404, { error: 'not found' });
+}
+
 // ---- Admin ----
 // For accounts whose role is staff or admin. Staff answer tickets and handle reports; only an admin changes
 // roles, deletes accounts, edits the notice or removes fare reports. Private messages are never shown here:
@@ -1070,7 +1483,7 @@ function series(table, column, days) {
   return Array.from({ length: days }, (_, i) => by[today - days + 1 + i] || 0);
 }
 const count = (sql, ...args) => db.prepare(sql).get(...args).n;
-const briefUser = u => u && ({ id: u.id, name: u.name, email: u.email, pic: u.pic_v, role: u.role, banned: u.banned, created: u.created, seen: u.seen, online: isOnline(u.id) });
+const briefUser = u => u && ({ id: u.id, name: u.name, email: u.email, pic: u.pic_v, role: u.role, banned: u.banned, verified: !!u.verified, created: u.created, seen: u.seen, online: isOnline(u.id) });
 
 async function adminApi(req, res, action, query) {
   const me = userOf(req);
@@ -1141,6 +1554,17 @@ async function adminApi(req, res, action, query) {
       const rows = db.prepare(`${POST_SELECT} AND p.id < ?2 ORDER BY p.id DESC LIMIT 60`).all(0, Number(query.get('before')) || Number.MAX_SAFE_INTEGER);
       return json(res, 200, { posts: rows.map(p => ({ ...shownPost(p), email: aq.byId.get(p.user).email })) });
     }
+    if (action === 'creators') {
+      const rows = db.prepare(`SELECT ${USER_COLS}, creator FROM users WHERE creator <> '' ORDER BY CASE creator WHEN 'applied' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END, id DESC LIMIT 200`).all();
+      return json(res, 200, { rules: creatorRules(), creators: rows.map(u => ({ ...briefUser(u), creator: u.creator, standing: creatorStanding(u), money: balanceOf(u.id) })),
+        totals: { earned: db.prepare('SELECT COALESCE(SUM(amount), 0) AS n FROM earnings').get().n, paid: db.prepare("SELECT COALESCE(SUM(amount), 0) AS n FROM payouts WHERE status = 'paid'").get().n,
+                  pending: db.prepare("SELECT COALESCE(SUM(amount), 0) AS n FROM payouts WHERE status = 'pending'").get().n } });
+    }
+    if (action === 'payouts') {
+      const status = query.get('status') || 'pending';
+      const rows = db.prepare(`SELECT x.*, u.name, u.email, u.pic_v AS pic FROM payouts x JOIN users u ON u.id = x.user WHERE ?1 = 'all' OR x.status = ?1 ORDER BY x.id DESC LIMIT 200`).all(status);
+      return json(res, 200, { payouts: rows.map(x => ({ ...shownPayout(x), user: { id: x.user, name: x.name, email: x.email, pic: x.pic } })) });
+    }
     if (action === 'audit') return json(res, 200, { audit: db.prepare('SELECT x.id, x.action, x.target, x.detail, x.at, u.name FROM audit x LEFT JOIN users u ON u.id = x.actor ORDER BY x.id DESC LIMIT 150').all() });
     if (action === 'system') {
       let size = 0;
@@ -1158,6 +1582,12 @@ async function adminApi(req, res, action, query) {
   if (action === 'user') {
     const u = aq.byId.get(Number(body.id));
     if (!u) return json(res, 404, { error: 'not found' });
+    if (body.do === 'verify' || body.do === 'unverify') {          // the badge: an admin may give it, also to themselves
+      if (!admin) return json(res, 403, { error: 'forbidden' });
+      db.prepare('UPDATE users SET verified = ? WHERE id = ?').run(body.do === 'verify' ? 1 : 0, u.id);
+      log(body.do, u.email);
+      return json(res, 200, { ok: true });
+    }
     if (u.id === me.id) return json(res, 400, { error: 'self' });
     if (u.role === 'admin' && !admin) return json(res, 403, { error: 'forbidden' });
     if (body.do === 'ban' || body.do === 'unban') {
@@ -1216,6 +1646,48 @@ async function adminApi(req, res, action, query) {
     db.prepare('UPDATE users SET points = MAX(0, points - ?) WHERE id = ?').run(POINTS_PER_FARE, c.user);
     log('fare removed', `${c.flabel} > ${c.tlabel}`, `${c.mode} ${c.fare}`);
     return json(res, 200, { ok: true });
+  }
+  if (action === 'creator') {                         // approve, refuse or end a creator; credit earnings
+    const u = aq.byId.get(Number(body.id));
+    if (!u) return json(res, 404, { error: 'not found' });
+    if (body.do === 'approve' || body.do === 'reject' || body.do === 'revoke') {
+      db.prepare('UPDATE users SET creator = ? WHERE id = ?').run(body.do === 'approve' ? 'approved' : body.do === 'reject' ? 'rejected' : '', u.id);
+      log('creator ' + body.do, u.email, cleanText(body.note, 200));
+    } else if (body.do === 'credit') {
+      const amount = Math.round(Number(body.amount)), note = cleanText(body.note, 120);
+      if (creatorOf(u.id) !== 'approved') return json(res, 400, { error: 'creator' });
+      if (!Number.isInteger(amount) || amount === 0 || Math.abs(amount) > 1_000_000 || !note) return json(res, 400, { error: 'bad request' });
+      if (amount < 0 && balanceOf(u.id).balance + amount < 0) return json(res, 400, { error: 'balance' });
+      db.prepare('INSERT INTO earnings (user, amount, note, by, created) VALUES (?, ?, ?, ?, ?)').run(u.id, amount, note, me.id, now);
+      log('earning', u.email, `${amount} ৳ — ${note}`);
+    } else return json(res, 400, { error: 'bad request' });
+    push(u.id, 'creator', {});
+    return json(res, 200, { ok: true });
+  }
+  if (action === 'payout') {                          // after sending the money from the business wallet
+    const x = db.prepare('SELECT * FROM payouts WHERE id = ?').get(Number(body.id));
+    if (!x || x.status !== 'pending') return json(res, 404, { error: 'not found' });
+    if (body.do === 'paid') {
+      const ref = cleanText(body.ref, 40);
+      if (ref.length < 4) return json(res, 400, { error: 'ref' });
+      db.prepare("UPDATE payouts SET status = 'paid', ref = ?, updated = ? WHERE id = ?").run(ref, now, x.id);
+      log('payout paid', 'payout ' + x.id, `${x.amount} ৳ · ${x.method} · ${ref}`);
+      const owner = aq.byId.get(x.user);
+      if (mailReady && owner) sendMail(owner.email, `BD Map: ৳${x.amount} পাঠানো হয়েছে`, `আপনার ${x.method} নম্বরে ৳${x.amount} পাঠানো হয়েছে। লেনদেন নম্বর: ${ref}\n\n— BD Map`).catch(e => console.error('mail failed:', e.message));
+    } else if (body.do === 'reject') {
+      db.prepare("UPDATE payouts SET status = 'rejected', note = ?, updated = ? WHERE id = ?").run(cleanText(body.note, 200) || 'বাতিল', now, x.id);
+      log('payout rejected', 'payout ' + x.id, cleanText(body.note, 200));
+    } else return json(res, 400, { error: 'bad request' });
+    push(x.user, 'creator', {});
+    return json(res, 200, { ok: true });
+  }
+  if (action === 'rules') {
+    for (const [key, v, max] of [['creator_followers', body.followers, 1e6], ['creator_posts', body.posts, 1e5], ['payout_min', body.min, 1e6]]) {
+      const n = Math.round(Number(v));
+      if (Number.isFinite(n) && n >= 0 && n <= max) sq.setSet.run(key, String(n));
+    }
+    log('creator rules', 'app', JSON.stringify(creatorRules()));
+    return json(res, 200, { rules: creatorRules() });
   }
   if (action === 'notice') {
     sq.setSet.run('notice', cleanText(body.text, 240));
@@ -1340,7 +1812,8 @@ http.createServer((req, res) => {
   const { pathname, searchParams } = new URL(req.url, 'http://localhost');
   if (pathname === '/api/ratings') return api(req, res).catch(() => json(res, 500, { error: 'server error' }));
   if (pathname === '/api/fares') return faresApi(req, res).catch(() => json(res, 500, { error: 'server error' }));
-  if (pathname.startsWith('/api/chat/')) return chatApi(req, res, pathname.slice(10), searchParams).catch(() => { if (!res.headersSent) json(res, 500, { error: 'server error' }); });
+  if (pathname.startsWith('/api/chat/')) return chatApi(req, res, pathname.slice(10), searchParams).catch(e => { console.error(e); if (!res.headersSent) json(res, 500, { error: 'server error' }); });
+  if (pathname.startsWith('/api/creator/')) return creatorApi(req, res, pathname.slice(13)).catch(e => { console.error(e); if (!res.headersSent) json(res, 500, { error: 'server error' }); });
   if (pathname.startsWith('/api/avatar/')) return avatarApi(req, res, pathname.slice(12));
   if (pathname.startsWith('/media/')) return serveMedia(req, res, pathname.slice(7));
   if (pathname.startsWith('/api/explore/')) return exploreApi(req, res, pathname.slice(13), searchParams).catch(e => { console.error(e); if (!res.headersSent) json(res, 500, { error: 'server error' }); });

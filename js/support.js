@@ -3,7 +3,7 @@
 // support: one ticket is one conversation, staff answer from the admin panel, and the answer shows up here
 // (and by e-mail when the server has a mail account).
 
-const TICKET_KINDS = { account: 'অ্যাকাউন্ট বা লগইন', fare: 'ভাড়া ভুল', route: 'বাস, ট্রেন বা রুটের তথ্য ভুল', chat: 'মেসেজ বা কল', person: 'কারও বিরুদ্ধে অভিযোগ', other: 'অন্য কিছু' };
+const TICKET_KINDS = { account: 'অ্যাকাউন্ট বা লগইন', fare: 'ভাড়া ভুল', route: 'বাস, ট্রেন বা রুটের তথ্য ভুল', chat: 'মেসেজ বা কল', person: 'কারও বিরুদ্ধে অভিযোগ', verify: 'ভেরিফায়েড ব্যাজের আবেদন', other: 'অন্য কিছু' };
 const TICKET_STATUS = { open: 'উত্তরের অপেক্ষায়', answered: 'উত্তর এসেছে', closed: 'বন্ধ' };
 let TICKETS = [];
 

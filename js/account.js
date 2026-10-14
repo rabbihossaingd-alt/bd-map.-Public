@@ -43,6 +43,24 @@ function avatar(person, cls = '') {
   return a;
 }
 
+// The blue badge beside the name of an account the BD Map team has verified. The list is small and public.
+const VERIFIED = new Set();
+fetch('api/people/verified').then(r => r.json()).then(d => { for (const id of d.ids || []) VERIFIED.add(id); }).catch(() => {});
+const isVerified = person => !!person && (!!person.verified || VERIFIED.has(person.id));
+function vbadge() {
+  const s = el('span', 'vbadge');
+  s.title = LANG === 'en' ? 'Verified' : 'ভেরিফায়েড';
+  s.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5l2.3 1.7 2.9.1.9 2.7 2.3 1.8-.9 2.7.9 2.8-2.3 1.7-.9 2.8-2.9.1L12 21.5l-2.3-1.7-2.9-.1-.9-2.8-2.3-1.7.9-2.8-.9-2.7 2.3-1.8.9-2.7 2.9-.1z"/><path class="t" d="M8.6 12.2l2.3 2.3 4.6-4.8"/></svg>';
+  return s;
+}
+// A person's name, with the badge when they have one. The name is the person's own words: never translated.
+function nameEl(person, tag = 'b', cls = '') {
+  const e = el(tag, ('no-tr ' + cls).trim());
+  e.appendChild(Object.assign(el('span', 'nm'), { textContent: person.name }));
+  if (isVerified(person)) e.appendChild(vbadge());
+  return e;
+}
+
 function renderAccount() {
   const card = $('acct-card');
   card.querySelector('.ic').replaceChildren(...(ME ? [avatar(ME)] : [Object.assign(el('i'), { innerHTML: svg('user') })]));
@@ -85,6 +103,7 @@ function authChanged() {
   if (current === 'home' && enter.home) enter.home();
   if (typeof drawProfile === 'function' && current === 'profile') { if (!ME) PROFILE.id = null; drawProfile(); }
   if (enter.settings && current === 'settings') enter.settings();
+  if (enter.insights && current === 'insights') enter.insights();
 }
 
 function field(label, attrs, tag = 'input') {

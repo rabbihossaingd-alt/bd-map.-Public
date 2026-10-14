@@ -214,20 +214,38 @@
     <div class="wrap prof" id="prof"></div>
   </section>
 
+  <!-- Professional dashboard: how one's own posts are doing -->
+  <section class="page" id="page-insights">
+    <div class="wrap dash" id="dash"></div>
+  </section>
+
   <!-- Settings -->
   <section class="page" id="page-settings">
     <div class="wrap hub">
       <div class="page-head"><h2>সেটিংস</h2></div>
-      <div class="label">অ্যাকাউন্ট</div>
+      <div class="label">আপনার অ্যাকাউন্ট</div>
       <div class="card menu">
         <button id="set-edit"><i class="mi soft" data-ic="user"></i><span><b>প্রোফাইল এডিট</b><em id="set-email"></em></span><i class="chev" data-ic="chev"></i></button>
+        <a href="#/insights" data-needs-login><i class="mi soft" data-ic="chart"></i><span><b>প্রফেশনাল ড্যাশবোর্ড</b><em>ভিউ, লাইক, ফলোয়ার — আপনার পোস্ট কেমন যাচ্ছে</em></span><i class="chev" data-ic="chev"></i></a>
+      </div>
+      <div class="label" data-needs-login>কে কীভাবে আপনার সাথে যোগাযোগ করবে</div>
+      <div class="card menu" data-needs-login>
+        <div class="row"><i class="mi soft" data-ic="chat"></i><span><b>মেসেজ রিকোয়েস্ট</b><em>অপরিচিত কেউ প্রথম মেসেজ পাঠাতে পারবে কি না</em></span>
+          <span class="theme-pick" id="dm-pick"><button data-dm="all">সবাই</button><button data-dm="following">যাঁদের ফলো করি</button></span></div>
+        <div class="row"><i class="mi soft" data-ic="eye"></i><span><b>অ্যাক্টিভিটি স্ট্যাটাস</b><em>বন্ধ করলে আপনি কখন অনলাইন তা কেউ দেখবে না, আপনিও অন্যদেরটা দেখবেন না</em></span>
+          <button class="switch" id="set-active" role="switch" aria-checked="true" aria-label="অ্যাক্টিভিটি স্ট্যাটাস"><i></i></button></div>
+        <button id="set-blocked"><i class="mi soft" data-ic="shield"></i><span><b>ব্লক করা মানুষ</b><em>যাঁদের মেসেজ ও কল বন্ধ করেছেন</em></span><i class="chev" data-ic="chev"></i></button>
+      </div>
+      <div class="label">যা দেখেন</div>
+      <div class="card menu">
         <div class="row"><i class="mi soft" data-ic="globe"></i><span><b>ভাষা</b><em>বাংলা · English</em></span><button class="lang-btn in-page"></button></div>
         <div class="row"><i class="mi soft" data-ic="moon2"></i><span><b>থিম</b><em>অ্যাপের রং</em></span>
           <span class="theme-pick" id="theme-pick"><button data-theme-set="dark">ডার্ক</button><button data-theme-set="light">লাইট</button><button data-theme-set="auto">ফোনের মতো</button></span></div>
       </div>
-      <div class="label">সাহায্য</div>
+      <div class="label">সহায়তা ও তথ্য</div>
       <div class="card menu">
         <a href="#/support"><i class="mi soft" data-ic="help"></i><span><b>সাহায্য ও সাপোর্ট</b><em>প্রশ্নের উত্তর, সমস্যা জানান</em></span><em class="nbadge inline" data-support-badge hidden></em><i class="chev" data-ic="chev"></i></a>
+        <button id="set-verify" data-needs-login><i class="mi soft" data-ic="verified"></i><span><b>ভেরিফায়েড ব্যাজ</b><em id="set-verify-sub">নামের পাশে নীল ব্যাজ — কীভাবে পাবেন</em></span><i class="chev" data-ic="chev"></i></button>
         <a href="admin.html" data-admin-link hidden><i class="mi soft" data-ic="shield"></i><span><b>অ্যাডমিন প্যানেল</b><em>ব্যবহারকারী, সাপোর্ট, রিপোর্ট</em></span><i class="chev" data-ic="chev"></i></a>
       </div>
       <div class="label" data-needs-login>অ্যাকাউন্ট থেকে বের হওয়া</div>
@@ -279,15 +297,17 @@
       <aside class="chat-side">
         <div class="chat-top">
           <h2 class="no-tr" id="chat-me"></h2>
-          <button class="icon-btn" id="chat-blocked" title="ব্লক করা মানুষ" aria-label="ব্লক করা মানুষ"><i data-ic="shield"></i></button>
-          <button class="icon-btn" id="chat-add" title="নতুন মেসেজ" aria-label="নতুন মেসেজ"><i data-ic="edit"></i></button>
-        </div>
-        <div class="chat-tabs" id="chat-tabs">
-          <button data-tab="all" class="on"><span>মেসেজ</span><em></em></button>
-          <button data-tab="requests"><span>রিকোয়েস্ট</span><em></em></button>
+          <button class="icon-btn" id="chat-add" title="নতুন মেসেজ বা গ্রুপ" aria-label="নতুন মেসেজ বা গ্রুপ"><i data-ic="edit"></i></button>
         </div>
         <label class="chat-find" id="chat-find"><i data-ic="search"></i><input id="chat-q" type="search" autocomplete="off" placeholder="খুঁজুন" aria-label="খুঁজুন"></label>
+        <div class="chat-tabs" id="chat-tabs">
+          <button data-tab="all" class="on"><span>সব</span><em></em></button>
+          <button data-tab="unread"><span>না-পড়া</span><em></em></button>
+          <button data-tab="groups"><span>গ্রুপ</span><em></em></button>
+          <button data-tab="requests"><span>রিকোয়েস্ট</span><em></em></button>
+        </div>
         <div class="chat-scroll">
+          <div class="notes" id="chat-notes" hidden></div>
           <div id="chat-requests" hidden></div>
           <div id="chat-list"></div>
         </div>
@@ -304,14 +324,18 @@
             <div class="who" id="chat-who"></div>
             <button class="icon-btn" id="chat-voice" title="ভয়েস কল" aria-label="ভয়েস কল"><i data-ic="phone"></i></button>
             <button class="icon-btn" id="chat-video" title="ভিডিও কল" aria-label="ভিডিও কল"><i data-ic="video"></i></button>
-            <button class="icon-btn" id="chat-more" title="আরও অপশন" aria-label="আরও অপশন"><i data-ic="more"></i></button>
+            <button class="icon-btn" id="chat-more" title="বিস্তারিত" aria-label="বিস্তারিত"><i data-ic="info"></i></button>
           </header>
+          <div class="callbar" id="chat-callbar" hidden></div>
           <div class="chat-msgs" id="chat-msgs"></div>
           <div class="upload-bar" id="chat-upload" hidden><i></i></div>
           <div class="emoji-tray" id="chat-emoji-tray" hidden></div>
+          <div class="reply-bar" id="chat-reply" hidden></div>
+          <div class="rec-bar" id="chat-rec" hidden></div>
           <form class="chat-compose" id="chat-form">
             <button type="button" class="icon-btn" id="chat-attach" title="ছবি, ভিডিও বা ফাইল" aria-label="ছবি, ভিডিও বা ফাইল"><i data-ic="clip"></i></button>
             <button type="button" class="icon-btn" id="chat-share" title="জায়গা পাঠান" aria-label="জায়গা পাঠান"><i data-ic="pin"></i></button>
+            <button type="button" class="icon-btn" id="chat-mic" title="ভয়েস মেসেজ" aria-label="ভয়েস মেসেজ"><i data-ic="mic"></i></button>
             <input type="file" id="chat-file" hidden>
             <div class="compose-box">
               <textarea id="chat-input" rows="1" maxlength="2000" placeholder="মেসেজ লিখুন…" aria-label="মেসেজ লিখুন…"></textarea>
@@ -320,6 +344,7 @@
             <button class="send like" id="chat-send" title="পাঠান" aria-label="পাঠান"><i data-ic="send"></i><span>👍</span></button>
           </form>
         </div>
+        <aside class="chat-info" id="chat-info" hidden></aside>
       </div>
     </div>
   </section>
@@ -566,6 +591,7 @@
 <script src="js/train.js"></script>
 <script src="js/account.js"></script>
 <script src="js/chat.js"></script>
+<script src="js/chat-extra.js"></script>
 <script src="js/support.js"></script>
 <script src="js/community.js"></script>
 <script src="js/explore.js"></script>

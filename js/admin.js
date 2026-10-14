@@ -19,6 +19,7 @@ const ICONS = {
   tag: '<path d="M3 12V4h8l10 10-8 8L3 12z"/><circle cx="7.5" cy="8.5" r="1.2"/>',
   list: '<path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/>',
   image: '<rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="2"/><path d="M4 18l5-5 4 4 3-3 4 4"/>',
+  wallet: '<path d="M4 7a2 2 0 012-2h11v4"/><rect x="3" y="7" width="18" height="13" rx="2.5"/><path d="M16 13.5h2"/>',
   cog: '<circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 00-.1-1.3l2-1.5-2-3.4-2.3.9a7 7 0 00-2.2-1.3L14 3h-4l-.4 2.4a7 7 0 00-2.2 1.3l-2.3-.9-2 3.4 2 1.5A7 7 0 005 12c0 .4 0 .9.1 1.3l-2 1.5 2 3.4 2.3-.9c.6.6 1.4 1 2.2 1.3L10 21h4l.4-2.4c.8-.3 1.6-.7 2.2-1.3l2.3.9 2-3.4-2-1.5c.1-.4.1-.9.1-1.3z"/>'
 };
 const icon = name => `<svg viewBox="0 0 24 24">${ICONS[name]}</svg>`;
@@ -32,7 +33,7 @@ async function api(path, body) {
 
 let ME = null, page = 'overview';
 const ROLE = { user: 'ব্যবহারকারী', staff: 'সাপোর্ট টিম', admin: 'অ্যাডমিন' };
-const KIND = { account: 'অ্যাকাউন্ট', fare: 'ভাড়া', route: 'রুটের তথ্য', chat: 'মেসেজ/কল', person: 'অভিযোগ', other: 'অন্য' };
+const KIND = { account: 'অ্যাকাউন্ট', fare: 'ভাড়া', route: 'রুটের তথ্য', chat: 'মেসেজ/কল', person: 'অভিযোগ', verify: 'ব্যাজ', other: 'অন্য' };
 const STATUS = { open: 'উত্তর বাকি', answered: 'উত্তর দেওয়া', closed: 'বন্ধ' };
 
 // "৫ মিনিট আগে", "গতকাল", or a date.
@@ -80,7 +81,7 @@ function snack(text, bad) {
   clearTimeout(snackTimer);
   snackTimer = setTimeout(() => { s.className = 'snack'; }, 2600);
 }
-const ERR = { forbidden: 'এই কাজটি শুধু অ্যাডমিন করতে পারেন।', self: 'নিজের অ্যাকাউন্টে এটি করা যায় না।' };
+const ERR = { forbidden: 'এই কাজটি শুধু অ্যাডমিন করতে পারেন।', self: 'নিজের অ্যাকাউন্টে এটি করা যায় না।', ref: 'লেনদেন নম্বরটি ঠিক নয়।', balance: 'ব্যালান্সের চেয়ে বেশি কমানো যায় না।', creator: 'আগে ক্রিয়েটর হিসেবে অনুমোদন দিন।', 'bad request': 'তথ্যটি ঠিক নয়।' };
 async function act(promise, done) {
   try { await promise; snack(done); return true; }
   catch (e) { snack(ERR[e.message] || 'কাজটি করা যায়নি।', true); return false; }
@@ -275,9 +276,62 @@ const PAGES = {
       btn('সরান', 'quiet small', async () => { if (await act(api('fare', { a: f.a, b: f.b, device: f.device }), 'ভাড়াটি সরানো হলো।')) show('fares'); })])));
   } },
 
+  creators: { title: 'ক্রিয়েটর ও পেমেন্ট', icon: 'wallet', state: { tab: 'payouts', status: 'pending' }, async draw(box) {
+    const st = PAGES.creators.state;
+    const taka = n => '৳' + num(n);
+    box.appendChild(h('p', 'hint', 'ক্রিয়েটর প্রোগ্রাম: শর্ত পূরণ করা ব্যবহারকারী আবেদন করেন, আপনি অনুমোদন দেন, তারপর তাঁর আয় যোগ করেন (বোনাস, স্পনসরশিপের ভাগ, পুরস্কার)। তিনি টাকা তুলতে চাইলে বিজনেস ওয়ালেট থেকে পাঠিয়ে এখানে লেনদেন নম্বর দিয়ে "পাঠানো হয়েছে" করুন। অ্যাপ নিজে কোনো টাকা কাটে বা পাঠায় না।'));
+    box.appendChild(tabs([['payouts', 'টাকা তোলার অনুরোধ'], ['creators', 'ক্রিয়েটর'], ['rules', 'নিয়ম']], st.tab, v => { st.tab = v; show('creators'); }));
+    if (st.tab === 'payouts') {
+      box.appendChild(tabs([['pending', 'অপেক্ষায়'], ['paid', 'পাঠানো'], ['rejected', 'বাতিল'], ['all', 'সব']], st.status, v => { st.status = v; show('creators'); }));
+      const d = await api('payouts?status=' + st.status);
+      const W = { bkash: 'বিকাশ', nagad: 'নগদ', rocket: 'রকেট' };
+      const S = { pending: ['অপেক্ষায়', 'warn'], paid: ['পাঠানো হয়েছে', 'ok'], rejected: ['বাতিল', 'bad'] };
+      if (!d.payouts.length) { box.appendChild(empty('এই তালিকায় কিছু নেই।')); return; }
+      box.appendChild(table(['কে', 'কত', 'কোথায়', 'অবস্থা', 'কখন', ''], d.payouts.map(x => {
+        const acts = h('div', 'acts');
+        if (x.status === 'pending') acts.append(
+          btn('পাঠানো হয়েছে', 'small', async () => { const ref = prompt(`${W[x.method]} ${x.account}-এ ${taka(x.amount)} পাঠানোর পর লেনদেন নম্বর (TrxID) লিখুন:`); if (ref && await act(api('payout', { id: x.id, do: 'paid', ref }), 'পরিশোধ হিসেবে চিহ্নিত হলো।')) show('creators'); }),
+          btn('বাতিল', 'quiet small', async () => { const note = prompt('কেন বাতিল করছেন? (তিনি দেখতে পাবেন)'); if (note !== null && await act(api('payout', { id: x.id, do: 'reject', note }), 'অনুরোধ বাতিল হলো, টাকা ব্যালান্সে ফিরেছে।')) show('creators'); }));
+        return [person(x.user), taka(x.amount), `${W[x.method]} · ${x.account}`, chip(S[x.status][0] + (x.ref ? ' · ' + x.ref : ''), S[x.status][1]), ago(x.created), acts];
+      })));
+      return;
+    }
+    const d = await api('creators');
+    if (st.tab === 'rules') {
+      const card = h('div', 'card');
+      const inp = (label, value) => { const w = h('label', 'field'); const i = h('input'); i.type = 'number'; i.min = 0; i.value = value; w.append(h('span', null, label), i); card.appendChild(w); return i; };
+      card.appendChild(h('h3', null, 'কারা আবেদন করতে পারবেন'));
+      const f = inp('কমপক্ষে ফলোয়ার', d.rules.followers), p = inp('কমপক্ষে পোস্ট', d.rules.posts), m = inp('সবচেয়ে কম কত টাকা তোলা যাবে', d.rules.payoutMin);
+      card.appendChild(btn('নিয়ম সেভ করুন', '', async () => { if (await act(api('rules', { followers: f.value, posts: p.value, min: m.value }), 'নিয়ম বদলানো হলো।')) show('creators'); }));
+      const sum = h('div', 'card');
+      sum.appendChild(h('h3', null, 'মোট হিসাব'));
+      for (const [k, v] of [['মোট আয় যোগ করা হয়েছে', d.totals.earned], ['পাঠানো হয়েছে', d.totals.paid], ['পাঠানো বাকি', d.totals.pending]]) { const r = h('div', 'line'); r.append(h('span', 'k', k), chip(taka(v))); sum.appendChild(r); }
+      box.append(card, sum);
+      return;
+    }
+    const C = { applied: ['আবেদন করেছেন', 'warn'], approved: ['চালু', 'ok'], rejected: ['গৃহীত হয়নি', 'bad'] };
+    if (!d.creators.length) { box.appendChild(empty('এখনো কেউ আবেদন করেননি।')); return; }
+    box.appendChild(table(['কে', 'অবস্থা', 'ফলোয়ার · পোস্ট', 'ব্যালান্স', ''], d.creators.map(u => {
+      const acts = h('div', 'acts');
+      if (u.creator === 'applied') acts.append(
+        btn('অনুমোদন দিন', 'small', async () => { if (await act(api('creator', { id: u.id, do: 'approve' }), 'ক্রিয়েটর প্রোগ্রাম চালু হলো।')) show('creators'); }),
+        btn('বাতিল', 'quiet small', async () => { if (await act(api('creator', { id: u.id, do: 'reject' }), 'আবেদন গৃহীত হয়নি।')) show('creators'); }));
+      if (u.creator === 'approved') acts.append(
+        btn('আয় যোগ করুন', 'small', async () => {
+          const amount = prompt(`${u.name}-এর ব্যালান্সে কত টাকা যোগ করবেন? (কমাতে চাইলে মাইনাস দিন, যেমন -100)`);
+          if (!amount) return;
+          const note = prompt('কীসের জন্য? (তিনি দেখতে পাবেন, যেমন: অক্টোবরের ক্রিয়েটর বোনাস)');
+          if (note && await act(api('creator', { id: u.id, do: 'credit', amount: Number(amount), note }), 'আয় যোগ হলো।')) show('creators');
+        }),
+        btn('বন্ধ করুন', 'quiet small', async () => { if (confirm(`${u.name}-এর ক্রিয়েটর প্রোগ্রাম বন্ধ করবেন? আগের আয়ের হিসাব থাকবে।`) && await act(api('creator', { id: u.id, do: 'revoke' }), 'বন্ধ হলো।')) show('creators'); }));
+      return [person(u), chip(C[u.creator][0], C[u.creator][1]), `${num(u.standing.followers)} · ${num(u.standing.posts)}`, taka(u.money.balance), acts];
+    })));
+  } },
+
   audit: { title: 'কাজের খতিয়ান', icon: 'list', async draw(box) {
     const d = await api('audit');
-    const WHAT = { ban: 'অ্যাকাউন্ট বন্ধ', unban: 'অ্যাকাউন্ট চালু', role: 'ভূমিকা বদল', delete: 'অ্যাকাউন্ট মোছা', signout: 'সব ডিভাইস থেকে লগআউট', reply: 'সাপোর্টে উত্তর',
+    const WHAT = { verify: 'ব্যাজ দেওয়া', unverify: 'ব্যাজ সরানো', 'creator approve': 'ক্রিয়েটর অনুমোদন', 'creator reject': 'ক্রিয়েটর আবেদন বাতিল', 'creator revoke': 'ক্রিয়েটর বন্ধ',
+                   earning: 'আয় যোগ', 'payout paid': 'টাকা পাঠানো', 'payout rejected': 'টাকা তোলা বাতিল', 'creator rules': 'ক্রিয়েটর নিয়ম বদল', ban: 'অ্যাকাউন্ট বন্ধ', unban: 'অ্যাকাউন্ট চালু', role: 'ভূমিকা বদল', delete: 'অ্যাকাউন্ট মোছা', signout: 'সব ডিভাইস থেকে লগআউট', reply: 'সাপোর্টে উত্তর',
                    notice: 'ঘোষণা বদল', 'fare removed': 'ভাড়া সরানো', 'report dismissed': 'রিপোর্ট বন্ধ', 'post removed': 'পোস্ট সরানো' };
     box.appendChild(h('p', 'hint', 'অ্যাডমিন ও সাপোর্ট টিম এই প্যানেল থেকে যা যা বদলেছেন, তার তালিকা। এটি মোছা যায় না।'));
     if (!d.audit.length) { box.appendChild(empty('এখনো কিছু বদলানো হয়নি।')); return; }
@@ -317,6 +371,7 @@ async function openUser(id) {
   top.append(avatar(u, 'xl'), h('b', null, u.name), h('span', null, u.email), h('p', null, u.bio || 'বায়ো লেখেননি।'));
   const chips = h('div', 'chips');
   chips.append(chip(ROLE[u.role], u.role === 'admin' ? 'violet' : u.role === 'staff' ? 'ok' : ''), u.banned ? chip('অ্যাকাউন্ট বন্ধ', 'bad') : chip('সচল', 'ok'), u.online ? chip('এখন অনলাইন', 'live') : chip('শেষ সক্রিয় ' + ago(u.seen)));
+  if (u.verified) chips.appendChild(chip('ভেরিফায়েড', 'violet'));
   top.appendChild(chips);
   const grid = h('div', 'stats');
   for (const [label, value] of [['বন্ধু', stats.friends], ['পাঠানো মেসেজ', stats.messages], ['সাপোর্ট অনুরোধ', stats.tickets], ['তার বিরুদ্ধে রিপোর্ট', stats.reportsAbout],
@@ -325,6 +380,10 @@ async function openUser(id) {
   }
   const acts = h('div', 'acts col');
   const again = () => { openUser(id); if (page === 'users' || page === 'overview') show(page); };
+  // The blue badge: only an admin gives it, and may give it to their own account too.
+  if (ME.role === 'admin') acts.append(u.verified
+    ? btn('ভেরিফায়েড ব্যাজ সরিয়ে নিন', 'quiet', async () => { if (await act(api('user', { id, do: 'unverify' }), 'ব্যাজ সরানো হলো।')) again(); })
+    : btn('ভেরিফায়েড ব্যাজ দিন', '', async () => { if (await act(api('user', { id, do: 'verify' }), 'ব্যাজ দেওয়া হলো।')) again(); }));
   if (u.id !== ME.id) {
     acts.append(u.banned ? btn('অ্যাকাউন্ট আবার চালু করুন', '', async () => { if (await act(api('user', { id, do: 'unban' }), 'অ্যাকাউন্ট চালু হলো।')) again(); })
                          : btn('অ্যাকাউন্ট বন্ধ করুন (ব্যান)', 'bad', async () => { const note = prompt('কেন বন্ধ করছেন? (খতিয়ানে লেখা থাকবে)'); if (note !== null && await act(api('user', { id, do: 'ban', note }), 'অ্যাকাউন্ট বন্ধ হলো।')) again(); }));

@@ -3,7 +3,7 @@
 for (const n of document.querySelectorAll('[data-ic]')) n.innerHTML = svg(n.dataset.ic);
 
 const BD_LNGLAT = [[87.8, 20.3], [92.9, 26.9]];   // Bangladesh, as [lon, lat] corners
-const PAGES = ['home', 'trip', 'buses', 'train', 'districts', 'nearby', 'tour', 'fares', 'more', 'chat', 'support', 'community', 'profile', 'settings', 'explore'];
+const PAGES = ['home', 'trip', 'buses', 'train', 'districts', 'nearby', 'tour', 'fares', 'more', 'chat', 'support', 'community', 'profile', 'settings', 'explore', 'insights'];
 const trip = { from: null, to: null };          // each: { lat, lon, label }
 const enter = {};                               // page name -> function run when the page opens
 const searches = [];

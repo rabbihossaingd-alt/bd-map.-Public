@@ -67,7 +67,7 @@ function feedCard(p, onGone) {
   const when = el('small');
   when.appendChild(el('span', null, agoText(p.created)));
   if (p.place) when.append(document.createTextNode(' · '), Object.assign(el('span', 'no-tr'), { textContent: p.place.label }));
-  t.append(Object.assign(el('b', 'no-tr'), { textContent: p.user.name }), when);
+  t.append(nameEl(p.user), when);
   who.append(avatar(p.user, 'sm ring'), t);
   who.addEventListener('click', () => openProfilePage(p.user.id));
   const more = el('button', 'icon-btn');
@@ -161,7 +161,32 @@ function feedCard(p, onGone) {
   body.appendChild(all);
   paint(false);
   card.append(head, media, bar, body);
+  card.dataset.post = p.id;
+  seenWatcher().observe(card);
   return card;
+}
+
+// Views: a post counts as seen once half of it has been on screen. Ids are sent in small batches.
+let seenObs = null, seenQueue = [], seenTimer = null;
+const seenSent = new Set();
+function seenWatcher() {
+  if (seenObs) return seenObs;
+  seenObs = new IntersectionObserver(entries => {
+    for (const e of entries) {
+      if (!e.isIntersecting) continue;
+      const id = Number(e.target.dataset.post);
+      seenObs.unobserve(e.target);
+      if (!id || seenSent.has(id)) continue;
+      seenSent.add(id);
+      seenQueue.push(id);
+    }
+    clearTimeout(seenTimer);
+    if (seenQueue.length) seenTimer = setTimeout(() => {
+      const ids = seenQueue.splice(0, 30);
+      fetch('api/explore/view', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids }) }).catch(() => {});
+    }, 1500);
+  }, { threshold: 0.5 });
+  return seenObs;
 }
 
 // One square in a grid (profiles, search results).
@@ -216,7 +241,7 @@ async function openPost(id, onGone) {
 
   const who = el('div', 'person tap post-who');
   const t = el('div', 't');
-  t.append(Object.assign(el('b', 'no-tr'), { textContent: p.user.name }), el('span', null, agoText(p.created)));
+  t.append(nameEl(p.user), el('span', null, agoText(p.created)));
   who.append(avatar(p.user, 'sm'), t);
   who.addEventListener('click', () => { closeReels(); openProfilePage(p.user.id); });
 
@@ -242,7 +267,7 @@ async function openPost(id, onGone) {
   const addComment = c => {
     const row = el('div', 'cmt no-tr');
     const txt = el('div');
-    txt.append(el('b', null, c.user.name), document.createTextNode(' ' + c.body));
+    txt.append(nameEl(c.user), document.createTextNode(' ' + c.body));
     row.append(avatar(c.user, 'xs'), txt);
     row.querySelector('b').addEventListener('click', () => { closeReels(); openProfilePage(c.user.id); });
     list.appendChild(row);
@@ -307,7 +332,7 @@ async function openReels(startId, user) {
 
     const info = el('div', 'reel-info');
     const who = el('button', 'fc-who');
-    who.append(avatar(p.user, 'sm'), Object.assign(el('b', 'no-tr'), { textContent: p.user.name }));
+    who.append(avatar(p.user, 'sm'), nameEl(p.user));
     who.addEventListener('click', () => { closeReels(); openProfilePage(p.user.id); });
     info.appendChild(who);
     if (p.caption) info.appendChild(Object.assign(el('p', 'no-tr'), { textContent: p.caption }));
