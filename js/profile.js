@@ -106,7 +106,10 @@ async function drawProfile() {
 
   // The bar across the top: where you are, and (on your own profile) the way to Settings.
   const bar = el('div', 'prof-bar');
-  bar.appendChild(el('span', 'no-tr', mine ? ME.email : ''));
+  const handle = el('span', 'prof-handle no-tr');
+  handle.textContent = u.username ? u.username : '';
+  if (isVerified(u)) handle.appendChild(vbadge());
+  bar.appendChild(handle);
   if (mine) bar.append(iconBtn('plus', 'নতুন পোস্ট', openNewPost), iconBtn('cog', 'সেটিংস', () => go('settings')));
   else bar.prepend(iconBtn('back', 'ফিরে যান', () => history.back()));
 
@@ -387,6 +390,113 @@ function openVerifyInfo() {
   openModal('ভেরিফায়েড ব্যাজ', 'ব্যাজ কেনা যায় না — BD Map টিম যাচাই করে দেয়।', [el('div', 'form-note', 'যা দেখা হয়:'), list], [apply]);
 }
 
+// ---- security: two-step verification and where the account is signed in ----
+// The QR code is drawn in the browser by a small library loaded only when it is needed; the secret never leaves
+// this page except to the server that made it.
+let qrLib = null;
+function loadQr() {
+  if (qrLib) return qrLib;
+  qrLib = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js';
+    s.onload = () => resolve(window.qrcode);
+    s.onerror = () => { qrLib = null; reject(new Error('qr')); };
+    document.head.appendChild(s);
+  });
+  return qrLib;
+}
+async function openTwoStep() {
+  if (!ME) { openLogin(); return; }
+  let info = {};
+  try { info = await acctApi('sessions'); } catch { /* shown as off */ }
+  if (info.twofa) {
+    const [box, code] = field('অ্যাপের ৬ সংখ্যার কোড বা একটি ব্যাকআপ কোড', { type: 'text', maxLength: 11, autocomplete: 'one-time-code' });
+    const note = el('div', 'form-note');
+    const off = button('close', 'বন্ধ করুন', async () => {
+      try { ME = (await acctApi('2fa-disable', { code: code.value })).user; closeModal(); if (enter.settings) enter.settings(); }
+      catch { note.className = 'form-note bad'; note.textContent = 'কোডটি মিলছে না।'; }
+    }, true);
+    const state = el('div', 'sec-state on');
+    state.append(ic('shield'), el('b', null, 'টু-স্টেপ ভেরিফিকেশন চালু আছে'), el('span', null, `নতুন ডিভাইসে লগইন করতে ই-মেইলের কোডের পর অ্যাপের কোডও লাগবে। ব্যাকআপ কোড বাকি: ${num(info.backupLeft || 0)}টি`));
+    openModal('টু-স্টেপ ভেরিফিকেশন', '', [state, el('div', 'info-label', 'বন্ধ করতে কোড দিন'), box, note], [off]);
+    return;
+  }
+  const intro = el('div', 'sec-intro');
+  intro.append(Object.assign(el('div', 'sec-hero'), { innerHTML: svg('shield') }),
+    el('b', null, 'অ্যাকাউন্টে আরেকটি তালা দিন'),
+    el('p', null, 'কেউ আপনার ই-মেইলে ঢুকে গেলেও আপনার ফোনের অথেন্টিকেটর অ্যাপের কোড ছাড়া BD Map-এ লগইন করতে পারবে না।'));
+  const steps = el('ol', 'sec-steps');
+  for (const t of ['ফোনে Google Authenticator, Microsoft Authenticator বা 2FAS অ্যাপ নিন', 'অ্যাপে QR কোডটি স্ক্যান করুন (বা কী-টি লিখে দিন)', 'অ্যাপে আসা ৬ সংখ্যার কোড এখানে দিন']) steps.appendChild(el('li', null, t));
+  const start = button('shield', 'শুরু করুন', setup);
+  openModal('টু-স্টেপ ভেরিফিকেশন', '', [intro, steps], [start]);
+
+  async function setup() {
+    start.disabled = true;
+    let s;
+    try { s = await acctApi('2fa-setup', {}); } catch { start.disabled = false; return; }
+    const qr = el('div', 'sec-qr');
+    qr.appendChild(el('div', 'skeleton'));
+    loadQr().then(make => {
+      const q = make(0, 'M');
+      q.addData(s.uri);
+      q.make();
+      qr.innerHTML = q.createSvgTag({ cellSize: 5, margin: 2, scalable: true });
+    }).catch(() => { qr.replaceChildren(el('div', 'form-note', 'QR দেখানো যায়নি — নিচের কী-টি অ্যাপে লিখে দিন।')); });
+    const key = el('button', 'sec-key no-tr', s.secret.match(/.{1,4}/g).join(' '));
+    key.title = 'কপি করুন';
+    key.addEventListener('click', () => { navigator.clipboard && navigator.clipboard.writeText(s.secret); key.classList.add('copied'); setTimeout(() => key.classList.remove('copied'), 1200); });
+    const openApp = el('a', 'text-btn', 'এই ফোনেই অথেন্টিকেটর অ্যাপ খুলুন');
+    openApp.href = s.uri;
+    const note = el('div', 'form-note');
+    const boxes = codeBoxes(async code => {
+      try {
+        const r = await acctApi('2fa-enable', { code });
+        ME = { ...ME, twofa: true };
+        showBackup(r.codes);
+      } catch { note.className = 'form-note bad'; note.textContent = 'কোডটি মিলছে না। অ্যাপে নতুন কোড এলে আবার দিন।'; boxes.clear(); }
+    });
+    openModal('অ্যাপ যুক্ত করুন', 'স্ক্যান করুন, তারপর কোড দিন', [qr, el('div', 'info-label', 'স্ক্যান না হলে এই কী'), key, openApp, el('div', 'info-label', 'অ্যাপের ৬ সংখ্যার কোড'), boxes, note]);
+    boxes.focus();
+  }
+  function showBackup(codes) {
+    const list = el('div', 'sec-codes no-tr');
+    for (const c of codes) list.appendChild(el('span', null, c));
+    const copy = button('copy', 'কপি করুন', () => { navigator.clipboard && navigator.clipboard.writeText(codes.join('\n')); copy.lastChild.textContent = 'কপি হয়েছে'; }, true);
+    const save = button('file', 'ফাইলে রাখুন', () => {
+      const a = el('a');
+      a.href = URL.createObjectURL(new Blob([`BD Map — ব্যাকআপ কোড (${ME.email})\nপ্রতিটি কোড একবারই চলে।\n\n${codes.join('\n')}\n`], { type: 'text/plain' }));
+      a.download = 'bdmap-backup-codes.txt';
+      a.click();
+    }, true);
+    const done = button('check', 'রেখেছি', () => { closeModal(); if (enter.settings) enter.settings(); });
+    const state = el('div', 'sec-state on');
+    state.append(ic('shield'), el('b', null, 'চালু হয়েছে'), el('span', null, 'ফোন হারালে এই কোডগুলো দিয়ে লগইন করা যাবে। প্রতিটি একবারই চলে — নিরাপদ জায়গায় রাখুন। অন্য সব ডিভাইস থেকে লগআউট করা হয়েছে।'));
+    openModal('ব্যাকআপ কোড', '', [state, list], [copy, save, done]);
+  }
+}
+
+async function openSessions() {
+  if (!ME) { openLogin(); return; }
+  let d;
+  try { d = await acctApi('sessions'); } catch { return; }
+  const ago = ts => { const m = Math.round((Date.now() - ts) / 60000); return m < 5 ? 'এখন সক্রিয়' : m < 60 ? `${num(m)} মিনিট আগে` : m < 1440 ? `${num(Math.round(m / 60))} ঘণ্টা আগে` : `${num(Math.round(m / 1440))} দিন আগে`; };
+  const rows = d.sessions.map(s => {
+    const row = el('div', 'sess' + (s.here ? ' here' : ''));
+    const phone = /iPhone|Android/.test(s.agent);
+    const tt = el('div', 't');
+    tt.append(Object.assign(el('b', 'no-tr'), { textContent: s.agent }), el('span', null, s.here ? 'এই ডিভাইস' : `${ago(s.last || s.made)} · লগইন ${new Date(s.made || s.last).toLocaleDateString(NUM_LOCALE, { day: 'numeric', month: 'short' })}`));
+    row.append(ic(phone ? 'phone' : 'grid'), tt);
+    if (!s.here) {
+      const out = el('button', 'pill-btn quiet', 'লগআউট');
+      out.addEventListener('click', async () => { out.disabled = true; await acctApi('session-end', { id: s.id }).catch(() => {}); row.remove(); });
+      row.appendChild(out);
+    } else row.appendChild(el('span', 'sess-here', 'এখানে'));
+    return row;
+  });
+  const all = button('logout', 'অন্য সব ডিভাইস থেকে লগআউট', async () => { await acctApi('sessions-end', {}).catch(() => {}); closeModal(); openSessions(); }, true);
+  openModal('লগইন অ্যাক্টিভিটি', 'যেসব ডিভাইসে আপনার অ্যাকাউন্ট খোলা আছে', rows, d.sessions.length > 1 ? [all] : []);
+}
+
 // ---- settings ----
 (function initSettings() {
   $('set-edit').addEventListener('click', () => (ME ? openProfile() : openLogin()));
@@ -405,6 +515,8 @@ function openVerifyInfo() {
     $('set-active').setAttribute('aria-checked', String(p.active));
     $('set-active').classList.toggle('on', p.active);
     $('set-verify-sub').textContent = ME && ME.verified ? 'আপনার অ্যাকাউন্ট ভেরিফায়েড' : 'নামের পাশে নীল ব্যাজ — কীভাবে পাবেন';
+    $('set-2fa-sub').textContent = ME && ME.twofa ? 'চালু আছে' : 'বন্ধ — চালু করলে অ্যাকাউন্ট আরও নিরাপদ';
+    $('set-2fa-sub').classList.toggle('on', !!(ME && ME.twofa));
   };
   const savePrivacy = async change => {
     if (!ME) { openLogin(); return; }
@@ -416,6 +528,8 @@ function openVerifyInfo() {
   $('set-active').addEventListener('click', () => savePrivacy({ active: !((ME && ME.prefs) || { active: true }).active }));
   $('set-blocked').addEventListener('click', () => { if (typeof loadChat === 'function') loadChat().then(openBlocked); else openBlocked(); });
   $('set-verify').addEventListener('click', openVerifyInfo);
+  $('set-2fa').addEventListener('click', openTwoStep);
+  $('set-sessions').addEventListener('click', openSessions);
   $('set-logout').addEventListener('click', logOut);
   $('set-delete').addEventListener('click', confirmDelete);
   $('people-open').addEventListener('click', openPeopleSearch);

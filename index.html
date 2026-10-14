@@ -202,6 +202,7 @@
         <label class="ex-search"><i data-ic="search"></i><input id="explore-q" type="search" autocomplete="off" placeholder="খুঁজুন — মানুষ, জায়গা, পোস্ট" aria-label="খুঁজুন"></label>
         <button class="ex-new" id="explore-new" title="নতুন পোস্ট" aria-label="নতুন পোস্ট"><i data-ic="plus"></i></button>
       </div>
+      <div class="ex-tabs" id="ex-tabs"><button class="on" data-t="feed"><i data-ic="home"></i><span>ফিড</span></button><button data-t="reels"><i data-ic="play"></i><span>রিলস</span></button></div>
       <div class="faces" id="explore-people" hidden></div>
       <div id="explore-results" hidden></div>
       <div id="explore-feed"></div>
@@ -227,6 +228,11 @@
       <div class="card menu">
         <button id="set-edit"><i class="mi soft" data-ic="user"></i><span><b>প্রোফাইল এডিট</b><em id="set-email"></em></span><i class="chev" data-ic="chev"></i></button>
         <a href="#/insights" data-needs-login><i class="mi soft" data-ic="chart"></i><span><b>প্রফেশনাল ড্যাশবোর্ড</b><em>ভিউ, লাইক, ফলোয়ার — আপনার পোস্ট কেমন যাচ্ছে</em></span><i class="chev" data-ic="chev"></i></a>
+      </div>
+      <div class="label" data-needs-login>পাসওয়ার্ড ও নিরাপত্তা</div>
+      <div class="card menu" data-needs-login>
+        <button id="set-2fa"><i class="mi soft" data-ic="shield"></i><span><b>টু-স্টেপ ভেরিফিকেশন</b><em id="set-2fa-sub">বন্ধ</em></span><i class="chev" data-ic="chev"></i></button>
+        <button id="set-sessions"><i class="mi soft" data-ic="phone"></i><span><b>লগইন অ্যাক্টিভিটি</b><em>কোন কোন ডিভাইসে লগইন আছে, দূর থেকে লগআউট</em></span><i class="chev" data-ic="chev"></i></button>
       </div>
       <div class="label" data-needs-login>কে কীভাবে আপনার সাথে যোগাযোগ করবে</div>
       <div class="card menu" data-needs-login>
@@ -314,9 +320,10 @@
       </aside>
       <div class="chat-main">
         <div class="chat-empty" id="chat-empty">
-          <div class="gate-art"><i></i><i></i><i></i><span data-ic="chat"></span></div>
-          <b>একটি কথোপকথন বেছে নিন</b>
-          <span>বন্ধুকে মেসেজ দিন, জায়গা পাঠান, ভয়েস বা ভিডিও কল করুন।</span>
+          <div class="ig-empty"><span data-ic="send"></span></div>
+          <b>আপনার মেসেজ</b>
+          <span>বন্ধুকে বা গ্রুপে ছবি, ভিডিও, ভয়েস মেসেজ আর জায়গা পাঠান — ভয়েস ও ভিডিও কলও করুন।</span>
+          <button class="btn" id="chat-empty-new">মেসেজ পাঠান</button>
         </div>
         <div class="chat-thread" id="chat-thread" hidden>
           <header class="chat-head">
@@ -333,6 +340,8 @@
           <div class="reply-bar" id="chat-reply" hidden></div>
           <div class="rec-bar" id="chat-rec" hidden></div>
           <form class="chat-compose" id="chat-form">
+            <button type="button" class="cam-btn" id="chat-cam" title="ছবি বা ভিডিও" aria-label="ছবি বা ভিডিও"><i data-ic="camera"></i></button>
+            <input type="file" id="chat-photo" accept="image/*,video/*" multiple hidden>
             <button type="button" class="icon-btn" id="chat-attach" title="ছবি, ভিডিও বা ফাইল" aria-label="ছবি, ভিডিও বা ফাইল"><i data-ic="clip"></i></button>
             <button type="button" class="icon-btn" id="chat-share" title="জায়গা পাঠান" aria-label="জায়গা পাঠান"><i data-ic="pin"></i></button>
             <button type="button" class="icon-btn" id="chat-mic" title="ভয়েস মেসেজ" aria-label="ভয়েস মেসেজ"><i data-ic="mic"></i></button>
@@ -341,7 +350,7 @@
               <textarea id="chat-input" rows="1" maxlength="2000" placeholder="মেসেজ লিখুন…" aria-label="মেসেজ লিখুন…"></textarea>
               <button type="button" class="emoji-btn" id="chat-emoji" title="ইমোজি" aria-label="ইমোজি">🙂</button>
             </div>
-            <button class="send like" id="chat-send" title="পাঠান" aria-label="পাঠান"><i data-ic="send"></i><span>👍</span></button>
+            <button class="send like" id="chat-send" title="পাঠান" aria-label="পাঠান"><i data-ic="send"></i><span>👍</span><em>পাঠান</em></button>
           </form>
         </div>
         <aside class="chat-info" id="chat-info" hidden></aside>

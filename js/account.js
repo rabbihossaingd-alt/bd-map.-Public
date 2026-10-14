@@ -30,6 +30,12 @@ const acctError = e => ACCT_ERRORS[e.message] || 'কাজটি করা য�
 const AVATAR_HUES = [158, 200, 262, 330, 24, 48, 96, 222];
 function avatar(person, cls = '') {
   const a = el('span', 'avatar no-tr ' + cls);
+  if (person && person.id) {
+    a.dataset.uid = person.id;
+    // Someone with a story from the last day gets the coloured ring (grey once it has been watched).
+    const ring = typeof storyClass === 'function' ? storyClass(person.id) : '';
+    if (ring) a.className += ' ' + ring;
+  }
   if (person.pic) {
     const img = el('img');
     img.alt = '';
@@ -48,9 +54,18 @@ const VERIFIED = new Set();
 fetch('api/people/verified').then(r => r.json()).then(d => { for (const id of d.ids || []) VERIFIED.add(id); }).catch(() => {});
 const isVerified = person => !!person && (!!person.verified || VERIFIED.has(person.id));
 function vbadge() {
+  if (!document.getElementById('vb-defs')) {
+    // One shared gradient for every badge on the page.
+    const defs = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    defs.id = 'vb-defs';
+    defs.setAttribute('aria-hidden', 'true');
+    defs.style.cssText = 'position:absolute;width:0;height:0;overflow:hidden';
+    defs.innerHTML = '<defs><linearGradient id="vb-g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4cc3ff"/><stop offset=".55" stop-color="#1d8cf8"/><stop offset="1" stop-color="#1565e8"/></linearGradient></defs>';
+    document.body.appendChild(defs);
+  }
   const s = el('span', 'vbadge');
   s.title = LANG === 'en' ? 'Verified' : 'ভেরিফায়েড';
-  s.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5l2.3 1.7 2.9.1.9 2.7 2.3 1.8-.9 2.7.9 2.8-2.3 1.7-.9 2.8-2.9.1L12 21.5l-2.3-1.7-2.9-.1-.9-2.8-2.3-1.7.9-2.8-.9-2.7 2.3-1.8.9-2.7 2.9-.1z"/><path class="t" d="M8.6 12.2l2.3 2.3 4.6-4.8"/></svg>';
+  s.innerHTML = '<svg viewBox="-1.2 -1.2 26.4 26.4" aria-hidden="true"><path class="b" d="M12.00 2.65Q15.43 -0.82 16.67 3.90Q21.38 2.62 20.10 7.33Q24.82 8.57 21.35 12.00Q24.82 15.43 20.10 16.67Q21.38 21.38 16.67 20.10Q15.43 24.82 12.00 21.35Q8.57 24.82 7.33 20.10Q2.62 21.38 3.90 16.68Q-0.82 15.43 2.65 12.00Q-0.82 8.57 3.90 7.32Q2.62 2.62 7.32 3.90Q8.57 -0.82 12.00 2.65Z"/><path class="t" d="M8.3 12.3l2.5 2.5 5-5.2"/></svg>';
   return s;
 }
 // A person's name, with the badge when they have one. The name is the person's own words: never translated.
@@ -114,55 +129,227 @@ function field(label, attrs, tag = 'input') {
   return [wrap, input];
 }
 
-// Step 1: the address. Step 2: the six-digit code that was sent to it.
-function openLogin() {
-  const [emailBox, email] = field('আপনার ই-মেইল', { type: 'email', autocomplete: 'email', inputMode: 'email', placeholder: 'name@gmail.com', maxLength: 120 });
-  const note = el('div', 'form-note', 'এই ঠিকানায় ৬ সংখ্যার একটি কোড যাবে। পাসওয়ার্ড লাগে না।');
-  const go = button('send', 'কোড পাঠান', async () => {
+// ---- Signing in, the way a social app does it ----
+// A screen of its own (not a pop-up): log in with an e-mail address and the code sent to it, or create a new
+// account (name, username, e-mail, code). With two-step verification on, a code from an authenticator app (or a
+// backup code) is asked for after the e-mail code.
+const AUTH_ERRORS = { noaccount: 'এই ই-মেইলে কোনো অ্যাকাউন্ট নেই।', exists: 'এই ই-মেইলে আগেই অ্যাকাউন্ট আছে — লগইন করুন।', closed: 'এই মুহূর্তে নতুন অ্যাকাউন্ট খোলা বন্ধ আছে।',
+                      utaken: 'এই ইউজারনেম আগেই কেউ নিয়েছেন।', uformat: 'ইউজারনেমে ছোট হাতের a-z, 0-9, ডট ও আন্ডারস্কোর — ৩ থেকে ৩০ অক্ষর।' };
+const authError = e => AUTH_ERRORS[e.message] || acctError(e);
+let authBox = null;
+function closeAuth() { if (authBox) { authBox.remove(); authBox = null; document.body.classList.remove('auth-open'); } }
+function authShell(content, footer) {
+  closeAuth();
+  if (!$('modal').hidden) closeModal();
+  authBox = el('div', 'auth');
+  const x = el('button', 'icon-btn auth-x');
+  x.innerHTML = svg('close');
+  x.setAttribute('aria-label', 'বন্ধ করুন');
+  x.addEventListener('click', closeAuth);
+  const card = el('div', 'auth-card');
+  const brand = el('div', 'auth-brand');
+  brand.append(Object.assign(el('span', 'auth-logo'), { innerHTML: '<i></i>' }), el('b', 'no-tr', 'BD Map'));
+  card.append(brand, ...content);
+  const foot = el('div', 'auth-foot');
+  foot.append(...footer);
+  const art = el('div', 'auth-art');
+  art.innerHTML = '<span class="a1"></span><span class="a2"></span><span class="a3"></span>';
+  authBox.append(art, x, card, foot);
+  document.body.appendChild(authBox);
+  document.body.classList.add('auth-open');
+  return authBox;
+}
+function authInput(label, attrs) {
+  const wrap = el('label', 'auth-field');
+  const input = el('input');
+  Object.assign(input, attrs, { placeholder: ' ' });
+  wrap.append(input, el('span', null, label));
+  return [wrap, input];
+}
+const linkBtn = (text, fn) => { const b = el('button', 'auth-link', text); b.type = 'button'; b.addEventListener('click', fn); return b; };
+
+function openLogin(mode = 'login', presetEmail = '') {
+  if (mode === 'signup') return openSignup(presetEmail);
+  const [emailBox, email] = authInput('ই-মেইল ঠিকানা', { type: 'email', autocomplete: 'email', inputMode: 'email', maxLength: 120, value: presetEmail });
+  const note = el('div', 'auth-note');
+  const go = el('button', 'auth-btn', 'কোড পাঠান');
+  const submit = async () => {
     go.disabled = true;
+    note.className = 'auth-note';
+    note.textContent = '';
     try {
-      const reply = await acctApi('code', { email: email.value });
-      openCode(email.value.trim(), reply.devCode);
+      const reply = await acctApi('code', { email: email.value, mode: 'login' });
+      openCode({ email: email.value.trim() }, reply.devCode);
     } catch (e) {
       go.disabled = false;
-      note.className = 'form-note bad';
-      note.textContent = acctError(e);
+      note.className = 'auth-note bad';
+      note.textContent = authError(e);
+      if (e.message === 'noaccount') note.appendChild(linkBtn('নতুন অ্যাকাউন্ট খুলুন', () => openSignup(email.value)));
     }
-  });
-  email.addEventListener('keydown', e => { if (e.key === 'Enter') go.click(); });
-  openModal('লগইন', 'ই-মেইলে আসা কোড দিয়ে', [emailBox, note], [go]);
+  };
+  go.addEventListener('click', submit);
+  email.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
+  const form = el('div', 'auth-form');
+  form.append(el('h2', null, 'লগইন করুন'), el('p', 'auth-sub', 'পাসওয়ার্ড লাগে না — ই-মেইলে একটি কোড যাবে।'), emailBox, go, note);
+  const divider = el('div', 'auth-or', 'অথবা');
+  const create = el('button', 'auth-btn ghost', 'নতুন অ্যাকাউন্ট খুলুন');
+  create.addEventListener('click', () => openSignup(email.value));
+  authShell([form, divider, create], [el('span', null, 'লগইন করলে আপনি BD Map-এর নিয়ম ও প্রাইভেসি মেনে নিচ্ছেন।')]);
   email.focus();
 }
 
-function openCode(email, devCode) {
-  const [codeBox, code] = field('৬ সংখ্যার কোড', { type: 'text', inputMode: 'numeric', autocomplete: 'one-time-code', maxLength: 6, placeholder: '• • • • • •' });
-  code.classList.add('code-input');
-  const note = el('div', 'form-note', 'ই-মেইল না পেলে স্প্যাম ফোল্ডার দেখুন। কোড ১০ মিনিট চলবে।');
-  if (devCode) {
-    // Only ever sent by a server running on this same computer with no mail account set up.
-    note.textContent = `এই কম্পিউটারে ই-মেইল সেটআপ করা নেই, তাই পরীক্ষার কোড এখানে দেখানো হলো: ${devCode}`;
-    note.classList.add('no-tr');
-  }
-  const again = el('button', 'text-btn', 'অন্য ই-মেইল দিন');
-  again.addEventListener('click', openLogin);
-  const go = button('check', 'যাচাই করুন', async () => {
+// Creating an account: who you are first, then the code to prove the e-mail address is yours.
+function openSignup(presetEmail = '') {
+  const [emailBox, email] = authInput('ই-মেইল ঠিকানা', { type: 'email', autocomplete: 'email', inputMode: 'email', maxLength: 120, value: presetEmail });
+  const [nameBox, name] = authInput('পুরো নাম', { type: 'text', autocomplete: 'name', maxLength: 40 });
+  const [userBox, user] = authInput('ইউজারনেম', { type: 'text', autocomplete: 'username', maxLength: 30, autocapitalize: 'off', spellcheck: false });
+  const status = el('span', 'auth-check');
+  userBox.appendChild(status);
+  let userOk = false, seq = 0, timer = null;
+  const check = () => {
+    const u = user.value.trim().toLowerCase();
+    user.value = u.replace(/[^a-z0-9._]/g, '');
+    clearTimeout(timer);
+    userOk = false;
+    status.className = 'auth-check';
+    if (user.value.length < 3) return;
+    const mine = ++seq;
+    timer = setTimeout(async () => {
+      try {
+        const r = await (await fetch('api/auth/username?u=' + encodeURIComponent(user.value))).json();
+        if (mine !== seq) return;
+        userOk = r.ok;
+        status.className = 'auth-check ' + (r.ok ? 'ok' : 'bad');
+        status.title = r.ok ? 'খালি আছে' : r.problem === 'taken' ? 'আগেই নেওয়া' : 'ঠিক নয়';
+      } catch { /* checked again on submit */ }
+    }, 280);
+  };
+  user.addEventListener('input', check);
+  // A username is suggested from the name, the way apps do.
+  name.addEventListener('blur', () => {
+    if (user.value) return;
+    const latin = name.value.toLowerCase().normalize('NFKD').replace(/[^a-z0-9 ]/g, '').trim().replace(/\s+/g, '.');
+    const fromMail = email.value.split('@')[0].toLowerCase().replace(/[^a-z0-9._]/g, '');
+    user.value = (latin.length >= 3 ? latin : fromMail).slice(0, 24);
+    check();
+  });
+  const note = el('div', 'auth-note');
+  const go = el('button', 'auth-btn', 'পরের ধাপ');
+  const submit = async () => {
+    note.className = 'auth-note bad';
+    if (name.value.trim().length < 2) { note.textContent = 'নাম অন্তত ২ অক্ষরের হতে হবে।'; name.focus(); return; }
+    if (!/^[a-z0-9._]{3,30}$/.test(user.value)) { note.textContent = AUTH_ERRORS.uformat; user.focus(); return; }
     go.disabled = true;
+    note.textContent = '';
     try {
-      const reply = await acctApi('verify', { email, code: code.value, device: deviceId() });
-      signedIn(reply);
-      closeModal();
-      if (reply.isNew) openProfile(true);
+      const r = await (await fetch('api/auth/username?u=' + encodeURIComponent(user.value))).json();
+      if (!r.ok) throw new Error(r.problem === 'taken' ? 'utaken' : 'uformat');
+      const reply = await acctApi('code', { email: email.value, mode: 'signup' });
+      openCode({ email: email.value.trim(), name: name.value.trim(), username: user.value }, reply.devCode);
     } catch (e) {
       go.disabled = false;
-      note.className = 'form-note bad';
-      note.textContent = acctError(e);
+      note.textContent = authError(e);
+      if (e.message === 'exists') note.appendChild(linkBtn('লগইন করুন', () => openLogin('login', email.value)));
     }
+  };
+  go.addEventListener('click', submit);
+  for (const i of [email, name, user]) i.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
+  const form = el('div', 'auth-form');
+  form.append(el('h2', null, 'নতুন অ্যাকাউন্ট'), el('p', 'auth-sub', 'বন্ধুদের ছবি-ভিডিও দেখুন, মেসেজ করুন, ভাড়া জানিয়ে পয়েন্ট নিন।'), emailBox, nameBox, userBox, go, note);
+  authShell([form], [el('span', null, 'আগে থেকেই অ্যাকাউন্ট আছে?'), linkBtn('লগইন করুন', () => openLogin('login', email.value))]);
+  (presetEmail ? name : email).focus();
+}
+
+// Six boxes for a six-digit code: typing moves along, a pasted code fills them all.
+function codeBoxes(onDone) {
+  const row = el('div', 'otp');
+  const boxes = Array.from({ length: 6 }, () => {
+    const i = el('input');
+    Object.assign(i, { type: 'text', inputMode: 'numeric', maxLength: 1, autocomplete: 'one-time-code' });
+    row.appendChild(i);
+    return i;
   });
-  code.addEventListener('input', () => { code.value = code.value.replace(/\D/g, ''); if (code.value.length === 6) go.click(); });
-  code.addEventListener('keydown', e => { if (e.key === 'Enter') go.click(); });
-  openModal('কোড দিন', email, [codeBox, note, again], [go]);
-  $('m-sub').classList.add('no-tr');
-  code.focus();
+  const value = () => boxes.map(b => b.value).join('');
+  boxes.forEach((b, n) => {
+    b.addEventListener('input', () => {
+      const digits = b.value.replace(/\D/g, '');
+      if (digits.length > 1) { digits.slice(0, 6 - n).split('').forEach((d, k) => { boxes[n + k].value = d; }); }
+      else b.value = digits;
+      const next = boxes.find(x => !x.value);
+      (next || boxes[5]).focus();
+      row.classList.toggle('full', value().length === 6);
+      if (value().length === 6) onDone(value());
+    });
+    b.addEventListener('keydown', e => { if (e.key === 'Backspace' && !b.value && n) { boxes[n - 1].value = ''; boxes[n - 1].focus(); } });
+    b.addEventListener('paste', e => { const t = (e.clipboardData.getData('text') || '').replace(/\D/g, '').slice(0, 6); if (t.length > 1) { e.preventDefault(); t.split('').forEach((d, k) => { if (boxes[k]) boxes[k].value = d; }); boxes[Math.min(5, t.length)].focus(); if (t.length === 6) onDone(t); } });
+  });
+  row.clear = () => { for (const b of boxes) b.value = ''; row.classList.remove('full'); boxes[0].focus(); };
+  row.focus = () => boxes[0].focus();
+  return row;
+}
+
+function openCode(who, devCode) {
+  const note = el('div', 'auth-note');
+  if (devCode) { note.textContent = `এই কম্পিউটারে ই-মেইল সেটআপ নেই — পরীক্ষার কোড: ${devCode}`; note.classList.add('no-tr'); }
+  let busy = false;
+  const boxes = codeBoxes(async code => {
+    if (busy) return;
+    busy = true;
+    note.className = 'auth-note';
+    try {
+      const reply = await acctApi('verify', { email: who.email, code, device: deviceId(), name: who.name, username: who.username });
+      if (reply.need2fa) { openSecondStep(reply.ticket); return; }
+      finishSignIn(reply);
+    } catch (e) {
+      note.className = 'auth-note bad';
+      note.textContent = authError(e);
+      boxes.clear();
+    }
+    busy = false;
+  });
+  const again = linkBtn('আবার কোড পাঠান', async () => {
+    try { const r = await acctApi('code', { email: who.email, mode: who.name ? 'signup' : 'login' }); note.className = 'auth-note good'; note.textContent = r.devCode ? `নতুন কোড: ${r.devCode}` : 'নতুন কোড পাঠানো হয়েছে।'; }
+    catch (e) { note.className = 'auth-note bad'; note.textContent = authError(e); }
+  });
+  const form = el('div', 'auth-form');
+  const sub = el('p', 'auth-sub');
+  sub.append(document.createTextNode('৬ সংখ্যার কোড পাঠানো হয়েছে '), Object.assign(el('b', 'no-tr'), { textContent: who.email }), document.createTextNode(' ঠিকানায়। ইনবক্স না পেলে স্প্যাম দেখুন।'));
+  const mail = el('div', 'auth-mail');
+  mail.innerHTML = svg('send');
+  form.append(mail, el('h2', null, 'কোডটি দিন'), sub, boxes, note, again);
+  authShell([form], [linkBtn(who.name ? 'তথ্য বদলান' : 'অন্য ই-মেইল দিন', () => (who.name ? openSignup(who.email) : openLogin('login', who.email)))]);
+  boxes.focus();
+}
+
+// Two-step verification: the authenticator app's code, or one of the backup codes.
+function openSecondStep(ticket) {
+  const note = el('div', 'auth-note');
+  let busy = false;
+  const send = async code => {
+    if (busy) return;
+    busy = true;
+    try { finishSignIn(await acctApi('verify2fa', { ticket, code })); }
+    catch (e) { note.className = 'auth-note bad'; note.textContent = e.message === 'expired' ? 'সময় শেষ — আবার লগইন করুন।' : e.message === 'wrong' ? 'কোডটি মিলছে না।' : authError(e); boxes.clear(); }
+    busy = false;
+  };
+  const boxes = codeBoxes(send);
+  const [backupBox, backup] = authInput('ব্যাকআপ কোড (যেমন abcde-12345)', { type: 'text', maxLength: 11, autocapitalize: 'off' });
+  backupBox.hidden = true;
+  const useBackup = el('button', 'auth-btn ghost', 'ব্যাকআপ কোড দিন');
+  useBackup.hidden = true;
+  useBackup.addEventListener('click', () => send(backup.value));
+  const toggle = linkBtn('অ্যাপ হাতের কাছে নেই? ব্যাকআপ কোড ব্যবহার করুন', () => { boxes.hidden = true; backupBox.hidden = useBackup.hidden = false; toggle.hidden = true; backup.focus(); });
+  const form = el('div', 'auth-form');
+  const shield = el('div', 'auth-mail');
+  shield.innerHTML = svg('shield');
+  form.append(shield, el('h2', null, 'টু-স্টেপ ভেরিফিকেশন'), el('p', 'auth-sub', 'Google Authenticator বা অন্য অথেন্টিকেটর অ্যাপে BD Map-এর ৬ সংখ্যার কোডটি দিন।'), boxes, backupBox, useBackup, note, toggle);
+  authShell([form], [linkBtn('আবার শুরু করুন', () => openLogin())]);
+  boxes.focus();
+}
+function finishSignIn(reply) {
+  closeAuth();
+  signedIn(reply);
+  if (reply.isNew) openProfile(true);
 }
 
 // A chosen photo is cut to a centred square and scaled to 320 px before it is sent (about 20-40 KB).
@@ -206,21 +393,23 @@ function openProfile(welcome) {
   top.append(pic, file, remove);
 
   const [nameBox, name] = field('নাম', { type: 'text', autocomplete: 'name', maxLength: 40, value: ME.name });
+  const [userBox, user] = field('ইউজারনেম', { type: 'text', autocomplete: 'username', maxLength: 30, value: ME.username || '', autocapitalize: 'off', spellcheck: false });
+  user.addEventListener('input', () => { user.value = user.value.toLowerCase().replace(/[^a-z0-9._]/g, ''); });
   const [bioBox, bio] = field('বায়ো — নিজের সম্পর্কে এক-দুই লাইন', { rows: 2, maxLength: 160, value: ME.bio, placeholder: 'যেমন: ঢাকায় থাকি, ঘুরতে ভালোবাসি' }, 'textarea');
   const mail = el('div', 'form-note no-tr', ME.email);
 
   const save = button('check', 'সেভ করুন', async () => {
     save.disabled = true;
     try {
-      ME = (await acctApi('profile', { name: name.value, bio: bio.value })).user;
+      ME = (await acctApi('profile', { name: name.value, bio: bio.value, username: user.value })).user;
       renderAccount();
       if (typeof chatAuthChanged === 'function') chatAuthChanged();
       closeModal();
       if (current === 'profile') drawProfile();
-    } catch (e) { fail(e); }
+    } catch (e) { note.className = 'form-note bad'; note.textContent = authError(e); }
     save.disabled = false;
   });
-  openModal(welcome ? 'আপনার প্রোফাইল' : 'প্রোফাইল এডিট', '', [top, nameBox, bioBox, mail, note], [save]);
+  openModal(welcome ? 'আপনার প্রোফাইল' : 'প্রোফাইল এডিট', '', [top, nameBox, userBox, bioBox, mail, note], [save]);
   if (welcome) name.select();
 }
 

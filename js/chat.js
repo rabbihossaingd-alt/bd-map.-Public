@@ -18,7 +18,7 @@ async function chatApi(path, body) {
 // Sentences that carry a person's name are written in both languages here, so the translator leaves them alone.
 const tx = (bn, en) => LANG === 'en' ? en : bn;
 const REACTIONS = ['❤️', '😂', '😮', '😢', '😡', '👍'];
-const THEMES = [['default', 'সবুজ', 'Green'], ['ocean', 'সমুদ্র', 'Ocean'], ['sunset', 'সূর্যাস্ত', 'Sunset'], ['berry', 'বেরি', 'Berry'],
+const THEMES = [['default', 'ক্লাসিক', 'Classic'], ['green', 'সবুজ', 'Green'], ['ocean', 'সমুদ্র', 'Ocean'], ['sunset', 'সূর্যাস্ত', 'Sunset'], ['berry', 'বেরি', 'Berry'],
                 ['forest', 'বন', 'Forest'], ['grape', 'আঙুর', 'Grape'], ['mono', 'সাদা-কালো', 'Mono']];
 
 // ---- small pieces ----
@@ -170,7 +170,7 @@ function threadRow(t) {
 function renderList() {
   const reqBox = $('chat-requests'), list = $('chat-list');
   const waiting = CHAT.requests.length + CHAT.incoming.length;
-  $('chat-me').textContent = ME ? ME.name : '';
+  $('chat-me').textContent = ME ? (ME.username || ME.name) : '';
   for (const t of $('chat-tabs').children) {
     t.classList.toggle('on', t.dataset.tab === inbox.tab);
     const n = t.dataset.tab === 'requests' ? waiting : t.dataset.tab === 'unread' ? allThreads().filter(x => x.unread && !x.muted).length : 0;
@@ -328,7 +328,6 @@ function bubble(m, t) {
     row.classList.add('has-reacts');
   }
   const meta = el('span', 'meta', (m.edited ? tx('এডিট করা · ', 'Edited · ') : '') + timeOf(m.sent));
-  if (mine && !t.members && m.kind !== 'gone') meta.appendChild(el('i', 'tick' + (m.seen ? ' seen' : ''), m.seen ? '✓✓' : '✓'));
   row.append(col, meta);
   if (m.kind !== 'gone') {
     // Hover tools (react, reply, more); on a phone, press and hold; double-click or double-tap sends a heart.
@@ -403,6 +402,24 @@ function renderMsgs(scroll = true) {
         s.appendChild(el('span', null, seers.length === others(t).length ? tx('সবাই দেখেছেন', 'Seen by everyone') : tx(`${seers.map(p => firstName(p.name)).join(', ')} দেখেছেন`, `Seen by ${seers.map(p => firstName(p.name)).join(', ')}`)));
         box.appendChild(s);
       }
+    }
+  }
+  // With one person: sent, delivered, or their face under the last message they have seen (as Messenger shows it).
+  if (!t.members && ME) {
+    const mineList = msgs.filter(m => m.sender === ME.id && !['sys', 'call', 'gone'].includes(m.kind));
+    const lastMine = mineList.at(-1), lastSeen = [...mineList].reverse().find(m => m.seen);
+    const after = (m, node) => { const row = box.querySelector(`.msg[data-id="${m.id}"]`); if (row) row.after(node); };
+    if (lastSeen) {
+      const s = el('div', 'mstat seen');
+      s.title = tx('দেখেছেন', 'Seen');
+      s.appendChild(avatar(t, 'xs'));
+      if (lastSeen === lastMine) s.appendChild(el('span', null, tx('দেখেছেন', 'Seen')));
+      after(lastSeen, s);
+    }
+    if (lastMine && lastMine !== lastSeen) {
+      const s = el('div', 'mstat ' + (lastMine.got ? 'got' : 'sent'));
+      s.append(Object.assign(el('i'), { innerHTML: svg('check') }), el('span', null, lastMine.got ? tx('পৌঁছেছে', 'Delivered') : tx('পাঠানো হয়েছে', 'Sent')));
+      after(lastMine, s);
     }
   }
   if (!t.members && !t.ok && msgs.length) box.appendChild(el('div', 'chat-wait', 'মেসেজ রিকোয়েস্ট পাঠানো হয়েছে। তিনি গ্রহণ করলে পুরো কথোপকথন, ছবি ও কল চালু হবে।'));
@@ -951,8 +968,12 @@ function connectChat() {
   on('friends', loadChat);
   on('presence', p => { const f = friendById(p.id); if (f) { f.online = p.online && CHAT.prefs.active; renderList(); if (CHAT.open === p.id) renderHead(); } });
   on('read', p => {
-    for (const m of CHAT.msgs.get(p.by) || []) m.seen = 1;
-    if (CHAT.open === p.by) for (const t of $('chat-msgs').querySelectorAll('.tick')) { t.textContent = '✓✓'; t.classList.add('seen'); }
+    for (const m of CHAT.msgs.get(p.by) || []) { m.seen = 1; m.got = 1; }
+    if (CHAT.open === p.by) { const box = $('chat-msgs'); renderMsgs(box.scrollHeight - box.scrollTop - box.clientHeight < 140); }
+  });
+  on('delivered', p => {
+    for (const m of CHAT.msgs.get(p.by) || []) if (ME && m.sender === ME.id) m.got = 1;
+    if (CHAT.open === p.by) { const box = $('chat-msgs'); renderMsgs(box.scrollHeight - box.scrollTop - box.clientHeight < 140); }
   });
   on('gread', p => {
     const key = 'g' + p.group, r = CHAT.reads.get(key) || {};
@@ -1185,7 +1206,7 @@ function hangUp() {
 // ---- wiring ----
 (function initChat() {
   const input = $('chat-input'), send = $('chat-send');
-  const refreshSend = () => { send.classList.toggle('like', !input.value.trim()); };
+  const refreshSend = () => { send.classList.toggle('like', !input.value.trim()); $('chat-form').classList.toggle('typing', !!input.value.trim()); };
   let lastTyping = 0;
   input.addEventListener('input', () => {
     refreshSend();
@@ -1212,8 +1233,16 @@ function hangUp() {
   refreshSend();
 
   // Attach, and a small emoji tray.
-  const chooser = $('chat-file');
-  $('chat-attach').addEventListener('click', () => chooser.click());
+  const chooser = $('chat-file'), photos = $('chat-photo');
+  // On a phone the paper-clip also offers a place, since there is no room for its own button.
+  $('chat-attach').addEventListener('click', () => {
+    if (!matchMedia('(max-width: 760px)').matches) { chooser.click(); return; }
+    openModal('পাঠান', '', [item('file', 'ফাইল, ছবি বা ভিডিও', 'ফোন থেকে বেছে নিন', '', () => { closeModal(); chooser.click(); }),
+                            item('pin', 'জায়গা', 'আপনার লোকেশন বা ম্যাপে খোলা জায়গা', '', () => { closeModal(); openShare(); })]);
+  });
+  $('chat-cam').addEventListener('click', () => photos.click());
+  photos.addEventListener('change', () => { for (const f of [...photos.files].slice(0, 6)) sendFile(f); photos.value = ''; });
+  $('chat-empty-new').addEventListener('click', () => openComposer());
   chooser.addEventListener('change', () => { sendFile(chooser.files[0]); chooser.value = ''; });
   const tray = $('chat-emoji-tray');
   for (const e of '😀 😂 🥰 😍 😎 😢 😡 👍 🙏 👏 🔥 ❤️ 🎉 💯 🤔 😴 🤝 🚌 🚆 ✈️ 🏖️ 🏞️ 🌧️ ☀️ 🍛 ☕ 📍 ✅'.split(' ')) {

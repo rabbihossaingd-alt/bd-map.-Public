@@ -19,6 +19,11 @@ const ICONS = {
   tag: '<path d="M3 12V4h8l10 10-8 8L3 12z"/><circle cx="7.5" cy="8.5" r="1.2"/>',
   list: '<path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/>',
   image: '<rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="2"/><path d="M4 18l5-5 4 4 3-3 4 4"/>',
+  story: '<circle cx="12" cy="12" r="9" stroke-dasharray="3 2.2"/><path d="M12 8v8M8 12h8"/>',
+  comment: '<path d="M21 12a8 8 0 01-11.8 7L4 20l1.2-4.6A8 8 0 1121 12z"/><path d="M8 11h8M8 14.5h5"/>',
+  group: '<circle cx="8" cy="9" r="3"/><circle cx="16.5" cy="9" r="3"/><path d="M2.5 19c.6-3 2.8-4.5 5.5-4.5s4.9 1.5 5.5 4.5M13.5 15c.9-.4 1.9-.5 3-.5 2.7 0 4.9 1.5 5.5 4.5"/>',
+  search: '<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>',
+  out: '<path d="M14 4h5a1 1 0 011 1v14a1 1 0 01-1 1h-5M10 16l-4-4 4-4M6 12h10"/>',
   wallet: '<path d="M4 7a2 2 0 012-2h11v4"/><rect x="3" y="7" width="18" height="13" rx="2.5"/><path d="M16 13.5h2"/>',
   cog: '<circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 00-.1-1.3l2-1.5-2-3.4-2.3.9a7 7 0 00-2.2-1.3L14 3h-4l-.4 2.4a7 7 0 00-2.2 1.3l-2.3-.9-2 3.4 2 1.5A7 7 0 005 12c0 .4 0 .9.1 1.3l-2 1.5 2 3.4 2.3-.9c.6.6 1.4 1 2.2 1.3L10 21h4l.4-2.4c.8-.3 1.6-.7 2.2-1.3l2.3.9 2-3.4-2-1.5c.1-.4.1-.9.1-1.3z"/>'
 };
@@ -135,20 +140,44 @@ const PAGES = {
   overview: { title: 'এক নজরে', icon: 'home', async draw(box) {
     const o = await api('overview');
     setCounts(o);
+    const hour = new Date().getHours();
+    const hello = h('div', 'hello');
+    hello.append(h('b', null, `${hour < 12 ? 'শুভ সকাল' : hour < 17 ? 'শুভ দুপুর' : hour < 20 ? 'শুভ সন্ধ্যা' : 'শুভ রাত্রি'}, ${ME.name}`),
+      h('span', null, new Date().toLocaleDateString('bn-BD', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) + ' · অ্যাপ এখন ' + (o.online ? `${num(o.online)} জন খুলে রেখেছেন` : 'কেউ খুলে রাখেননি')));
+    // What needs someone today.
+    const todo = h('div', 'todo');
+    const task = (n, label, sub, go, tone) => {
+      const t = h('button', 'task ' + (n ? tone : 'done'));
+      t.append(h('b', null, num(n)), h('span', null, label), h('small', null, n ? sub : 'সব ঠিক আছে'));
+      t.addEventListener('click', go);
+      todo.appendChild(t);
+    };
+    task(o.ticketsOpen, 'সাপোর্টে উত্তর বাকি', 'ব্যবহারকারীরা অপেক্ষা করছেন', () => show('support'), 'warn');
+    task(o.reportsOpen, 'রিপোর্ট দেখা বাকি', 'অভিযোগগুলো যাচাই করুন', () => show('reports'), 'bad');
+    task(o.payoutsWaiting, 'টাকা পাঠানো বাকি', `মোট ৳${num(o.payoutsPendingTaka)}`, () => { PAGES.creators.state.tab = 'payouts'; show('creators'); }, 'warn');
+    task(o.creatorsWaiting, 'ক্রিয়েটর আবেদন', 'অনুমোদন দিন বা বাতিল করুন', () => { PAGES.creators.state.tab = 'creators'; show('creators'); }, 'violet');
+    task(o.verifyWaiting, 'ব্যাজের আবেদন', 'সাপোর্টে "ব্যাজ" বিষয়ের অনুরোধ', () => show('support'), 'violet');
+
     const kpis = h('div', 'kpis');
-    const kpi = (label, value, sub, tone) => { const k = h('div', 'kpi ' + (tone || '')); k.append(h('span', null, label), h('b', null, num(value)), h('small', null, sub)); kpis.appendChild(k); };
-    kpi('মোট ব্যবহারকারী', o.users, `আজ নতুন ${num(o.usersToday)} জন`);
-    kpi('আজ সক্রিয়', o.activeToday, `৭ দিনে ${num(o.active7)} জন`);
-    kpi('এখন অনলাইন', o.online, 'অ্যাপ খোলা আছে', 'live');
-    kpi('উত্তর বাকি', o.ticketsOpen, `মোট ${num(o.tickets)}টি সাপোর্ট অনুরোধ`, o.ticketsOpen ? 'warn' : '');
-    kpi('খোলা রিপোর্ট', o.reportsOpen, `বন্ধ করা অ্যাকাউন্ট ${num(o.banned)}টি`, o.reportsOpen ? 'bad' : '');
-    kpi('আজকের মেসেজ', o.messagesToday, `মোট ${num(o.messages)}টি · বন্ধুত্ব ${num(o.friendships)}টি`);
-    kpi('পোস্ট', o.posts, `আজ ${num(o.postsToday)}টি`);
-    kpi('জানানো ভাড়া', o.fares, 'যাত্রীদের কাছ থেকে');
+    const kpi = (icon_, label, value, sub, tone) => { const k = h('div', 'kpi ' + (tone || '')); const i = h('i', 'ki'); i.innerHTML = icon(icon_); k.append(i, h('span', null, label), h('b', null, num(value)), h('small', null, sub)); kpis.appendChild(k); };
+    kpi('users', 'মোট ব্যবহারকারী', o.users, `আজ নতুন ${num(o.usersToday)} · ৭ দিনে সক্রিয় ${num(o.active7)}`);
+    kpi('home', 'আজ সক্রিয়', o.activeToday, `এখন অনলাইন ${num(o.online)}`, 'live');
+    kpi('help', 'আজকের মেসেজ', o.messagesToday, `মোট ${num(o.messages)} · গ্রুপ ${num(o.groups)}`);
+    kpi('image', 'পোস্ট', o.posts, `আজ ${num(o.postsToday)} · স্টোরি ${num(o.stories)} · মন্তব্য ${num(o.comments)}`);
+    kpi('group', 'চলতি গ্রুপ কল', o.calls, `বন্ধুত্ব ${num(o.friendships)}টি`);
+    kpi('flag', 'ভেরিফায়েড', o.verified, `টু-স্টেপ চালু ${num(o.twofa)} জন`);
+    kpi('tag', 'জানানো ভাড়া', o.fares, `রেটিং ${num(o.ratings)}টি`);
+    kpi('flag', 'বন্ধ অ্যাকাউন্ট', o.banned, `খোলা রিপোর্ট ${num(o.reportsOpen)}`, o.banned ? 'bad' : '');
+
     const charts = h('div', 'charts');
-    const chart = (title, data) => {
+    const chart = (title, data, hue) => {
       const c = h('div', 'card chart'), bars = h('div', 'bars'), max = Math.max(1, ...data);
-      c.append(h('span', null, title), h('b', null, num(data.reduce((a, b) => a + b, 0))), h('small', null, 'গত ১৪ দিন'));
+      const total = data.reduce((x, y) => x + y, 0), half = data.slice(7).reduce((x, y) => x + y, 0), before = data.slice(0, 7).reduce((x, y) => x + y, 0);
+      const trend = before ? Math.round((half - before) / before * 100) : half ? 100 : 0;
+      const head = h('div', 'ch-head');
+      head.append(h('span', null, title), h('em', trend > 0 ? 'up' : trend < 0 ? 'down' : '', (trend > 0 ? '▲ ' : trend < 0 ? '▼ ' : '') + num(Math.abs(trend)) + '%'));
+      c.append(head, h('b', null, num(total)), h('small', null, 'গত ১৪ দিন · আগের সপ্তাহের তুলনায়'));
+      c.style.setProperty('--h1', hue);
       data.forEach((v, i) => {
         const bar = h('i');
         bar.style.height = Math.max(4, v / max * 100) + '%';
@@ -160,9 +189,11 @@ const PAGES = {
       c.appendChild(bars);
       charts.appendChild(c);
     };
-    chart('নতুন অ্যাকাউন্ট', o.signups); chart('মেসেজ', o.chats); chart('সাপোর্ট অনুরোধ', o.support);
-    const cols = h('div', 'cols');
-    const users = h('div', 'card'), tickets = h('div', 'card');
+    chart('নতুন অ্যাকাউন্ট', o.signups, 158); chart('মেসেজ', o.chats, 210); chart('পোস্ট', o.postsSeries, 280);
+    chart('লাইক', o.likesSeries, 340); chart('সাপোর্ট অনুরোধ', o.support, 30); chart('জানানো ভাড়া', o.faresSeries, 48);
+
+    const cols = h('div', 'cols three');
+    const users = h('div', 'card'), tickets = h('div', 'card'), side = h('div', 'card');
     users.appendChild(h('h3', null, 'নতুন যোগ দিয়েছেন'));
     for (const u of o.latestUsers) { const row = person(u, `${u.email} · ${ago(u.created)}`); row.classList.add('click'); row.addEventListener('click', () => openUser(u.id)); users.appendChild(row); }
     if (!o.latestUsers.length) users.appendChild(empty('এখনো কেউ যোগ দেননি।'));
@@ -176,8 +207,50 @@ const PAGES = {
       tickets.appendChild(row);
     }
     if (!o.latestTickets.length) tickets.appendChild(empty('কোনো সাপোর্ট অনুরোধ নেই।'));
-    cols.append(users, tickets);
-    box.append(kpis, charts, cols);
+    side.appendChild(h('h3', null, 'দ্রুত সুইচ'));
+    side.append(switchRow('নতুন অ্যাকাউন্ট খোলা', 'বন্ধ করলে শুধু পুরোনোরা লগইন করতে পারবেন', 'signups', o.flags.signups),
+                switchRow('পোস্ট ও স্টোরি দেওয়া', 'বন্ধ করলে সাধারণ ব্যবহারকারীরা পোস্ট করতে পারবেন না', 'posts', o.flags.posts));
+    side.appendChild(h('h3', 'gap', 'সবচেয়ে বেশি পোস্ট'));
+    for (const u of o.topPosters) { const row = person(u, `${num(u.n)}টি পোস্ট`); row.classList.add('click'); row.addEventListener('click', () => openUser(u.id)); side.appendChild(row); }
+    if (!o.topPosters.length) side.appendChild(empty('এখনো কোনো পোস্ট নেই।'));
+    cols.append(users, tickets, side);
+    box.append(hello, todo, kpis, charts, cols);
+  } },
+
+  stories: { title: 'স্টোরি', icon: 'story', async draw(box) {
+    const d = await api('stories');
+    box.appendChild(h('p', 'hint', 'গত ২৪ ঘণ্টার সব স্টোরি। আপত্তিকর কিছু থাকলে সরান — ২৪ ঘণ্টা পরে এমনিতেই মুছে যায়।'));
+    if (!d.stories.length) { box.appendChild(empty('এখন কোনো স্টোরি নেই।')); return; }
+    const grid = h('div', 'sgrid');
+    for (const st of d.stories) {
+      const c = h('div', 'scard');
+      const m = h(st.kind === 'video' ? 'video' : 'img');
+      m.src = st.src;
+      if (st.kind === 'video') { m.muted = true; m.preload = 'metadata'; m.poster = st.poster; m.addEventListener('mouseenter', () => m.play().catch(() => {})); m.addEventListener('mouseleave', () => m.pause()); }
+      const who = person(st.user, ago(st.created));
+      who.classList.add('click');
+      who.addEventListener('click', () => openUser(st.user.id));
+      c.append(m, who, btn('সরান', 'bad quiet small', async () => { if (confirm('স্টোরিটি সরাবেন?') && await act(api('story', { id: st.id }), 'স্টোরি সরানো হলো।')) show('stories'); }));
+      grid.appendChild(c);
+    }
+    box.appendChild(grid);
+  } },
+
+  comments: { title: 'মন্তব্য', icon: 'comment', async draw(box) {
+    const d = await api('comments');
+    box.appendChild(h('p', 'hint', 'পোস্টের নিচে করা সাম্প্রতিক মন্তব্য। গালিগালাজ, স্প্যাম বা হুমকি থাকলে সরান।'));
+    if (!d.comments.length) { box.appendChild(empty('এখনো কোনো মন্তব্য নেই।')); return; }
+    box.appendChild(table(['কে', 'মন্তব্য', 'পোস্ট', 'কখন', ''], d.comments.map(c => [person(c.user), h('span', 'wrap', c.body), '#' + num(c.post), ago(c.created),
+      btn('সরান', 'bad quiet small', async () => { if (await act(api('comment', { id: c.id }), 'মন্তব্য সরানো হলো।')) show('comments'); })])));
+  } },
+
+  groups: { title: 'গ্রুপ চ্যাট', icon: 'group', async draw(box) {
+    const d = await api('groups');
+    box.appendChild(h('p', 'hint', `গ্রুপগুলোর নাম, সদস্য আর মেসেজের সংখ্যা — মেসেজ পড়া যায় না। এখন ${num(d.calls)}টি গ্রুপ কল চলছে। নিয়ম ভাঙা গ্রুপ বন্ধ করলে তার সব মেসেজ মুছে যায়।`));
+    if (!d.groups.length) { box.appendChild(empty('এখনো কোনো গ্রুপ নেই।')); return; }
+    box.appendChild(table(['গ্রুপ', 'বানিয়েছেন', 'সদস্য', 'মেসেজ', 'শেষ সক্রিয়', ''], d.groups.map(g => [h('b', null, g.name || 'নাম নেই'), g.owner || '—', num(g.members), num(g.messages),
+      g.call ? chip(`কল চলছে · ${num(g.call.people.length)} জন`, 'live') : ago(g.active),
+      btn('বন্ধ করুন', 'bad quiet small', async () => { if (confirm(`"${g.name || 'গ্রুপ'}" বন্ধ করবেন? সব মেসেজ মুছে যাবে।`) && await act(api('group', { id: g.id }), 'গ্রুপ বন্ধ হলো।')) show('groups'); })])));
   } },
 
   users: { title: 'ব্যবহারকারী', icon: 'users', state: { q: '', filter: 'all', page: 0 }, async draw(box) {
@@ -187,12 +260,14 @@ const PAGES = {
     search.value = st.q;
     let timer;
     search.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(() => { st.q = search.value; st.page = 0; fill(); }, 250); });
-    $('tools').replaceChildren(search);
+    const csv = h('a', 'btn quiet', 'CSV ডাউনলোড');
+    csv.href = 'api/admin/export';
+    $('tools').replaceChildren(search, csv);
     const holder = h('div');
     box.append(tabs([['all', 'সবাই'], ['new', 'এই সপ্তাহে নতুন'], ['team', 'টিম'], ['banned', 'বন্ধ করা']], st.filter, v => { st.filter = v; st.page = 0; show('users'); }), holder);
     async function fill() {
       const d = await api(`users?q=${encodeURIComponent(st.q)}&filter=${st.filter}&page=${st.page}`);
-      const rows = d.users.map(u => Object.assign([person(u), chip(ROLE[u.role], u.role === 'admin' ? 'violet' : u.role === 'staff' ? 'ok' : ''), ago(u.created),
+      const rows = d.users.map(u => Object.assign([person(u, u.email + (u.verified ? ' · ✔ ভেরিফায়েড' : '')), chip(ROLE[u.role], u.role === 'admin' ? 'violet' : u.role === 'staff' ? 'ok' : ''), ago(u.created),
         u.online ? chip('অনলাইন', 'live') : ago(u.seen), u.banned ? chip('বন্ধ', 'bad') : chip('সচল', 'ok')], { onClick: () => openUser(u.id) }));
       const pager = h('div', 'pager');
       pager.append(h('span', null, `মোট ${num(d.total)} জন · পাতা ${num(d.page + 1)}/${num(Math.max(1, Math.ceil(d.total / 25)))}`));
@@ -249,8 +324,8 @@ const PAGES = {
     const grid = h('div', 'pgrid');
     for (const p of d.posts) {
       const card = h('div', 'card pcard');
-      const media = h(p.kind === 'video' ? 'video' : 'img');
-      media.src = p.src;
+      const media = h(p.kind === 'video' ? 'video' : p.kind === 'text' ? 'div' : 'img', p.kind === 'text' ? 'ptext' : null);
+      if (p.kind === 'text') media.textContent = p.caption; else media.src = p.src;
       if (p.kind === 'video') { media.controls = true; media.preload = 'none'; if (p.poster) media.poster = p.poster; }
       const who = person(p.user, `${p.email} · ${ago(p.created)}`);
       who.classList.add('click');
@@ -340,6 +415,12 @@ const PAGES = {
 
   settings: { title: 'সেটিংস', icon: 'cog', async draw(box) {
     const s = await api('system');
+    const f = (await api('flags')).flags;
+    const sw = h('div', 'card');
+    sw.append(h('h3', null, 'ফিচার চালু/বন্ধ'), h('p', 'hint', 'জরুরি অবস্থায় (স্প্যাম, আক্রমণ) পুরো অ্যাপের জন্য এক চাপে বন্ধ করুন। অ্যাডমিন ও টিম সবসময় পারবেন।'),
+      switchRow('নতুন অ্যাকাউন্ট খোলা', 'বন্ধ করলে নতুন কেউ সাইন আপ করতে পারবেন না', 'signups', f.signups),
+      switchRow('পোস্ট ও স্টোরি দেওয়া', 'বন্ধ করলে সাধারণ ব্যবহারকারীরা নতুন পোস্ট বা স্টোরি দিতে পারবেন না', 'posts', f.posts));
+    box.appendChild(sw);
     const notice = h('div', 'card');
     const text = h('textarea');
     text.maxLength = 240; text.rows = 2; text.value = s.notice; text.placeholder = 'যেমন: ঈদের ছুটিতে কাউন্টারে ভাড়া বাড়তে পারে। ফাঁকা রাখলে কিছু দেখাবে না।';
@@ -368,10 +449,12 @@ const PAGES = {
 async function openUser(id) {
   const { user: u, stats } = await api('user?id=' + id);
   const top = h('div', 'utop');
-  top.append(avatar(u, 'xl'), h('b', null, u.name), h('span', null, u.email), h('p', null, u.bio || 'বায়ো লেখেননি।'));
+  top.append(avatar(u, 'xl'), h('b', null, u.name), h('span', null, `@${u.username || '—'} · ${u.email}`), h('p', null, u.bio || 'বায়ো লেখেননি।'));
   const chips = h('div', 'chips');
   chips.append(chip(ROLE[u.role], u.role === 'admin' ? 'violet' : u.role === 'staff' ? 'ok' : ''), u.banned ? chip('অ্যাকাউন্ট বন্ধ', 'bad') : chip('সচল', 'ok'), u.online ? chip('এখন অনলাইন', 'live') : chip('শেষ সক্রিয় ' + ago(u.seen)));
   if (u.verified) chips.appendChild(chip('ভেরিফায়েড', 'violet'));
+  chips.appendChild(u.twofa ? chip('টু-স্টেপ চালু', 'ok') : chip('টু-স্টেপ বন্ধ'));
+  if (u.creator) chips.appendChild(chip({ applied: 'ক্রিয়েটর আবেদন', approved: 'ক্রিয়েটর', rejected: 'ক্রিয়েটর বাতিল' }[u.creator] || u.creator, 'violet'));
   top.appendChild(chips);
   const grid = h('div', 'stats');
   for (const [label, value] of [['বন্ধু', stats.friends], ['পাঠানো মেসেজ', stats.messages], ['সাপোর্ট অনুরোধ', stats.tickets], ['তার বিরুদ্ধে রিপোর্ট', stats.reportsAbout],
@@ -399,7 +482,21 @@ async function openUser(id) {
       }));
     }
   } else acts.appendChild(h('p', 'hint', 'এটি আপনার নিজের অ্যাকাউন্ট।'));
-  openDrawer('ব্যবহারকারী', [top, grid, h('p', 'hint', `যোগ দিয়েছেন ${when(u.created)}। ব্যক্তিগত মেসেজ এখানে দেখা যায় না — শুধু সংখ্যা।`), acts]);
+  const devices = h('div', 'card flat');
+  devices.appendChild(h('h3', null, 'যেসব ডিভাইসে লগইন আছে'));
+  try {
+    const { sessions } = await api('sessions?id=' + id);
+    for (const ss of sessions) {
+      const row = h('div', 'line');
+      const t = h('div', 't');
+      t.append(h('b', null, ss.agent), h('span', null, `শেষ ব্যবহার ${ago(ss.last || ss.made)} · লগইন ${ss.made ? when(ss.made) : '—'}`));
+      row.append(t);
+      if (ME.role === 'admin') row.appendChild(btn('লগআউট', 'quiet small', async () => { if (await act(api('session-end', { user: id, id: ss.id }), 'ওই ডিভাইস থেকে লগআউট হলো।')) row.remove(); }));
+      devices.appendChild(row);
+    }
+    if (!sessions.length) devices.appendChild(empty('কোথাও লগইন নেই।'));
+  } catch { devices.appendChild(empty('দেখানো যায়নি।')); }
+  openDrawer('ব্যবহারকারী', [top, grid, h('p', 'hint', `যোগ দিয়েছেন ${when(u.created)}। ব্যক্তিগত মেসেজ এখানে দেখা যায় না — শুধু সংখ্যা।`), devices, acts]);
 }
 
 // ---- a support ticket ----
@@ -430,12 +527,56 @@ async function openTicket(id) {
 }
 
 // ---- shell ----
+// An on/off switch for a feature of the whole app.
+function switchRow(title, sub, key, on) {
+  const row = h('div', 'line sw-row');
+  const t = h('div', 't');
+  t.append(h('b', null, title), h('span', null, sub));
+  const sw = h('button', 'switch' + (on ? ' on' : ''));
+  sw.setAttribute('role', 'switch');
+  sw.setAttribute('aria-checked', String(on));
+  sw.appendChild(h('i'));
+  sw.addEventListener('click', async () => {
+    if (ME.role !== 'admin') { snack(ERR.forbidden, true); return; }
+    const next = !sw.classList.contains('on');
+    if (await act(api('flags', { [key]: next }), next ? 'চালু করা হলো।' : 'বন্ধ করা হলো।')) { sw.classList.toggle('on', next); sw.setAttribute('aria-checked', String(next)); }
+  });
+  row.append(t, sw);
+  return row;
+}
+
 function setCounts(o) {
-  for (const [key, n] of [['support', o.ticketsOpen], ['reports', o.reportsOpen]]) {
+  for (const [key, n] of [['support', o.ticketsOpen], ['reports', o.reportsOpen], ['creators', (o.payoutsWaiting || 0) + (o.creatorsWaiting || 0)]]) {
     const b = document.querySelector(`#nav [data-page=${key}] em`);
     if (b) { b.textContent = num(n); b.hidden = !n; }
   }
 }
+// One search box for people, posts and groups, reachable from every page ("/" focuses it).
+function wireSearch() {
+  const q = $('gq'), out = $('gs');
+  let timer = null, seq = 0;
+  const close = () => { out.hidden = true; };
+  q.addEventListener('input', () => {
+    clearTimeout(timer);
+    const text = q.value.trim(), mine = ++seq;
+    if (text.length < 2) { close(); return; }
+    timer = setTimeout(async () => {
+      let d;
+      try { d = await api('search?q=' + encodeURIComponent(text)); } catch { return; }
+      if (mine !== seq) return;
+      const parts = [];
+      if (d.users.length) { parts.push(h('div', 'gs-label', 'মানুষ')); for (const u of d.users) { const r = person(u, `@${u.username || ''} · ${u.email}`); r.classList.add('click'); r.addEventListener('click', () => { close(); openUser(u.id); }); parts.push(r); } }
+      if (d.posts.length) { parts.push(h('div', 'gs-label', 'পোস্ট')); for (const p of d.posts) { const r = h('div', 'line click'); const t = h('div', 't'); t.append(h('b', null, p.caption || '(ছবি/ভিডিও)'), h('span', null, p.user.name + ' · ' + ago(p.created))); r.appendChild(t); r.addEventListener('click', () => { close(); show('posts'); }); parts.push(r); } }
+      if (d.groups.length) { parts.push(h('div', 'gs-label', 'গ্রুপ')); for (const g of d.groups) { const r = h('div', 'line click'); const t = h('div', 't'); t.append(h('b', null, g.name), h('span', null, 'গ্রুপ চ্যাট')); r.appendChild(t); r.addEventListener('click', () => { close(); show('groups'); }); parts.push(r); } }
+      out.replaceChildren(...(parts.length ? parts : [h('div', 'gs-none', 'কিছু পাওয়া যায়নি।')]));
+      out.hidden = false;
+    }, 220);
+  });
+  q.addEventListener('keydown', e => { if (e.key === 'Escape') { q.value = ''; close(); q.blur(); } });
+  document.addEventListener('click', e => { if (!e.target.closest('.gsearch')) close(); });
+  addEventListener('keydown', e => { if (e.key === '/' && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') { e.preventDefault(); q.focus(); } });
+}
+
 let drawing = 0;
 async function show(name) {
   const mine = ++drawing;                          // a newer request to draw wins over one still loading
@@ -462,7 +603,13 @@ async function show(name) {
     if (e.status !== 403) $('gate-text').textContent = 'সার্ভারের সাথে যোগাযোগ করা যায়নি। একটু পরে আবার চেষ্টা করুন।';
     return;
   }
-  for (const [key, p] of Object.entries(PAGES)) {
+  const NAV = [['প্রধান', ['overview']], ['মানুষ', ['users', 'support', 'reports']], ['কনটেন্ট', ['posts', 'stories', 'comments', 'groups']],
+               ['আয় ও কমিউনিটি', ['creators', 'fares']], ['সিস্টেম', ['audit', 'settings']]];
+  for (const [label, keys] of NAV) {
+    $('nav').appendChild(h('div', 'nav-group', label));
+    for (const key of keys) {
+    const p = PAGES[key];
+    if (!p) continue;
     const a = h('a');
     a.dataset.page = key;
     a.href = '#' + key;
@@ -470,7 +617,9 @@ async function show(name) {
     a.append(h('span', null, p.title), Object.assign(h('em'), { hidden: true }));
     a.addEventListener('click', e => { e.preventDefault(); show(key); });
     $('nav').appendChild(a);
+    }
   }
+  wireSearch();
   const me = person(ME, ROLE[ME.role]);
   $('me').appendChild(me);
   $('shell').hidden = false;

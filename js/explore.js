@@ -111,6 +111,7 @@ function feedCard(p, onGone) {
     if (feedWatcher) feedWatcher.observe(v);
   } else {
     const img = Object.assign(el('img'), { src: p.src, alt: p.caption || '', loading: 'lazy' });
+    img.addEventListener('load', () => { const r = img.naturalWidth / img.naturalHeight; if (r) media.style.aspectRatio = String(Math.min(1.91, Math.max(0.8, r))); });
     media.appendChild(img);
     // Double tap (or double click) on a photo likes it, with a heart over the picture.
     let last = 0;
@@ -302,8 +303,8 @@ function closeReels() {
 async function openReels(startId, user) {
   let posts = [];
   try { posts = (await exploreApi(`feed?kind=video${user ? '&user=' + user : ''}`)).posts; } catch { return; }
-  const at = posts.findIndex(p => p.id === startId);
-  if (at < 0) return;
+  const at = startId ? posts.findIndex(p => p.id === startId) : 0;
+  if (at < 0 || !posts.length) { if (!startId) exploreNote('এখনো কোনো রিল নেই — প্রথম ভিডিওটি আপনিই দিন।'); return; }
   closeReels();
   let sound = true;
   const box = reelsBox = el('div', 'reels');
@@ -312,6 +313,13 @@ async function openReels(startId, user) {
   close.setAttribute('aria-label', 'বন্ধ করুন');
   close.addEventListener('click', closeReels);
   const column = el('div', 'reels-col');
+  const topbar = el('div', 'reels-top');
+  topbar.append(el('b', null, 'রিলস'));
+  const camera = el('button', 'reels-cam');
+  camera.innerHTML = svg('camera');
+  camera.setAttribute('aria-label', 'নতুন রিল');
+  camera.addEventListener('click', () => { closeReels(); openNewPost(); });
+  topbar.appendChild(camera);
   const watcher = new IntersectionObserver(entries => {
     for (const e of entries) {
       const v = e.target.querySelector('video');
@@ -334,7 +342,18 @@ async function openReels(startId, user) {
     const who = el('button', 'fc-who');
     who.append(avatar(p.user, 'sm'), nameEl(p.user));
     who.addEventListener('click', () => { closeReels(); openProfilePage(p.user.id); });
-    info.appendChild(who);
+    const whoRow = el('div', 'reel-who');
+    whoRow.appendChild(who);
+    if (!ME || p.user.id !== ME.id) {
+      const follow = el('button', 'reel-follow', 'ফলো করুন');
+      follow.addEventListener('click', async () => {
+        if (!ME) { openLogin(); return; }
+        follow.disabled = true;
+        try { await chatApi('friend', { id: p.user.id }); follow.textContent = 'ফলো করছেন'; follow.classList.add('done'); } catch { follow.disabled = false; }
+      });
+      whoRow.appendChild(follow);
+    }
+    info.appendChild(whoRow);
     if (p.caption) info.appendChild(Object.assign(el('p', 'no-tr'), { textContent: p.caption }));
     if (p.place) {
       const place = el('button', 'reel-place');
@@ -351,14 +370,20 @@ async function openReels(startId, user) {
     }));
     like.classList.toggle('on', p.liked);
     act('chat', num(p.comments), () => { v.pause(); openPost(p.id); });
+    act('share', '', () => sharePost(p));
+    const [keep] = act('bookmark', '', () => toggleSave(p, () => keep.classList.toggle('on', p.saved)));
+    keep.classList.toggle('on', p.saved);
     const [mute] = act('sound', '', () => { sound = !sound; for (const x of box.querySelectorAll('video')) x.muted = !sound; for (const m of box.querySelectorAll('.mute')) m.classList.toggle('off', !sound); });
     mute.classList.add('mute');
     act('more', '', () => postMenu(p, closeReels));
+    const audio = el('div', 'reel-audio no-tr');
+    audio.append(Object.assign(el('i'), { innerHTML: svg('sound') }), document.createTextNode(`${p.user.name} · ${LANG === 'en' ? 'Original audio' : 'মূল অডিও'}`));
+    info.appendChild(audio);
     reel.append(v, svgEl('play', 'reel-paused'), info, side, line);
     column.appendChild(reel);
     watcher.observe(reel);
   }
-  box.append(column, close);
+  box.append(column, topbar, close);
   document.body.appendChild(box);
   document.body.classList.add('reels-open');
   column.tabIndex = 0;
@@ -379,9 +404,42 @@ function markStorySeen(userId, storyId) {
   seen[userId] = storyId;
   try { localStorage.setItem('bdmap.stories', JSON.stringify(seen)); } catch { /* storage unavailable */ }
 }
+// Everyone's stories, so any picture of a person can show the ring and open their story when tapped.
+const STORY = { groups: [], by: new Map() };
+function storyClass(id) {
+  const i = STORY.by.get(id);
+  if (i == null) return '';
+  return (seenStories()[id] || 0) >= STORY.groups[i].items.at(-1).id ? 'st-ring st-seen' : 'st-ring';
+}
+async function refreshStoryRings() {
+  try { STORY.groups = (await exploreApi('stories')).stories; } catch { return; }
+  STORY.by = new Map(STORY.groups.map((g, i) => [g.user.id, i]));
+  paintRings();
+}
+function paintRings() {
+  for (const a of document.querySelectorAll('.avatar[data-uid]')) {
+    const cls = storyClass(Number(a.dataset.uid));
+    a.classList.toggle('st-ring', !!cls);
+    a.classList.toggle('st-seen', cls.includes('st-seen'));
+  }
+}
+document.addEventListener('click', e => {
+  const a = e.target.closest('.avatar.st-ring');
+  if (!a || a.matches('.xs, .mini') || a.closest('.faces, .stories, .gcall, .pick-list, .note, .gc-ring, .seen-by, .gavatar, .call, .pic-edit, #chat-toast')) return;
+  const i = STORY.by.get(Number(a.dataset.uid));
+  if (i == null) return;
+  e.preventDefault();
+  e.stopPropagation();
+  openStories(STORY.groups, i, paintRings);
+}, true);
+refreshStoryRings();
+setInterval(() => { if (!document.hidden) refreshStoryRings(); }, 180_000);
+
 async function loadStories(row) {
   let groups = [];
   try { groups = (await exploreApi('stories')).stories; } catch { /* the row still offers to add one */ }
+  STORY.groups = groups;
+  STORY.by = new Map(groups.map((g, i) => [g.user.id, i]));
   const seen = seenStories();
   row.replaceChildren();
   const add = el('button', 'face add');
@@ -391,7 +449,7 @@ async function loadStories(row) {
   groups.forEach((g, i) => {
     const b = el('button', 'face' + ((seen[g.user.id] || 0) >= g.items.at(-1).id ? ' seen' : ''));
     b.append(avatar(g.user, 'lg ring'), Object.assign(el('span', 'no-tr'), { textContent: ME && g.user.id === ME.id ? (LANG === 'en' ? 'You' : 'আপনি') : g.user.name }));
-    b.addEventListener('click', () => openStories(groups, i, () => loadStories(row)));
+    b.addEventListener('click', () => openStories(groups, i, () => { loadStories(row); paintRings(); }));
     row.appendChild(b);
   });
   row.hidden = false;
@@ -410,6 +468,7 @@ function addStory() {
       await exploreApi('story', { media, poster: video ? await videoPoster(file) : '' });
       exploreNote('স্টোরি দেওয়া হয়েছে — ২৪ ঘণ্টা থাকবে।');
       loadStories($('explore-people'));
+      refreshStoryRings();
     } catch { exploreNote('স্টোরি দেওয়া যায়নি। আবার চেষ্টা করুন।'); }
   });
   chooser.click();
@@ -650,6 +709,16 @@ function openNewPost() {
     if (wanted && !enter.explore.opened) { enter.explore.opened = true; openPost(wanted); }
   };
   $('explore-new').addEventListener('click', () => openNewPost());
+  // Reels: every video, one screen at a time, scrolled up and down.
+  for (const b of $('ex-tabs').children) b.addEventListener('click', () => {
+    if (b.dataset.t !== 'reels') return;
+    b.classList.add('on');
+    b.previousElementSibling.classList.remove('on');
+    openReels(0).finally(() => {
+      const back = () => { b.classList.remove('on'); b.previousElementSibling.classList.add('on'); };
+      if (!reelsBox) back(); else new MutationObserver((_, o) => { if (!document.body.contains(reelsBox)) { back(); o.disconnect(); } }).observe(document.body, { childList: true });
+    });
+  });
   if (current === 'explore') enter.explore();
 })();
 

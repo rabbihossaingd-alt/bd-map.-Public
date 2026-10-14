@@ -154,6 +154,9 @@ db.exec(`CREATE TABLE IF NOT EXISTS sessions (
   user    INTEGER NOT NULL,
   expires INTEGER NOT NULL
 )`);
+for (const [col, def] of [['agent', "TEXT NOT NULL DEFAULT ''"], ['made', 'INTEGER NOT NULL DEFAULT 0'], ['last', 'INTEGER NOT NULL DEFAULT 0'], ['ip', "TEXT NOT NULL DEFAULT ''"]])
+  if (!db.prepare("SELECT COUNT(*) AS n FROM pragma_table_info('sessions') WHERE name = ?").get(col).n) db.exec(`ALTER TABLE sessions ADD COLUMN ${col} ${def}`);
+db.exec(`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)`);
 db.exec(`CREATE TABLE IF NOT EXISTS codes (
   email   TEXT PRIMARY KEY,
   hash    TEXT NOT NULL,
@@ -162,9 +165,11 @@ db.exec(`CREATE TABLE IF NOT EXISTS codes (
   sent    INTEGER NOT NULL
 )`);
 if (!db.prepare("SELECT COUNT(*) AS n FROM pragma_table_info('users') WHERE name = 'points'").get().n) db.exec('ALTER TABLE users ADD COLUMN points INTEGER NOT NULL DEFAULT 0');
-for (const [col, def] of [['verified', 'INTEGER NOT NULL DEFAULT 0'], ['prefs', "TEXT NOT NULL DEFAULT '{}'"]])
+for (const [col, def] of [['verified', 'INTEGER NOT NULL DEFAULT 0'], ['prefs', "TEXT NOT NULL DEFAULT '{}'"], ['username', "TEXT NOT NULL DEFAULT ''"],
+                          ['totp', "TEXT NOT NULL DEFAULT ''"], ['totp_on', 'INTEGER NOT NULL DEFAULT 0'], ['backup', "TEXT NOT NULL DEFAULT '[]'"]])
   if (!db.prepare("SELECT COUNT(*) AS n FROM pragma_table_info('users') WHERE name = ?").get(col).n) db.exec(`ALTER TABLE users ADD COLUMN ${col} ${def}`);
-const USER_COLS = 'id, email, name, bio, pic_v, role, banned, data, created, seen, points, verified, prefs';
+db.exec("CREATE UNIQUE INDEX IF NOT EXISTS users_username ON users (username) WHERE username <> ''");
+const USER_COLS = 'id, email, name, bio, pic_v, role, banned, data, created, seen, points, verified, prefs, username, totp_on';
 const aq = {
   byEmail:    db.prepare(`SELECT ${USER_COLS} FROM users WHERE email = ?`),
   byId:       db.prepare(`SELECT ${USER_COLS} FROM users WHERE id = ?`),
@@ -178,7 +183,7 @@ const aq = {
   setSeen:    db.prepare('UPDATE users SET seen = ? WHERE id = ?'),
   remove:     db.prepare('DELETE FROM users WHERE id = ?'),
   session:    db.prepare(`SELECT ${USER_COLS.split(', ').map(c => 'u.' + c).join(', ')} FROM sessions s JOIN users u ON u.id = s.user WHERE s.token = ? AND s.expires > ?`),
-  addSession: db.prepare('INSERT INTO sessions (token, user, expires) VALUES (?, ?, ?)'),
+  addSession: db.prepare('INSERT INTO sessions (token, user, expires, agent, made, last, ip) VALUES (?, ?, ?, ?, ?, ?, ?)'),
   endSession: db.prepare('DELETE FROM sessions WHERE token = ?'),
   endAll:     db.prepare('DELETE FROM sessions WHERE user = ?'),
   expire:     db.prepare('DELETE FROM sessions WHERE expires <= ?'),
@@ -210,7 +215,7 @@ function userOf(req) {
   if (!user || user.banned) return null;
   if (user.role !== 'admin' && ADMIN_EMAILS.includes(user.email)) { aq.setRole.run('admin', user.id); user.role = 'admin'; }
   const now = Date.now();
-  if (now - user.seen > 5 * 60_000) aq.setSeen.run(now, user.id);       // "last active", to the nearest five minutes
+  if (now - user.seen > 5 * 60_000) { aq.setSeen.run(now, user.id); db.prepare('UPDATE sessions SET last = ? WHERE token = ?').run(now, sha(token)); }   // "last active", to the nearest five minutes
   return user;
 }
 // Ratings and fare reports are counted once per person: the account when logged in, else the device.
@@ -222,7 +227,7 @@ function cookie(req, value, maxAge) {
 }
 function startSession(req, res, user, device) {
   const token = crypto.randomBytes(32).toString('hex');
-  aq.addSession.run(sha(token), user.id, Date.now() + SESSION_DAYS * 864e5);
+  aq.addSession.run(sha(token), user.id, Date.now() + SESSION_DAYS * 864e5, deviceName(req.headers['user-agent']), Date.now(), Date.now(), clientIp(req));
   res.setHeader('Set-Cookie', cookie(req, token, SESSION_DAYS * 86400));
   if (okDevice(device)) {
     const voter = 'u' + user.id;
@@ -233,7 +238,68 @@ function startSession(req, res, user, device) {
 // Privacy choices: `active` shows when you are online (and lets you see others'); `dm` is who may send you a
 // message request: 'all', or only 'following' (people you follow).
 const prefsOf = u => ({ active: true, dm: 'all', ...JSON.parse((u && u.prefs) || '{}') });
-const publicUser = u => ({ user: { id: u.id, name: u.name, email: u.email, bio: u.bio, pic: u.pic_v, role: u.role, points: u.points, verified: !!u.verified, prefs: prefsOf(u) }, data: JSON.parse(u.data || '{}') });
+const publicUser = u => ({ user: { id: u.id, name: u.name, username: u.username || '', email: u.email, bio: u.bio, pic: u.pic_v, role: u.role, points: u.points, verified: !!u.verified,
+  twofa: !!u.totp_on, prefs: prefsOf(u) }, data: JSON.parse(u.data || '{}') });
+
+// "Chrome · Windows", "Safari · iPhone": enough to recognise one's own devices in the login activity list.
+function deviceName(ua = '') {
+  const os = /iPhone/.test(ua) ? 'iPhone' : /iPad/.test(ua) ? 'iPad' : /Android/.test(ua) ? 'Android' : /Windows/.test(ua) ? 'Windows' : /Mac OS X/.test(ua) ? 'Mac' : /Linux/.test(ua) ? 'Linux' : '';
+  const br = /Edg\//.test(ua) ? 'Edge' : /OPR\//.test(ua) ? 'Opera' : /SamsungBrowser/.test(ua) ? 'Samsung Internet' : /Firefox\//.test(ua) ? 'Firefox' : /Chrome\//.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : '';
+  return [br, os].filter(Boolean).join(' · ') || 'Browser';
+}
+const clientIp = req => String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress || '';
+
+// ---- usernames: a-z, 0-9, dot and underscore, 3 to 30 long, unique ----
+const RESERVED = ['admin', 'bdmap', 'bd_map', 'support', 'help', 'official', 'root', 'staff', 'moderator'];
+function usernameProblem(u, selfId = 0) {
+  if (!/^[a-z0-9._]{3,30}$/.test(u)) return 'format';
+  if (/^\.|\.$|\.\./.test(u)) return 'format';
+  if (RESERVED.includes(u)) return 'taken';
+  const other = db.prepare('SELECT id FROM users WHERE username = ?').get(u);
+  return other && other.id !== selfId ? 'taken' : '';
+}
+function freshUsername(seed) {
+  let base = String(seed || '').toLowerCase().replace(/[^a-z0-9._]/g, '').replace(/^\.+|\.+$/g, '').replace(/\.{2,}/g, '.').slice(0, 22);
+  if (base.length < 3) base = (base + 'traveler').slice(0, 8);
+  if (!usernameProblem(base)) return base;
+  for (let i = 0; i < 50; i++) { const u = `${base}${crypto.randomInt(10, 9999)}`; if (!usernameProblem(u)) return u; }
+  return 'user' + crypto.randomBytes(4).toString('hex');
+}
+for (const u of db.prepare("SELECT id, email FROM users WHERE username = ''").all()) db.prepare('UPDATE users SET username = ? WHERE id = ?').run(freshUsername(u.email.split('@')[0]), u.id);
+
+// ---- two-step verification: a time-based code from an authenticator app (RFC 6238), or a one-time backup code ----
+const B32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+const b32encode = buf => { let bits = '', out = ''; for (const b of buf) bits += b.toString(2).padStart(8, '0'); for (let i = 0; i + 5 <= bits.length; i += 5) out += B32[parseInt(bits.slice(i, i + 5), 2)]; return out; };
+const b32decode = s => { let bits = ''; for (const ch of s.toUpperCase()) { const v = B32.indexOf(ch); if (v >= 0) bits += v.toString(2).padStart(5, '0'); } const out = []; for (let i = 0; i + 8 <= bits.length; i += 8) out.push(parseInt(bits.slice(i, i + 8), 2)); return Buffer.from(out); };
+function totpAt(secret, step) {
+  const msg = Buffer.alloc(8);
+  msg.writeBigUInt64BE(BigInt(step));
+  const h = crypto.createHmac('sha1', b32decode(secret)).update(msg).digest(), o = h[19] & 15;
+  return String((h.readUInt32BE(o) & 0x7fffffff) % 1e6).padStart(6, '0');
+}
+const usedSteps = new Map();   // user id -> the last time step a code was accepted for, so a code works once
+function totpOk(userId, secret, code) {
+  const c = String(code || '').replace(/\D/g, '');
+  if (c.length !== 6 || !secret) return false;
+  const now = Math.floor(Date.now() / 30000);
+  for (const d of [0, -1, 1]) {
+    const step = now + d;
+    if (crypto.timingSafeEqual(Buffer.from(totpAt(secret, step)), Buffer.from(c)) && (usedSteps.get(userId) || 0) < step) { usedSteps.set(userId, step); return true; }
+  }
+  return false;
+}
+function backupOk(userId, code) {
+  const c = String(code || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (c.length !== 10) return false;
+  const row = db.prepare('SELECT backup FROM users WHERE id = ?').get(userId), list = JSON.parse((row && row.backup) || '[]'), h = sha('backup:' + c);
+  if (!list.includes(h)) return false;
+  db.prepare('UPDATE users SET backup = ? WHERE id = ?').run(JSON.stringify(list.filter(x => x !== h)), userId);
+  return true;
+}
+const secondStep = new Map();  // ticket -> { user, device, expires }: a correct e-mail code waiting for the second step
+setInterval(() => { const now = Date.now(); for (const [k, v] of secondStep) if (v.expires < now) secondStep.delete(k); }, 60_000).unref();
+// Switches the owner can flip from the admin panel.
+const flagOn = (key, def = true) => { const v = (db.prepare('SELECT value FROM settings WHERE key = ?').get('flag_' + key) || {}).value; return v == null ? def : v === '1'; };
 
 function cleanEmail(e) {
   if (typeof e !== 'string') return null;
@@ -283,6 +349,18 @@ function deleteUser(id) {
 async function authApi(req, res, action) {
   const me = userOf(req);
   if (action === 'me' && req.method === 'GET') return json(res, 200, me ? publicUser(me) : { user: null });
+  if (action === 'username' && req.method === 'GET') {       // is this username free?
+    const u = String(new URL(req.url, 'http://x').searchParams.get('u') || '').toLowerCase();
+    const problem = usernameProblem(u, me ? me.id : 0);
+    return json(res, 200, { ok: !problem, problem });
+  }
+  if (action === 'sessions' && req.method === 'GET') {       // login activity: where this account is signed in
+    if (!me) return json(res, 401, { error: 'login' });
+    const mine = sha(sessionToken(req) || '');
+    const rows = db.prepare('SELECT token, agent, made, last, ip FROM sessions WHERE user = ? AND expires > ? ORDER BY last DESC').all(me.id, Date.now());
+    return json(res, 200, { sessions: rows.map(s => ({ id: s.token.slice(0, 16), agent: s.agent || 'Browser', made: s.made, last: s.last, here: s.token === mine })), twofa: !!me.totp_on,
+      backupLeft: JSON.parse(db.prepare('SELECT backup FROM users WHERE id = ?').get(me.id).backup || '[]').length });
+  }
   if (req.method !== 'POST') return json(res, 405, { error: 'method not allowed' });
   // Only this app's own JSON requests: a form on another site cannot send this content type.
   if (!(req.headers['content-type'] || '').startsWith('application/json')) return json(res, 400, { error: 'bad request' });
@@ -293,6 +371,11 @@ async function authApi(req, res, action) {
   if (action === 'code') {
     const email = cleanEmail(body.email);
     if (!email) return json(res, 400, { error: 'email' });
+    // "Log in" needs an existing account, "Create account" a new address — so a typo is caught before a code is sent.
+    const exists = !!aq.byEmail.get(email);
+    if (body.mode === 'login' && !exists) return json(res, 404, { error: 'noaccount' });
+    if (body.mode === 'signup' && exists) return json(res, 409, { error: 'exists' });
+    if (!exists && !flagOn('signups') && !ADMIN_EMAILS.includes(email)) return json(res, 403, { error: 'closed' });
     const old = aq.code.get(email);
     if (old && now - old.sent < 60_000) return json(res, 429, { error: 'wait' });
     if (!allowTry(ip + '|code') || !allowTry(email + '|code')) return json(res, 429, { error: 'slow' });
@@ -328,8 +411,30 @@ async function authApi(req, res, action) {
       user = aq.byId.get(lastInsertRowid);
     } else if (admin && user.role !== 'admin') { aq.setRole.run('admin', user.id); user.role = 'admin'; }
     if (user.banned) return json(res, 403, { error: 'banned' });
+    if (isNew) {
+      const name = cleanName(body.name), username = String(body.username || '').toLowerCase();
+      if (name.length >= 2) aq.setProfile.run(name, '', user.id);
+      db.prepare('UPDATE users SET username = ? WHERE id = ?').run(username && !usernameProblem(username) ? username : freshUsername(email.split('@')[0]), user.id);
+      user = aq.byId.get(user.id);
+    }
+    if (user.totp_on) {                              // the second step: a code from the authenticator app
+      const ticket = crypto.randomBytes(24).toString('hex');
+      secondStep.set(ticket, { user: user.id, device: body.device, expires: now + 5 * 60_000 });
+      return json(res, 200, { need2fa: true, ticket });
+    }
     startSession(req, res, user, body.device);
     return json(res, 200, { ...publicUser(user), isNew });
+  }
+  if (action === 'verify2fa') {
+    const t = secondStep.get(String(body.ticket || ''));
+    if (!t || t.expires < now) return json(res, 401, { error: 'expired' });
+    if (!allowTry('2fa|' + t.user)) return json(res, 429, { error: 'slow' });
+    const u = aq.byId.get(t.user), full = db.prepare('SELECT totp FROM users WHERE id = ?').get(t.user);
+    if (!u || u.banned) return json(res, 403, { error: 'banned' });
+    if (!totpOk(u.id, full.totp, body.code) && !backupOk(u.id, body.code)) return json(res, 401, { error: 'wrong' });
+    secondStep.delete(String(body.ticket));
+    startSession(req, res, u, t.device);
+    return json(res, 200, publicUser(aq.byId.get(u.id)));
   }
   if (action === 'logout') {
     const token = sessionToken(req);
@@ -341,6 +446,11 @@ async function authApi(req, res, action) {
   if (action === 'profile') {
     const name = cleanName(body.name), bio = typeof body.bio === 'string' ? body.bio.trim().slice(0, 160) : '';
     if (name.length < 2) return json(res, 400, { error: 'name' });
+    if (typeof body.username === 'string' && body.username.toLowerCase() !== me.username) {
+      const u = body.username.toLowerCase(), problem = usernameProblem(u, me.id);
+      if (problem) return json(res, 400, { error: problem === 'taken' ? 'utaken' : 'uformat' });
+      db.prepare('UPDATE users SET username = ? WHERE id = ?').run(u, me.id);
+    }
     aq.setProfile.run(name, bio, me.id);
     tellFriends(me.id, 'friends', {});
     return json(res, 200, publicUser(aq.byId.get(me.id)));
@@ -354,6 +464,34 @@ async function authApi(req, res, action) {
     }
     aq.setPic.run(pic, me.id);
     tellFriends(me.id, 'friends', {});
+    return json(res, 200, publicUser(aq.byId.get(me.id)));
+  }
+  if (action === 'session-end' || action === 'sessions-end') {   // sign one device out, or every other one
+    const mine = sha(sessionToken(req) || '');
+    if (action === 'session-end') db.prepare("DELETE FROM sessions WHERE user = ? AND substr(token, 1, 16) = ? AND token <> ?").run(me.id, String(body.id || ''), mine);
+    else db.prepare('DELETE FROM sessions WHERE user = ? AND token <> ?').run(me.id, mine);
+    return json(res, 200, { ok: true });
+  }
+  if (action === '2fa-setup') {                       // a new secret, shown once as a QR code and as text
+    if (me.totp_on) return json(res, 400, { error: 'on' });
+    const secret = b32encode(crypto.randomBytes(20));
+    db.prepare('UPDATE users SET totp = ? WHERE id = ?').run(secret, me.id);
+    const label = encodeURIComponent('BD Map:' + me.email);
+    return json(res, 200, { secret, uri: `otpauth://totp/${label}?secret=${secret}&issuer=BD%20Map&algorithm=SHA1&digits=6&period=30` });
+  }
+  if (action === '2fa-enable') {
+    const row = db.prepare('SELECT totp FROM users WHERE id = ?').get(me.id);
+    if (!totpOk(me.id, row.totp, body.code)) return json(res, 401, { error: 'wrong' });
+    const codes = Array.from({ length: 8 }, () => crypto.randomBytes(8).toString('base64').toLowerCase().replace(/[^a-z0-9]/g, '').padEnd(10, '7').slice(0, 10));
+    db.prepare('UPDATE users SET totp_on = 1, backup = ? WHERE id = ?').run(JSON.stringify(codes.map(c => sha('backup:' + c))), me.id);
+    // Every other device must pass the second step from now on.
+    db.prepare('DELETE FROM sessions WHERE user = ? AND token <> ?').run(me.id, sha(sessionToken(req) || ''));
+    return json(res, 200, { codes: codes.map(c => c.slice(0, 5) + '-' + c.slice(5)) });
+  }
+  if (action === '2fa-disable') {
+    const row = db.prepare('SELECT totp FROM users WHERE id = ?').get(me.id);
+    if (!totpOk(me.id, row.totp, body.code) && !backupOk(me.id, body.code)) return json(res, 401, { error: 'wrong' });
+    db.prepare("UPDATE users SET totp_on = 0, totp = '', backup = '[]' WHERE id = ?").run(me.id);
     return json(res, 200, publicUser(aq.byId.get(me.id)));
   }
   if (action === 'prefs') {
@@ -416,10 +554,10 @@ db.exec(`CREATE TABLE IF NOT EXISTS messages (
 db.exec('CREATE INDEX IF NOT EXISTS messages_pair ON messages (a, b, id)');
 // grp: the group a message belongs to (0 for a conversation between two people, whose a and b are then 0);
 // reply: the message it answers; reacts: {user id: emoji}; gone: unsent by its sender (kept as a marker only).
-for (const [col, def] of [['grp', 'INTEGER NOT NULL DEFAULT 0'], ['reply', 'INTEGER NOT NULL DEFAULT 0'], ['reacts', "TEXT NOT NULL DEFAULT '{}'"], ['gone', 'INTEGER NOT NULL DEFAULT 0'], ['edited', 'INTEGER NOT NULL DEFAULT 0']])
+for (const [col, def] of [['grp', 'INTEGER NOT NULL DEFAULT 0'], ['reply', 'INTEGER NOT NULL DEFAULT 0'], ['reacts', "TEXT NOT NULL DEFAULT '{}'"], ['gone', 'INTEGER NOT NULL DEFAULT 0'], ['edited', 'INTEGER NOT NULL DEFAULT 0'], ['got', 'INTEGER NOT NULL DEFAULT 0']])
   if (!db.prepare("SELECT COUNT(*) AS n FROM pragma_table_info('messages') WHERE name = ?").get(col).n) db.exec(`ALTER TABLE messages ADD COLUMN ${col} ${def}`);
 db.exec('CREATE INDEX IF NOT EXISTS messages_grp ON messages (grp, id)');
-const MSG_COLS = 'id, sender, kind, body, sent, seen, grp, reply, reacts, gone, edited';
+const MSG_COLS = 'id, sender, kind, body, sent, seen, grp, reply, reacts, gone, edited, got';
 const EDIT_MINUTES = 15;                                // a text can be changed this long after it was sent
 const REACTIONS = ['❤️', '😂', '😮', '😢', '😡', '👍'];
 db.exec(`CREATE TABLE IF NOT EXISTS reports (
@@ -459,7 +597,7 @@ function quoteOf(id) {
   return { id: r.id, sender: r.sender, kind: r.gone ? 'gone' : r.kind, text: r.gone ? '' : r.kind === 'text' ? r.body.slice(0, 140) : r.kind === 'file' ? JSON.parse(r.body).name : '' };
 }
 function shown(m) {
-  const out = { id: m.id, sender: m.sender, kind: m.gone ? 'gone' : m.kind, body: m.gone ? '' : m.kind === 'text' ? m.body : JSON.parse(m.body), sent: m.sent, seen: m.seen };
+  const out = { id: m.id, sender: m.sender, kind: m.gone ? 'gone' : m.kind, body: m.gone ? '' : m.kind === 'text' ? m.body : JSON.parse(m.body), sent: m.sent, seen: m.seen, got: m.got ? 1 : 0 };
   if (m.grp) out.group = m.grp;
   if (!m.gone && m.edited) out.edited = m.edited;
   if (!m.gone && m.reply) out.reply = quoteOf(m.reply);
@@ -479,7 +617,7 @@ db.exec('CREATE INDEX IF NOT EXISTS group_members_user ON group_members (user)')
 db.exec(`CREATE TABLE IF NOT EXISTS chat_prefs (user INTEGER NOT NULL, thread TEXT NOT NULL, muted INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (user, thread))`);
 db.exec(`CREATE TABLE IF NOT EXISTS chat_theme (thread TEXT PRIMARY KEY, theme TEXT NOT NULL)`);
 db.exec(`CREATE TABLE IF NOT EXISTS notes (user INTEGER PRIMARY KEY, body TEXT NOT NULL, created INTEGER NOT NULL)`);
-const GROUP_MAX = 32, NOTE_HOURS = 24, THEMES = ['default', 'ocean', 'sunset', 'berry', 'forest', 'grape', 'mono'];
+const GROUP_MAX = 32, NOTE_HOURS = 24, THEMES = ['default', 'green', 'ocean', 'sunset', 'berry', 'forest', 'grape', 'mono'];
 const gq = {
   group:   db.prepare('SELECT * FROM chat_groups WHERE id = ?'),
   member:  db.prepare('SELECT * FROM group_members WHERE grp = ? AND user = ?'),
@@ -561,6 +699,13 @@ function messageText(me, kind, v) {
   }
   return null;
 }
+// Messages waiting for this person count as delivered once their app is open; each sender is told.
+function deliverTo(userId) {
+  const senders = db.prepare('SELECT DISTINCT sender FROM messages WHERE (a = ?1 OR b = ?1) AND grp = 0 AND sender <> ?1 AND got = 0').all(userId);
+  if (!senders.length) return;
+  db.prepare('UPDATE messages SET got = ?2 WHERE (a = ?1 OR b = ?1) AND grp = 0 AND sender <> ?1 AND got = 0').run(userId, Date.now());
+  for (const s of senders) push(s.sender, 'delivered', { by: userId });
+}
 // People who should hear about a change to someone: friends, and those who follow them.
 function tellFollowers(userId, event, data) {
   for (const l of cq.links.all(userId)) if (l.state === 'friends' || (l.state === 'pending' && l.actor !== userId)) push(l.id, event, data);
@@ -613,6 +758,7 @@ async function chatApi(req, res, action, query) {
       const set = streams.get(me.id);
       set.add(res);
       if (set.size === 1 && prefsOf(me).active) tellFriends(me.id, 'presence', { id: me.id, online: true });
+      deliverTo(me.id);
       req.on('close', () => {
         set.delete(res);
         if (!set.size) {
@@ -662,6 +808,7 @@ async function chatApi(req, res, action, query) {
                               AND (f.state = 'friends' OR (f.state = 'pending' AND f.actor = ?1)))) ORDER BY (n.user = ?1) DESC, n.created DESC LIMIT 30`)
         .all(me.id, Date.now() - NOTE_HOURS * 36e5).map(n => ({ user: { id: n.id, name: n.name, pic: n.pic }, body: n.body, created: n.created }));
       out.prefs = prefsOf(me);
+      deliverTo(me.id);
       return json(res, 200, out);
     }
     if (action === 'find') {
@@ -847,7 +994,9 @@ async function chatApi(req, res, action, query) {
     const reply = Number(body.reply) || 0;
     if (reply && !db.prepare('SELECT 1 FROM messages WHERE id = ? AND a = ? AND b = ?').get(reply, a, b)) return json(res, 400, { error: 'bad request' });
     const { lastInsertRowid } = cq.add.run(a, b, me.id, kind, text, now, 0, reply);
-    const message = { ...shown({ id: Number(lastInsertRowid), sender: me.id, kind, body: text, sent: now, seen: 0, grp: 0, reply, reacts: '{}', gone: 0 }), to: other };
+    const got = isOnline(other) ? now : 0;            // their app is open: it arrives this moment
+    if (got) db.prepare('UPDATE messages SET got = ? WHERE id = ?').run(got, Number(lastInsertRowid));
+    const message = { ...shown({ id: Number(lastInsertRowid), sender: me.id, kind, body: text, sent: now, seen: 0, grp: 0, reply, reacts: '{}', gone: 0, got }), to: other };
     push(other, 'message', message);
     push(me.id, 'message', message);                 // the sender's other devices
     return json(res, 200, { message });
@@ -1175,6 +1324,7 @@ async function exploreApi(req, res, action, query) {
   let body;
   try { body = JSON.parse(await readBody(req, 600_000)) || {}; } catch { return json(res, 400, { error: 'bad request' }); }
 
+  if ((action === 'post' || action === 'story') && !flagOn('posts') && me.role === 'user') return json(res, 403, { error: 'closed' });
   if (action === 'post' && !body.media) {              // words only
     const text = cleanText(body.caption, 1000);
     if (text.length < 2) return json(res, 400, { error: 'short' });
@@ -1272,7 +1422,7 @@ function relationOf(meId, otherId) {
 }
 const followers = id => count("SELECT COUNT(*) AS n FROM friends WHERE (a = ?1 OR b = ?1) AND (state = 'friends' OR (state = 'pending' AND actor <> ?1))", id);
 const following = id => count("SELECT COUNT(*) AS n FROM friends WHERE (a = ?1 OR b = ?1) AND (state = 'friends' OR (state = 'pending' AND actor = ?1))", id);
-const card = (u, meId) => ({ id: u.id, name: u.name, bio: u.bio, pic: u.pic_v ?? u.pic, points: u.points, verified: !!u.verified, relation: relationOf(meId, u.id) });
+const card = (u, meId) => ({ id: u.id, name: u.name, username: u.username || '', bio: u.bio, pic: u.pic_v ?? u.pic, points: u.points, verified: !!u.verified, relation: relationOf(meId, u.id) });
 
 //   GET /api/people/search?q=          -> { people: [{ id, name, bio, pic, points, relation }] }   (login needed)
 //   GET /api/people/profile?id=        -> { user, followers, following, rank, fares: [...] }
@@ -1285,8 +1435,8 @@ function peopleApi(req, res, action, query) {
     const q = (query.get('q') || '').trim().toLowerCase().replace(/[%_]/g, '');
     if (q.length < 2) return json(res, 200, { people: [] });
     // Names that begin with what was typed first, then names that contain it; the better known first.
-    const rows = db.prepare(`SELECT ${USER_COLS} FROM users WHERE banned = 0 AND id <> ?1 AND lower(name) LIKE ?2
-                             ORDER BY (lower(name) LIKE ?3) DESC, points DESC, id LIMIT 30`).all(meId, '%' + q + '%', q + '%');
+    const rows = db.prepare(`SELECT ${USER_COLS} FROM users WHERE banned = 0 AND id <> ?1 AND (lower(name) LIKE ?2 OR username LIKE ?2)
+                             ORDER BY (username = ?4) DESC, (lower(name) LIKE ?3 OR username LIKE ?3) DESC, points DESC, id LIMIT 30`).all(meId, '%' + q + '%', q + '%', q.replace(/^@/, ''));
     return json(res, 200, { people: rows.map(u => card(u, meId)).filter(p => p.relation !== 'blocked').slice(0, 20) });
   }
   if (action === 'verified') return json(res, 200, { ids: db.prepare('SELECT id FROM users WHERE verified = 1 AND banned = 0').all().map(r => r.id) });
@@ -1506,6 +1656,14 @@ async function adminApi(req, res, action, query) {
         ratings: count('SELECT COUNT(*) AS n FROM ratings'), fares: count('SELECT COUNT(*) AS n FROM fare_reports') + count('SELECT COUNT(*) AS n FROM contributions'),
         posts: count('SELECT COUNT(*) AS n FROM posts'), postsToday: count('SELECT COUNT(*) AS n FROM posts WHERE created >= ?', dayStart),
         signups: series('users', 'created', 14), chats: series('messages', 'sent', 14), support: series('tickets', 'created', 14),
+        postsSeries: series('posts', 'created', 14), likesSeries: series('post_likes', 'made', 14), faresSeries: series('contributions', 'created', 14),
+        groups: count('SELECT COUNT(*) AS n FROM chat_groups'), stories: count('SELECT COUNT(*) AS n FROM stories'), comments: count('SELECT COUNT(*) AS n FROM post_comments'),
+        calls: groupCalls.size, verified: count('SELECT COUNT(*) AS n FROM users WHERE verified = 1'), twofa: count('SELECT COUNT(*) AS n FROM users WHERE totp_on = 1'),
+        creatorsWaiting: count("SELECT COUNT(*) AS n FROM users WHERE creator = 'applied'"), payoutsWaiting: count("SELECT COUNT(*) AS n FROM payouts WHERE status = 'pending'"),
+        payoutsPendingTaka: db.prepare("SELECT COALESCE(SUM(amount), 0) AS n FROM payouts WHERE status = 'pending'").get().n,
+        verifyWaiting: count("SELECT COUNT(*) AS n FROM tickets WHERE category = 'verify' AND status <> 'closed'"),
+        topPosters: db.prepare(`SELECT u.id, u.name, u.pic_v AS pic, COUNT(p.id) AS n FROM posts p JOIN users u ON u.id = p.user GROUP BY u.id ORDER BY n DESC LIMIT 5`).all(),
+        flags: { signups: flagOn('signups'), posts: flagOn('posts') },
         latestUsers: db.prepare(`SELECT ${USER_COLS} FROM users ORDER BY id DESC LIMIT 6`).all().map(briefUser),
         latestTickets: db.prepare("SELECT t.id, t.subject, t.status, t.updated, u.name FROM tickets t JOIN users u ON u.id = t.user ORDER BY t.updated DESC LIMIT 6").all()
       });
@@ -1521,7 +1679,7 @@ async function adminApi(req, res, action, query) {
     if (action === 'user') {
       const u = aq.byId.get(Number(query.get('id')));
       if (!u) return json(res, 404, { error: 'not found' });
-      return json(res, 200, { user: { ...briefUser(u), bio: u.bio }, stats: {
+      return json(res, 200, { user: { ...briefUser(u), bio: u.bio, username: u.username, twofa: !!u.totp_on, creator: creatorOf(u.id) }, stats: {
         friends: count("SELECT COUNT(*) AS n FROM friends WHERE (a = ?1 OR b = ?1) AND state = 'friends'", u.id),
         messages: count('SELECT COUNT(*) AS n FROM messages WHERE sender = ?', u.id),
         tickets: count('SELECT COUNT(*) AS n FROM tickets WHERE user = ?', u.id),
@@ -1553,6 +1711,39 @@ async function adminApi(req, res, action, query) {
     if (action === 'posts') {
       const rows = db.prepare(`${POST_SELECT} AND p.id < ?2 ORDER BY p.id DESC LIMIT 60`).all(0, Number(query.get('before')) || Number.MAX_SAFE_INTEGER);
       return json(res, 200, { posts: rows.map(p => ({ ...shownPost(p), email: aq.byId.get(p.user).email })) });
+    }
+    if (action === 'flags') return json(res, 200, { flags: { signups: flagOn('signups'), posts: flagOn('posts'), chat: flagOn('chat') } });
+    if (action === 'search') {                          // one box for people, posts and groups
+      const q = '%' + (query.get('q') || '').trim().toLowerCase().replace(/[%_]/g, '') + '%';
+      return json(res, 200, {
+        users: db.prepare(`SELECT ${USER_COLS} FROM users WHERE lower(name) LIKE ?1 OR email LIKE ?1 OR username LIKE ?1 ORDER BY id DESC LIMIT 12`).all(q).map(briefUser),
+        posts: db.prepare(`${POST_SELECT} AND lower(p.caption) LIKE ?2 ORDER BY p.id DESC LIMIT 12`).all(0, q).map(shownPost),
+        groups: db.prepare('SELECT id, name, created FROM chat_groups WHERE lower(name) LIKE ? ORDER BY id DESC LIMIT 12').all(q) });
+    }
+    if (action === 'groups') {                          // group chats: names and numbers only, never their messages
+      const rows = db.prepare(`SELECT g.id, g.name, g.created, u.name AS owner, (SELECT COUNT(*) FROM group_members m WHERE m.grp = g.id) AS members,
+        (SELECT COUNT(*) FROM messages x WHERE x.grp = g.id AND x.kind <> 'sys') AS messages, (SELECT MAX(sent) FROM messages x WHERE x.grp = g.id) AS active
+        FROM chat_groups g LEFT JOIN users u ON u.id = g.owner ORDER BY active DESC LIMIT 200`).all();
+      return json(res, 200, { groups: rows.map(g => ({ ...g, call: callOf(g.id) })), calls: groupCalls.size });
+    }
+    if (action === 'stories') return json(res, 200, { stories: db.prepare('SELECT s.id, s.kind, s.file, s.poster, s.created, u.id AS uid, u.name, u.email, u.pic_v AS pic FROM stories s JOIN users u ON u.id = s.user ORDER BY s.id DESC LIMIT 200').all()
+      .map(s => ({ id: s.id, kind: s.kind, src: 'media/' + s.file, poster: s.poster ? 'media/' + s.poster : '', created: s.created, user: { id: s.uid, name: s.name, email: s.email, pic: s.pic } })) });
+    if (action === 'comments') return json(res, 200, { comments: db.prepare(`SELECT c.id, c.body, c.created, c.post, u.id AS uid, u.name, u.email, u.pic_v AS pic FROM post_comments c JOIN users u ON u.id = c.user ORDER BY c.id DESC LIMIT 200`).all()
+      .map(c => ({ id: c.id, body: c.body, created: c.created, post: c.post, user: { id: c.uid, name: c.name, email: c.email, pic: c.pic } })) });
+    if (action === 'sessions') {                        // where one person is signed in
+      const rows = db.prepare('SELECT token, agent, made, last, ip FROM sessions WHERE user = ? AND expires > ? ORDER BY last DESC').all(Number(query.get('id')), now);
+      return json(res, 200, { sessions: rows.map(s => ({ id: s.token.slice(0, 16), agent: s.agent || 'Browser', made: s.made, last: s.last, ip: s.ip })) });
+    }
+    if (action === 'export') {                          // every account, as a spreadsheet
+      const rows = db.prepare(`SELECT ${USER_COLS} FROM users ORDER BY id`).all();
+      const cell = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+      const csv = '\ufeff' + [['id', 'name', 'username', 'email', 'role', 'verified', 'banned', 'points', 'followers', 'posts', 'joined', 'last seen'].join(','),
+        ...rows.map(u => [u.id, u.name, u.username, u.email, u.role, u.verified ? 'yes' : '', u.banned ? 'yes' : '', u.points, followers(u.id), count('SELECT COUNT(*) AS n FROM posts WHERE user = ?', u.id),
+          new Date(u.created).toISOString().slice(0, 10), u.seen ? new Date(u.seen).toISOString().slice(0, 10) : ''].map(cell).join(','))].join('\r\n');
+      log('export', 'users', rows.length + ' rows');
+      res.writeHead(200, { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="bdmap-users-${new Date().toISOString().slice(0, 10)}.csv"`, 'Cache-Control': 'no-store' });
+      res.end(csv);
+      return;
     }
     if (action === 'creators') {
       const rows = db.prepare(`SELECT ${USER_COLS}, creator FROM users WHERE creator <> '' ORDER BY CASE creator WHEN 'applied' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END, id DESC LIMIT 200`).all();
@@ -1645,6 +1836,34 @@ async function adminApi(req, res, action, query) {
     db.prepare('DELETE FROM contributions WHERE id = ?').run(c.id);
     db.prepare('UPDATE users SET points = MAX(0, points - ?) WHERE id = ?').run(POINTS_PER_FARE, c.user);
     log('fare removed', `${c.flabel} > ${c.tlabel}`, `${c.mode} ${c.fare}`);
+    return json(res, 200, { ok: true });
+  }
+  if (action === 'flags') {                           // switch sign-ups or posting off and on for everyone
+    for (const k of ['signups', 'posts']) if (typeof body[k] === 'boolean') { sq.setSet.run('flag_' + k, body[k] ? '1' : '0'); log('flag', k, body[k] ? 'on' : 'off'); }
+    return json(res, 200, { flags: { signups: flagOn('signups'), posts: flagOn('posts') } });
+  }
+  if (action === 'story') {
+    const st = db.prepare('SELECT * FROM stories WHERE id = ?').get(Number(body.id));
+    if (st) { deleteStory(st); log('story removed', 'story ' + st.id); }
+    return json(res, 200, { ok: true });
+  }
+  if (action === 'comment') {
+    const c = db.prepare('SELECT * FROM post_comments WHERE id = ?').get(Number(body.id));
+    if (c) { db.prepare('DELETE FROM post_comments WHERE id = ?').run(c.id); log('comment removed', 'post ' + c.post, cleanText(c.body, 80)); }
+    return json(res, 200, { ok: true });
+  }
+  if (action === 'session-end') {
+    db.prepare('DELETE FROM sessions WHERE user = ? AND substr(token, 1, 16) = ?').run(Number(body.user), String(body.id || ''));
+    log('signout', 'user ' + body.user, 'one device');
+    return json(res, 200, { ok: true });
+  }
+  if (action === 'group') {                            // close a group (its messages go with it)
+    const g = db.prepare('SELECT * FROM chat_groups WHERE id = ?').get(Number(body.id));
+    if (!g) return json(res, 404, { error: 'not found' });
+    const members = gq.members.all(g.id).map(m => m.id);
+    for (const id of members) leaveGroup(g.id, id);
+    for (const id of members) push(id, 'friends', {});
+    log('group removed', 'group ' + g.id, g.name);
     return json(res, 200, { ok: true });
   }
   if (action === 'creator') {                         // approve, refuse or end a creator; credit earnings
