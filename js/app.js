@@ -74,6 +74,7 @@ function operatorChips(a, b) {
   const chips = el('div', 'chips');
   for (const o of list) {
     const chip = el('div', 'chip', o.bn);
+    chip.dataset.i = [...o.bn][0];
     if (!(o.ac && o.nonAc)) chip.appendChild(el('small', null, o.ac ? 'শুধু এসি' : 'নন-এসি'));
     chips.appendChild(chip);
   }
@@ -1243,7 +1244,12 @@ for (const b of $('seg').children) b.addEventListener('click', () => showPane(b.
     const r = cache.get(key), km = r.distance / 1000;
     const head = el('div', 'head');
     const titles = el('div', 'grow');
-    titles.append(el('h3', null, `${a.bn} → ${b.bn}`), el('p', null, `${num(km, 1)} কিমি · গাড়িতে প্রায় ${fmtMin(r.duration / 60)}`));
+    const route = el('h3', 'rx-route');
+    route.append(el('span', null, a.bn), Object.assign(el('i', 'rx-arrow'), { innerHTML: svg('arrow') }), el('span', null, b.bn));
+    const facts = el('div', 'rx-facts');
+    const fact = (icon, text) => { const f = el('span'); f.append(ic(icon), el('span', null, text)); return f; };
+    facts.append(fact('route', `${num(km, 1)} কিমি`), fact('clock', `গাড়িতে প্রায় ${fmtMin(r.duration / 60)}`));
+    titles.append(route, facts);
     head.appendChild(titles);
     const btn = button('route', 'ম্যাপে দেখুন', () => { trip.from = asPlace(a); setPlace('to', asPlace(b)); }, true);
     const actions = el('div', 'actions');

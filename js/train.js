@@ -138,9 +138,18 @@ const pathOf = r => r.train.s.slice(r.i, r.j + 1).map(s => ({ lat: RAIL.stations
 
 function trainCard(r) {
   const low = cheapest(r.fares);
-  const sub = [`${clock(r.depart)} → ${clock(r.arrive)}`, fmtMin(r.mins), offText(r.train)].join(' · ');
-  const price = low ? (low.exact ? taka(low.taka) : `~${taka(low.taka)}`) : '';
-  return item('train', trainName(r.train), sub, price, () => openTrain(r));
+  const row = el('button', 'trow');
+  const times = el('div', 'tr-times');
+  const line = el('span', 'tr-line');
+  line.append(el('i'), el('em', null, fmtMin(r.mins)), el('i'));
+  times.append(el('b', null, clock(r.depart)), line, el('b', null, clock(r.arrive)));
+  const info = el('div', 'tr-info');
+  info.append(el('b', 'no-tr', tr(r.train.bn)), el('span', null, `${num(+r.train.c) || r.train.c} · ${offText(r.train)}`));
+  const fare = el('div', 'tr-fare');
+  if (low) fare.append(el('small', null, `${CLASS_NAMES[low.cls]}${low.exact ? '' : ' · আনুমানিক'}`), el('b', null, (low.exact ? '' : '~') + taka(low.taka)));
+  row.append(times, info, fare);
+  row.addEventListener('click', () => openTrain(r));
+  return row;
 }
 
 function fareTilesOf(r) {
@@ -274,10 +283,17 @@ function openChange(c) {
     const fare = el('div', 'lx-fare');
     fare.append(el('small', null, L ? 'Deck' : 'ডেক'), el('b', null, fareRange(l.deck[0], l.deck[1])));
     top.append(icon, routeBox, fare);
+    const pass = el('div', 'lx-pass');
+    const end = (label, place) => { const e = el('div', 'lx-end'); e.append(el('small', null, label), el('b', null, place)); return e; };
+    const track = el('div', 'lx-track');
+    const boat = el('span', 'lx-boat');
+    boat.innerHTML = svg('launchBoat');
+    track.append(el('i', 'd'), el('span', 'ln'), boat, el('span', 'ln'), el('i', 'd'), el('em', null, `${hours} ${L ? 'hours' : 'ঘণ্টা'}`));
+    pass.append(end(L ? 'From' : 'থেকে', L ? 'Sadarghat' : 'সদরঘাট'), track, end(L ? 'To' : 'গন্তব্য', l.to[L].split(/[,(]/)[0].trim()));
     const meta = el('div', 'lx-meta');
     const item = (ico, text) => { const s = el('span'); s.append(ic(ico), el('span', null, text)); return s; };
-    meta.append(item('clock', l.when[L]), item('hourglass', `${hours} ${L ? 'hours' : 'ঘণ্টা'}`));
-    card.append(top, meta);
+    meta.append(item('clock', `${L ? 'Leaves' : 'ছাড়ে'} ${l.when[L]}`));
+    card.append(top, pass, meta);
     if (l.note) card.appendChild(el('div', 'lx-note', l.note[L]));
     const more = el('button', 'lx-more');
     more.append(el('span', null, L ? `${list.length} launch${list.length > 1 ? 'es' : ''}` : `${num(list.length)}টি লঞ্চ`), ic('chev'));
@@ -304,7 +320,7 @@ function openChange(c) {
   const seg = $('tx-seg'), pill = seg.querySelector('.tseg-pill');
   const placePill = () => {
     const b = seg.querySelector('[aria-selected="true"]');
-    if (!b || !b.offsetWidth) return;
+    if (!pill || !b || !b.offsetWidth) return;
     pill.style.width = b.offsetWidth + 'px';
     pill.style.transform = `translateX(${b.offsetLeft - 4}px)`;
   };
@@ -323,6 +339,9 @@ function openChange(c) {
     if (m === 'train') loadTrains();
   }
   for (const b of seg.querySelectorAll('button')) b.addEventListener('click', () => showMode(b.dataset.m));
+  $('tx-c-bus').textContent = `${num(DISTRICTS.length)} জেলা · ${num(OPERATORS.length)} কোম্পানি`;
+  $('tx-c-launch').textContent = L ? `${LAUNCHES.length} routes · Sadarghat` : `${num(LAUNCHES.length)}টি রুট · সদরঘাট`;
+  $('tx-bus-source').textContent = `ভাড়ার হার: বিআরটিএ, কার্যকর ${FARES.effective}। এসি বাসের ভাড়া সরকার ঠিক করে না — তাই আনুমানিক।`;
   addEventListener('resize', placePill);
   let savedMode = 'bus';
   try { savedMode = localStorage.getItem('bdmap.tx') || 'bus'; } catch { /* storage off */ }
@@ -333,6 +352,7 @@ function openChange(c) {
     note.textContent = 'ট্রেনের তালিকা আসছে…';
     try { await loadRail(); } catch { note.textContent = 'ট্রেনের তালিকা আনা যায়নি। ইন্টারনেট সংযোগ দেখে আবার চেষ্টা করুন।'; return; }
     $('train-updated').textContent = `ট্রেনের সময়সূচি: বাংলাদেশ রেলওয়ের তথ্য থেকে, হালনাগাদ ${RAIL.updated}।`;
+    $('tx-c-train').textContent = `${num(RAIL.list.length)} স্টেশন`;
     pick('from', RAIL.list.find(s => s.code === 'DA'));
     pick('to', RAIL.list.find(s => s.code === 'CTG'));
   }
@@ -361,3 +381,5 @@ async function renderTrainPane() {
 }
 // The districts page's link opens the Transport page on its bus tab.
 for (const a of document.querySelectorAll('.dx-link')) a.addEventListener('click', () => { try { localStorage.setItem('bdmap.tx', 'bus'); } catch { /* storage off */ } });
+// The swap turns as it swaps.
+$('ic-swap').addEventListener('click', e => { const b = e.currentTarget; b.classList.toggle('spin'); });

@@ -367,28 +367,33 @@
   <!-- Transport: long-distance buses, trains and launches, one tab each -->
   <section class="page" id="page-train">
     <div class="wrap tx">
-      <div class="page-head tx-head"><h2>যাতায়াত</h2><p>দূরপাল্লার বাস, ট্রেন আর লঞ্চ — রুট, সময় আর ভাড়া এক জায়গায়।</p></div>
-      <div class="tseg" id="tx-seg" role="tablist" aria-label="যাতায়াতের ধরন">
-        <span class="tseg-pill" aria-hidden="true"></span>
-        <button role="tab" data-m="bus" aria-selected="true"><i data-ic="busFront"></i><span>বাস</span></button>
-        <button role="tab" data-m="train" aria-selected="false"><i data-ic="trainFront"></i><span>ট্রেন</span></button>
-        <button role="tab" data-m="launch" aria-selected="false"><i data-ic="launchBoat"></i><span>লঞ্চ</span></button>
+      <div class="tx-hero">
+        <span class="tx-eyebrow"><i data-ic="route"></i><span>যাতায়াত</span></span>
+        <h2>কোথায় যাবেন?</h2>
+        <p>দূরপাল্লার বাস, ট্রেন আর লঞ্চ — রুট, সময় আর ভাড়া এক জায়গায়।</p>
+      </div>
+      <div class="tmode" id="tx-seg" role="tablist" aria-label="যাতায়াতের ধরন">
+        <button role="tab" data-m="bus" class="m-bus" aria-selected="true"><span class="mi2"><i data-ic="busFront"></i></span><span class="mt"><b>বাস</b><small id="tx-c-bus"></small></span></button>
+        <button role="tab" data-m="train" class="m-train" aria-selected="false"><span class="mi2"><i data-ic="trainFront"></i></span><span class="mt"><b>ট্রেন</b><small id="tx-c-train">স্টেশন ও সময়সূচি</small></span></button>
+        <button role="tab" data-m="launch" class="m-launch" aria-selected="false"><span class="mi2"><i data-ic="launchBoat"></i></span><span class="mt"><b>লঞ্চ</b><small id="tx-c-launch"></small></span></button>
       </div>
       <div class="tx-pane" id="tx-bus" role="tabpanel">
       <div class="tx-sub"><h3>জেলা থেকে জেলা</h3><p>যেকোনো দুটি জেলার মধ্যে দূরপাল্লার বাসের ভাড়া, আর কোন রুটে কোন বাস চলে।</p></div>
-      <div class="card picker">
-        <select id="ic-from" aria-label="কোন জেলা থেকে"></select>
-        <button class="icon-btn" id="ic-swap" aria-label="অদলবদল"><i data-ic="swap-h"></i></button>
-        <select id="ic-to" aria-label="কোন জেলায়"></select>
+      <div class="tx-plan">
+        <span class="tp-line" aria-hidden="true"></span>
+        <label class="tp-field"><span class="tp-dot a"></span><span class="tp-t"><small>কোথা থেকে</small><select id="ic-from" aria-label="কোন জেলা থেকে"></select></span><i class="tp-chev" data-ic="chev"></i></label>
+        <label class="tp-field"><span class="tp-dot b"></span><span class="tp-t"><small>কোথায় যাবেন</small><select id="ic-to" aria-label="কোন জেলায়"></select></span><i class="tp-chev" data-ic="chev"></i></label>
+        <button class="tp-swap" id="ic-swap" aria-label="অদলবদল" title="অদলবদল"><i data-ic="swap"></i></button>
       </div>
       <div class="card result" id="ic-result"></div>
 
       <div class="tx-sub" style="margin-top: 44px"><h3>বাস কোম্পানি</h3><p>তারায় চাপ দিয়ে রেটিং দিন।</p></div>
       <div class="grid" id="op-grid" style="margin-top: 0"></div>
+        <p class="tx-source" id="tx-bus-source"></p>
       </div>
       <div class="tx-pane" id="tx-train" role="tabpanel" hidden>
         <div class="tx-sub"><h3>ট্রেন</h3><p>দুটি স্টেশন বেছে নিন — কোন ট্রেন, কখন ছাড়ে, ভাড়া কত।</p></div>
-      <div class="card" style="padding: 12px; max-width: 560px">
+      <div class="card tx-od">
         <div class="od">
           <div class="dots"><i class="a"></i><i class="l"></i><i class="b"></i></div>
           <div class="inputs">
