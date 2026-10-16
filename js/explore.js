@@ -40,7 +40,7 @@ async function toggleSave(p, repaint) {
 async function toggleLike(p, repaint) {
   if (!ME) { openLogin(); return; }
   p.liked = !p.liked;
-  p.likes += p.liked ? 1 : -1;
+  if (p.likes !== null) p.likes += p.liked ? 1 : -1;      // null: the owner hid the count
   repaint(true);
   try { Object.assign(p, await exploreApi('like', { id: p.id })); repaint(false); } catch { /* keeps what was shown */ }
 }
@@ -100,9 +100,12 @@ function feedCard(p, onGone) {
   when.appendChild(el('span', null, agoText(p.created)));
   if (p.place) when.append(document.createTextNode(' · '), Object.assign(el('span', 'no-tr'), { textContent: p.place.label }));
   t.append(nameEl(p.user), when);
-  if (p.music) {
+  if (p.music || p.kind === 'video') {
     const tune = el('small', 'fc-tune no-tr');
-    tune.append(Object.assign(el('i'), { innerHTML: svg('note') }), document.createTextNode(soundLabel(p)));
+    tune.append(Object.assign(el('i'), { innerHTML: svg('note') }), document.createTextNode(audioName(p)));
+    tune.setAttribute('role', 'button');
+    tune.title = LANG === 'en' ? 'Use this audio' : 'এই অডিও দিয়ে রিল বানান';
+    tune.addEventListener('click', e => { e.stopPropagation(); openAudioSheet(p); });
     t.appendChild(tune);
   }
   who.append(avatar(p.user, 'sm ring'), t);
@@ -157,8 +160,7 @@ function feedCard(p, onGone) {
     seek.appendChild(fill);
     const paintSeek = () => { if (v.duration) fill.style.width = (v.currentTime / v.duration * 100) + '%'; };
     v.addEventListener('timeupdate', paintSeek);
-    v.addEventListener('pause', () => { if (!v.dataset.auto) media.classList.add('paused'); });
-    v.addEventListener('play', () => media.classList.remove('paused'));
+
     const seekTo = e => { const r = seek.getBoundingClientRect(); if (v.duration) { v.currentTime = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * v.duration; paintSeek(); } };
     seek.addEventListener('pointerdown', e => { e.stopPropagation(); seek.classList.add('drag'); try { seek.setPointerCapture(e.pointerId); } catch { /* old browser */ } seekTo(e); });
     seek.addEventListener('pointermove', e => { if (seek.classList.contains('drag')) seekTo(e); });
@@ -170,19 +172,17 @@ function feedCard(p, onGone) {
     if (p.layers && p.layers.length) layerBox(v, p.layers);
     media.classList.add('video');
     card.classList.add('fc-video');
-    let lastTap = 0;
-    media.addEventListener('click', () => {
-      const t0 = Date.now();
-      if (t0 - lastTap < 300) {                        // the second tap of a double tap: like, and undo the first tap's pause
-        lastTap = 0;
+    // one tap opens it in reels (full screen, where a tap stops it); two taps like it
+    let tapTimer = 0;
+    media.addEventListener('click', e => {
+      if (e.target.closest('.fc-head, .fc-sound, .fc-seek')) return;
+      if (tapTimer) {
+        clearTimeout(tapTimer); tapTimer = 0;
         if (!p.liked) toggleLike(p, paint);
         burst.classList.remove('go'); void burst.offsetWidth; burst.classList.add('go');
-        if (v.paused) { delete v.dataset.auto; v.play().catch(() => {}); }
         return;
       }
-      lastTap = t0;
-      delete v.dataset.auto;
-      if (v.paused) v.play().catch(() => {}); else v.pause();
+      tapTimer = setTimeout(() => { tapTimer = 0; v.pause(); openReels(p.id); }, 260);
     });
     if (feedWatcher) feedWatcher.observe(v);
   } else {
@@ -392,9 +392,38 @@ function closeReels() {
   reelsBox = null;
   document.body.classList.remove('reels-open');
 }
+// Instagram's "use audio": a new reel with a post's sound (its own sound, or the track it uses).
+function audioOf(p) {
+  const l = p.music && p.music.label;
+  return p.music ? (l.kind === 'gen' ? { id: 'gen:' + l.track, start: p.music.start } : l.kind === 'post' ? { id: 'post:' + l.post, start: p.music.start, src: l.src, by: l.by, title: l.title }
+    : l.kind === 'file' ? { id: p.music.id, start: p.music.start, src: l.src, title: l.title, by: l.by } : null)
+    : { id: 'post:' + p.id, start: 0, src: p.src, by: p.user.name, title: p.aname || '' };
+}
+function openAudioSheet(p) {
+  const go2 = button('camera', LANG === 'en' ? 'Use this audio' : 'এই অডিও দিয়ে রিল বানান', () => { closeModal(); useAudioOf(p); });
+  const head = el('div', 'aud-head');
+  const art = el('span', 'aud-art');
+  if (p.poster) art.style.backgroundImage = `url("${p.poster}")`;
+  art.innerHTML = svg('note');
+  const t = el('div', 't no-tr');
+  t.append(el('b', null, audioName(p)), el('small', null, p.user.name));
+  head.append(art, t);
+  openModal(LANG === 'en' ? 'Audio' : 'অডিও', LANG === 'en' ? 'Make your own reel with this sound' : 'এই সাউন্ড দিয়ে নিজের রিল বানান', [head], [go2]);
+}
+function useAudioOf(p) {
+  const music = audioOf(p);
+  if (!music) return;
+  if (!ME) { openLogin(); return; }
+  openNewPost({ music, mode: 'reel' });
+}
+const audioName = p => p.music ? soundLabel(p) : p.aname || `${p.user.name} · ${LANG === 'en' ? 'Original audio' : 'মূল অডিও'}`;
+const newSeed = () => 1 + Math.floor(Math.random() * 999983);
 async function openReels(startId, user) {
   let posts = [];
-  try { posts = (await exploreApi(`feed?kind=video${user ? '&user=' + user : ''}`)).posts; } catch { return; }
+  const seed = newSeed();
+  const page = o => exploreApi(user ? `feed?kind=video&user=${user}${o ? '&before=' + o : ''}` : `feed?kind=video&seed=${seed}&o=${o}${startId ? '&first=' + startId : ''}`);
+  try { posts = (await page(0)).posts; } catch { return; }
+  let offset = posts.length, ended = posts.length < 30, loading = false;
   const at = startId ? posts.findIndex(p => p.id === startId) : 0;
   if (at < 0 || !posts.length) { if (!startId) exploreNote('এখনো কোনো রিল নেই — প্রথম ভিডিওটি আপনিই দিন।'); return; }
   closeReels();
@@ -422,7 +451,10 @@ async function openReels(startId, user) {
     }
   }, { root: column, threshold: [0, 0.6, 1] });
 
-  for (const p of posts) {
+  const shown = new Set();
+  const addReel = p => {
+    if (shown.has(p.id)) return;
+    shown.add(p.id);
     const reel = el('section', 'reel');
     const v = el('video');
     Object.assign(v, { src: p.src, poster: p.poster, loop: true, playsInline: true, preload: 'metadata' });
@@ -482,14 +514,7 @@ async function openReels(startId, user) {
     const audio = el('button', 'reel-audio no-tr');
     audio.append(Object.assign(el('i'), { innerHTML: svg('note') }), document.createTextNode(p.music ? soundLabel(p) : `${p.user.name} · ${LANG === 'en' ? 'Original audio' : 'মূল অডিও'}`));
     // Instagram's "use audio": a new reel with this sound (another reel's own sound, or the same app track).
-    audio.addEventListener('click', () => {
-      const l = p.music && p.music.label;
-      const music = p.music ? (l.kind === 'gen' ? { id: 'gen:' + l.track, start: p.music.start } : l.kind === 'post' ? { id: 'post:' + l.post, start: p.music.start, src: l.src, by: l.by }
-        : l.kind === 'file' ? { id: p.music.id, start: p.music.start, src: l.src, title: l.title, by: l.by } : null)
-        : { id: 'post:' + p.id, start: 0, src: p.src, by: p.user.name };
-      closeReels();
-      if (music) openNewPost({ music, mode: 'reel' });
-    });
+    audio.addEventListener('click', () => { closeReels(); useAudioOf(p); });
     info.appendChild(audio);
     v.dataset.orig = p.orig ? '1' : '0';
     if (p.fx) reel.classList.add('fx-' + p.fx);
@@ -505,7 +530,21 @@ async function openReels(startId, user) {
     if (p.layers && p.layers.length) layerBox(v, p.layers);
     column.appendChild(reel);
     watcher.observe(reel);
-  }
+  };
+  posts.forEach(addReel);
+  // Near the last reel, the next ones load (a new video each time, as on TikTok).
+  column.addEventListener('scroll', async () => {
+    if (ended || loading || column.scrollTop + column.clientHeight * 3 < column.scrollHeight) return;
+    loading = true;
+    try {
+      const more = (await page(user ? posts.at(-1).id : offset)).posts;
+      offset += more.length;
+      ended = more.length < 30;
+      posts.push(...more);
+      more.forEach(addReel);
+    } catch { /* the next scroll tries again */ }
+    loading = false;
+  }, { passive: true });
   box.append(column, topbar, close);
   document.body.appendChild(box);
   document.body.classList.add('reels-open');
@@ -747,12 +786,11 @@ function openQuickPost() {
 // ---- the page ----
 (function initExplore() {
   const feed = $('explore-feed'), results = $('explore-results'), people = $('explore-people'), q = $('explore-q');
-  let last = 0, busy = false, done = false;
+  let last = 0, busy = false, done = false, seed = newSeed(), offset = 0;
   feedWatcher = new IntersectionObserver(entries => {
     for (const e of entries) {
       const v = e.target;
       if (e.isIntersecting && e.intersectionRatio > 0.6) {
-        if (v.dataset.auto === 'held') continue;      // stopped by a tap: it stays stopped
         v.muted = !feedSound || v.dataset.orig === '0';
         v.play().catch(() => { v.muted = true; feedNeedsTap = true; v.play().catch(() => {}); });
       } else if (!v.paused) { v.dataset.auto = '1'; v.pause(); }
@@ -763,18 +801,24 @@ function openQuickPost() {
     if (busy || done) return;
     busy = true;
     let posts = [];
-    try { posts = (await exploreApi('feed' + (last ? '?before=' + last : ''))).posts; } catch { /* shows what is there */ }
+    try { posts = (await exploreApi(`feed?seed=${seed}&o=${offset}`)).posts; } catch { /* shows what is there */ }
     for (const p of posts) feed.appendChild(feedCard(p, start));
+    offset += posts.length;
     if (posts.length) last = posts[posts.length - 1].id;
     done = posts.length < 30;
-    if (!feed.children.length) {
+    if (!feed.querySelector('.fc:not(.fc-live)')) {
       const none = el('div', 'prof-none');
       none.append(ic('image'), el('b', null, 'এখনো কেউ কিছু পোস্ট করেননি। প্রথম পোস্টটি আপনার হোক।'), button('plus', 'নতুন পোস্ট', () => openNewPost()));
       feed.appendChild(none);
     }
     busy = false;
   }
-  function start() { last = 0; done = false; busy = false; feed.replaceChildren(); more(); }
+  function start() {
+    last = 0; offset = 0; done = false; busy = false; seed = newSeed();
+    feed.replaceChildren();
+    if (typeof liveIntoFeed === 'function') liveIntoFeed(feed);     // who is live now, at the top (live.js)
+    more();
+  }
 
   // Stories: the row of rings above the feed. The first one adds your own.
   async function faces() { return loadStories(people); }
@@ -843,11 +887,13 @@ function openQuickPost() {
   });
   // Reels: every video, one screen at a time, scrolled up and down.
   for (const b of $('ex-tabs').children) b.addEventListener('click', () => {
+    if (b.dataset.t === 'live') { if (typeof openLiveHub === 'function') openLiveHub(); return; }
     if (b.dataset.t !== 'reels') return;
     b.classList.add('on');
-    b.previousElementSibling.classList.remove('on');
+    const feedTab = $('ex-tabs').children[0];
+    feedTab.classList.remove('on');
     openReels(0).finally(() => {
-      const back = () => { b.classList.remove('on'); b.previousElementSibling.classList.add('on'); };
+      const back = () => { b.classList.remove('on'); feedTab.classList.add('on'); };
       if (!reelsBox) back(); else new MutationObserver((_, o) => { if (!document.body.contains(reelsBox)) { back(); o.disconnect(); } }).observe(document.body, { childList: true });
     });
   });

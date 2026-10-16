@@ -991,6 +991,7 @@ function connectChat() {
   if (CHAT.stream || !ME || !window.EventSource) return;
   const es = CHAT.stream = new EventSource('api/chat/stream');
   const on = (name, fn) => es.addEventListener(name, e => fn(JSON.parse(e.data)));
+  if (typeof liveEvents === 'function') liveEvents(on, es);   // live video's signals, comments and hearts (live.js)
   on('message', addMessage);
   on('update', updateMessage);
   on('friends', loadChat);

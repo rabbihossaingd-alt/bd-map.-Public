@@ -1375,6 +1375,16 @@ setInterval(() => { const old = Date.now() - 6 * 36e5; for (const [k, t] of view
 async function exploreApi(req, res, action, query) {
   const me = userOf(req), meId = me ? me.id : 0, now = Date.now();
   if (req.method === 'GET') {
+    if (action === 'feed' && query.get('seed') && !query.get('user') && !query.get('q') && !query.get('saved')) {
+      const seed = Math.max(1, Math.min(1e6, Number(query.get('seed')) | 0)), off = Math.max(0, Math.min(5000, Number(query.get('o')) | 0));
+      const kind = query.get('kind') === 'video' ? 'video' : '', first = Number(query.get('first')) || 0;
+      const rows = db.prepare(`${POST_SELECT} AND (?4 = '' OR p.kind = ?4)
+        ORDER BY (CASE WHEN p.id = ?5 THEN -9 ELSE 0 END) + ((p.id * ?2 + 7919) % 1009) / 1009.0
+          - MAX(0, 1 - (?6 - p.created) / 259200000.0) * 0.7
+          - (CASE WHEN EXISTS (SELECT 1 FROM friends f WHERE f.a = min(p.user, ?1) AND f.b = max(p.user, ?1) AND (f.state = 'friends' OR (f.state = 'pending' AND f.actor = ?1))) THEN 0.25 ELSE 0 END)
+        LIMIT 30 OFFSET ?3`).all(meId, seed, off, kind, first, now);
+      return json(res, 200, { posts: rows.map(p => forViewer(shownPost(p), meId)) });
+    }
     if (action === 'feed') {
       const before = Number(query.get('before')) || Number.MAX_SAFE_INTEGER, user = Number(query.get('user')) || 0;
       const kind = query.get('kind') === 'video' ? 'video' : '', q = (query.get('q') || '').trim().toLowerCase().replace(/[%_]/g, '');
@@ -1547,7 +1557,7 @@ async function exploreApi(req, res, action, query) {
     const liked = !db.prepare('DELETE FROM post_likes WHERE post = ? AND user = ?').run(p.id, me.id).changes;
     if (liked) { db.prepare('INSERT INTO post_likes (post, user, made) VALUES (?, ?, ?)').run(p.id, me.id, now); notify(p.user, me.id, 'like', p.id); }
     else unnotify(p.user, me.id, 'like', p.id);
-    return json(res, 200, { liked, likes: count('SELECT COUNT(*) AS n FROM post_likes WHERE post = ?', p.id) });
+    return json(res, 200, { liked, likes: p.hidelikes && p.user !== me.id ? null : count('SELECT COUNT(*) AS n FROM post_likes WHERE post = ?', p.id) });
   }
   if (action === 'comment') {
     if (p.nocomm && p.user !== me.id) return json(res, 403, { error: 'closed' });
@@ -1804,6 +1814,74 @@ async function creatorApi(req, res, action) {
 }
 
 //   GET /api/notify/list -> { items, unread }     GET /api/notify/count -> { unread }     POST /api/notify/read
+// ---- Live ----
+// One person broadcasts from their camera; each viewer gets the stream straight from the broadcaster's browser
+// (WebRTC, the broadcaster offering). The server keeps who is live and who watches, and passes on the signals,
+// the comments and the hearts. A live that stops sending its heartbeat for 40 seconds has ended.
+const lives = new Map();              // id -> { id, user, title, started, last, viewers: Set, comments: [] }
+let liveSeq = 0;
+const LIVE_MAX = 25;                  // viewers per live: each one is a separate upload from the broadcaster's phone
+const liveCard = l => { const u = aq.byId.get(l.user); return { id: l.id, title: l.title, started: l.started, viewers: l.viewers.size, user: { id: u.id, name: u.name, username: u.username || '', pic: u.pic_v, verified: !!u.verified } }; };
+function liveTell(l, event, data, except) { for (const id of [l.user, ...l.viewers]) if (id !== except) push(id, event, data); }
+function endLive(l) {
+  if (!lives.has(l.id)) return;
+  lives.delete(l.id);
+  liveTell(l, 'live-end', { live: l.id });
+}
+setInterval(() => { const t = Date.now(); for (const l of lives.values()) if (t - l.last > 40_000) endLive(l); }, 10_000).unref();
+async function liveApi(req, res, action) {
+  const me = userOf(req);
+  if (action === 'list') return json(res, 200, { lives: [...lives.values()].filter(l => { const u = aq.byId.get(l.user); return u && !u.banned; }).sort((a, b) => b.viewers.size - a.viewers.size || b.started - a.started).map(liveCard) });
+  if (req.method !== 'POST') return json(res, 405, { error: 'method not allowed' });
+  if (!me) return json(res, 401, { error: 'login' });
+  let body;
+  try { body = JSON.parse(await readBody(req, 20_000)) || {}; } catch { return json(res, 400, { error: 'bad request' }); }
+  if (action === 'start') {
+    if (!flagOn('posts') && me.role === 'user') return json(res, 403, { error: 'closed' });
+    for (const l of lives.values()) if (l.user === me.id) endLive(l);
+    const l = { id: ++liveSeq, user: me.id, title: cleanText(body.title, 80), started: Date.now(), last: Date.now(), viewers: new Set(), comments: [] };
+    lives.set(l.id, l);
+    tellFriends(me.id, 'live-start', liveCard(l));
+    return json(res, 200, { live: liveCard(l), iceServers: await iceServers() });
+  }
+  const l = lives.get(Number(body.id));
+  if (!l) return json(res, 404, { error: 'ended' });
+  const host = l.user === me.id;
+  if (action === 'ping') { if (host) l.last = Date.now(); return json(res, 200, { viewers: l.viewers.size }); }
+  if (action === 'end') { if (host || me.role !== 'user') endLive(l); return json(res, 200, { ok: true }); }
+  if (action === 'join') {
+    if (host) return json(res, 400, { error: 'host' });
+    if (!l.viewers.has(me.id) && l.viewers.size >= LIVE_MAX) return json(res, 429, { error: 'full' });
+    l.viewers.add(me.id);
+    push(l.user, 'live-join', { live: l.id, viewer: { id: me.id, name: me.name, pic: me.pic_v } });
+    liveTell(l, 'live-count', { live: l.id, viewers: l.viewers.size });
+    return json(res, 200, { live: liveCard(l), comments: l.comments.slice(-30), iceServers: await iceServers() });
+  }
+  if (action === 'leave') {
+    if (l.viewers.delete(me.id)) { push(l.user, 'live-leave', { live: l.id, viewer: me.id }); liveTell(l, 'live-count', { live: l.id, viewers: l.viewers.size }); }
+    return json(res, 200, { ok: true });
+  }
+  if (action === 'signal') {
+    const to = Number(body.to);
+    if (!(host ? l.viewers.has(to) : l.viewers.has(me.id) && to === l.user)) return json(res, 403, { error: 'not in this live' });
+    push(to, 'live-signal', { live: l.id, from: me.id, data: body.data });
+    return json(res, 200, { ok: true });
+  }
+  if (action === 'comment' || action === 'heart') {
+    if (!host && !l.viewers.has(me.id)) return json(res, 403, { error: 'not in this live' });
+    if (!allowSend(me.id)) return json(res, 429, { error: 'slow' });
+    if (action === 'heart') { liveTell(l, 'live-heart', { live: l.id, from: me.id }, me.id); return json(res, 200, { ok: true }); }
+    const text = cleanText(body.body, 200);
+    if (!text) return json(res, 400, { error: 'bad request' });
+    const c = { id: Date.now() + Math.random(), body: text, user: { id: me.id, name: me.name, pic: me.pic_v } };
+    l.comments.push(c);
+    if (l.comments.length > 100) l.comments.shift();
+    liveTell(l, 'live-comment', { live: l.id, comment: c });
+    return json(res, 200, { ok: true });
+  }
+  return json(res, 404, { error: 'not found' });
+}
+
 async function notifyApi(req, res, action) {
   const me = userOf(req);
   if (!me) return json(res, 401, { error: 'login' });
@@ -2241,6 +2319,7 @@ const server = http.createServer((req, res) => {
   if (pathname === '/api/ratings') return api(req, res).catch(() => json(res, 500, { error: 'server error' }));
   if (pathname === '/api/fares') return faresApi(req, res).catch(() => json(res, 500, { error: 'server error' }));
   if (pathname.startsWith('/api/chat/')) return chatApi(req, res, pathname.slice(10), searchParams).catch(e => { console.error(e); if (!res.headersSent) json(res, 500, { error: 'server error' }); });
+  if (pathname.startsWith('/api/live/')) return liveApi(req, res, pathname.slice(10)).catch(e => { console.error(e); if (!res.headersSent) json(res, 500, { error: 'server error' }); });
   if (pathname.startsWith('/api/notify/')) return notifyApi(req, res, pathname.slice(12)).catch(e => { console.error(e); if (!res.headersSent) json(res, 500, { error: 'server error' }); });
   if (pathname.startsWith('/api/creator/')) return creatorApi(req, res, pathname.slice(13)).catch(e => { console.error(e); if (!res.headersSent) json(res, 500, { error: 'server error' }); });
   if (pathname.startsWith('/api/avatar/')) return avatarApi(req, res, pathname.slice(12));

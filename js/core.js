@@ -3,7 +3,7 @@
 const $ = id => document.getElementById(id);
 // Numbers follow the chosen language: Bangla digits (১২৩) or English (123).
 const NUM_LOCALE = LANG === 'en' ? 'en-US' : 'bn-BD';
-const num = (n, digits = 0) => n.toLocaleString(NUM_LOCALE, { maximumFractionDigits: digits });
+const num = (n, digits = 0) => n == null ? '' : n.toLocaleString(NUM_LOCALE, { maximumFractionDigits: digits });
 const taka = n => '৳' + num(Math.ceil(n));
 
 function fmtMin(min) {
