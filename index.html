@@ -464,12 +464,33 @@
 
   <!-- Districts and intercity -->
   <section class="page" id="page-districts">
-    <div class="wrap">
-      <div class="page-head"><h2>৬৪ জেলা</h2><p>জেলায় চাপ দিন — ঢাকা থেকে ভাড়া, বাস আর দর্শনীয় স্থান দেখুন।</p></div>
-      <a class="dx-link" href="#/train"><i class="mi c-teal" data-ic="busFront"></i><span><b>জেলা থেকে জেলার বাস ভাড়া</b><em>যেকোনো দুটি জেলা — ভাড়া আর কোন বাস চলে, যাতায়াত পাতায়</em></span><i data-ic="chev"></i></a>
-      <label class="filter"><i data-ic="search"></i><input id="district-filter" autocomplete="off" placeholder="জেলার নাম — যেমন: রংপুর, coxbazar" aria-label="জেলা খুঁজুন"></label>
-      <div id="district-list"></div>
+    <div class="wrap tx dg">
+      <div class="tx-hero">
+        <span class="tx-eyebrow"><i data-ic="pin"></i><span id="dg-count">৬৪ জেলা</span></span>
+        <h2>কোথায় ঘুরবেন?</h2>
+        <p>৬৪ জেলার সবচেয়ে বেশি দেখা জায়গা, কোন জেলার কী বিখ্যাত, আর ঢাকা থেকে যাওয়ার ভাড়া — এক জায়গায়।</p>
+      </div>
+      <label class="filter tx-find dg-find"><i data-ic="search"></i><input id="district-filter" autocomplete="off" placeholder="জেলার নাম — যেমন: সিলেট, coxbazar" aria-label="জেলা খুঁজুন"></label>
 
+      <section class="dg-sec" id="dg-top-sec" hidden>
+        <div class="dg-head"><h3>সবচেয়ে বেশি দেখা জায়গা</h3><p>উইকিপিডিয়ায় গত ৬০ দিনে সবচেয়ে বেশি পড়া জায়গাগুলো</p></div>
+        <div class="dg-rail" id="dg-top"></div>
+      </section>
+
+      <section class="dg-sec">
+        <div class="dg-head"><h3>কোন জেলার কী বিখ্যাত</h3><p>সরকারের জিআই (ভৌগোলিক নির্দেশক) স্বীকৃত খাবার ও পণ্য — চাপ দিলে সেই জেলা</p></div>
+        <div class="dg-tabs" id="dg-gi-tabs"></div>
+        <div class="dg-gi" id="dg-gi"></div>
+        <p class="dg-note" id="dg-gi-national"></p>
+      </section>
+
+      <section class="dg-sec">
+        <div class="dg-head"><h3>৬৪ জেলা</h3><p>জেলায় চাপ দিন — দর্শনীয় স্থান, বিখ্যাত খাবার, ঢাকা থেকে ভাড়া ও বাস।</p></div>
+        <div class="dg-divs" id="dg-divs"></div>
+        <div id="district-list"></div>
+      </section>
+      <a class="dx-link" href="#/train"><i class="mi c-teal" data-ic="busFront"></i><span><b>জেলা থেকে জেলার বাস ভাড়া</b><em>যেকোনো দুটি জেলা — ভাড়া আর কোন বাস চলে, যাতায়াত পাতায়</em></span><i data-ic="chev"></i></a>
+      <p class="tx-source">দর্শনীয় স্থান ও ছবি: বাংলা উইকিপিডিয়া ও উইকিমিডিয়া কমন্স · বিখ্যাত খাবার ও পণ্য: পেটেন্ট, শিল্প-নকশা ও ট্রেডমার্কস অধিদপ্তরের জিআই জার্নাল · ভাড়া: বিআরটিএ।</p>
     </div>
   </section>
 
@@ -632,6 +653,8 @@
 <script src="js/tour.js"></script>
 <script src="js/scene.js"></script>
 <script src="js/train.js"></script>
+<script src="data/district-famous.js"></script>
+<script src="js/guide.js"></script>
 <script src="js/account.js"></script>
 <script src="js/chat.js"></script>
 <script src="js/chat-extra.js"></script>

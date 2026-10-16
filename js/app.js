@@ -1363,8 +1363,7 @@ for (const b of $('seg').children) b.addEventListener('click', () => showPane(b.
     }
     if (!box.children.length) box.appendChild(el('div', 'empty', 'এই নামে কোনো জেলা পাওয়া যায়নি।'));
   }
-  $('district-filter').addEventListener('input', renderDistricts);
-  renderDistricts();
+  // the district list is drawn by js/guide.js now (pictures, places, famous foods)
 
   let loaded = false;
   enter.districts = () => { if (!loaded) { loaded = true; update(); } };
