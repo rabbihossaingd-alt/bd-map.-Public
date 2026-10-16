@@ -56,6 +56,32 @@ function postMenu(p, onGone) {
   $('m-title').classList.add('no-tr');
 }
 
+// ---- sound in the feed ----
+const feedSounds = new Set();
+function setFeedSound(on) {
+  feedSound = on;
+  MUSIC.unlock();
+  for (const b of document.querySelectorAll('.fc-sound')) b.classList.toggle('on', on);
+  for (const x of document.querySelectorAll('.fc-media video')) x.muted = !on || x.dataset.orig === '0';
+  for (const f of feedSounds) {
+    if (f.v && !document.contains(f.v)) { f.sound.stop(); feedSounds.delete(f); continue; }
+    f.sound.mute(!on);
+    if (on && f.v && !f.v.paused) f.sound.start(f.v.currentTime);
+    if (on && f.media && f.media.dataset.visible === '1') f.sound.start(0);
+  }
+}
+let photoObs = null;
+function photoMusic() {
+  return photoObs || (photoObs = new IntersectionObserver(entries => {
+    for (const e of entries) {
+      const vis = e.isIntersecting && e.intersectionRatio > .6;
+      e.target.dataset.visible = vis ? '1' : '0';
+      if (vis && feedSound) e.target._sound.start(0); else e.target._sound.stop();
+    }
+  }, { threshold: [0, .6] }));
+}
+addEventListener('hashchange', () => { for (const f of feedSounds) f.sound.stop(); });
+
 // ---- one post in the feed ----
 let feedWatcher = null;      // plays a feed video while it is on screen, pauses it when it leaves
 let feedSound = false;       // browsers only allow sound after a tap, so videos start silent until the speaker is pressed
@@ -68,6 +94,11 @@ function feedCard(p, onGone) {
   when.appendChild(el('span', null, agoText(p.created)));
   if (p.place) when.append(document.createTextNode(' · '), Object.assign(el('span', 'no-tr'), { textContent: p.place.label }));
   t.append(nameEl(p.user), when);
+  if (p.music) {
+    const tune = el('small', 'fc-tune no-tr');
+    tune.append(Object.assign(el('i'), { innerHTML: svg('note') }), document.createTextNode(soundLabel(p)));
+    t.appendChild(tune);
+  }
   who.append(avatar(p.user, 'sm ring'), t);
   who.addEventListener('click', () => openProfilePage(p.user.id));
   const more = el('button', 'icon-btn');
@@ -76,8 +107,9 @@ function feedCard(p, onGone) {
   more.addEventListener('click', () => postMenu(p, onGone));
   head.append(who, more);
 
-  const media = el('div', 'fc-media');
+  const media = el('div', 'fc-media' + (p.fx ? ' fx-' + p.fx : ''));
   const burst = svgEl('heart', 'burst');
+  const sound = postSound(p);
   const like = el('button', 'fc-btn like-btn'), count = el('b', 'fc-likes');
   const paint = pop => {
     like.classList.toggle('on', p.liked);
@@ -97,19 +129,31 @@ function feedCard(p, onGone) {
     const speaker = el('button', 'fc-sound' + (feedSound ? ' on' : ''));
     speaker.innerHTML = svg('sound');
     speaker.setAttribute('aria-label', 'শব্দ');
-    speaker.addEventListener('click', e => {
-      e.stopPropagation();
-      feedSound = !feedSound;
-      for (const b of document.querySelectorAll('.fc-sound')) b.classList.toggle('on', feedSound);
-      for (const x of document.querySelectorAll('.fc-media video')) x.muted = !feedSound;
-      if (feedSound) v.play().catch(() => {});
-    });
-    v.muted = !feedSound;
+    speaker.addEventListener('click', e => { e.stopPropagation(); setFeedSound(!feedSound); if (feedSound) v.play().catch(() => {}); });
+    v.muted = !feedSound || !p.orig;
+    v.dataset.orig = p.orig ? '1' : '0';
+    if (sound) {
+      feedSounds.add({ v, sound });
+      let last = 0;
+      v.addEventListener('play', () => { sound.mute(!feedSound); sound.start(v.currentTime); });
+      v.addEventListener('pause', () => sound.stop());
+      v.addEventListener('timeupdate', () => { if (v.currentTime + .4 < last && !v.paused) sound.start(v.currentTime); last = v.currentTime; });   // the video looped
+    }
     media.append(v, svgEl('play', 'reel-mark'), speaker);
     media.classList.add('video');
     media.addEventListener('click', () => { v.pause(); openReels(p.id); });
     if (feedWatcher) feedWatcher.observe(v);
   } else {
+    if (sound) {                                       // a photo with music: it plays while the photo is on screen, if sound is on
+      const speaker = el('button', 'fc-sound' + (feedSound ? ' on' : ''));
+      speaker.innerHTML = svg('sound');
+      speaker.setAttribute('aria-label', 'শব্দ');
+      speaker.addEventListener('click', e => { e.stopPropagation(); setFeedSound(!feedSound); if (feedSound) sound.start(0); });
+      media.appendChild(speaker);
+      feedSounds.add({ v: null, sound, media });
+      photoMusic().observe(media);
+      media._sound = sound;
+    }
     const img = Object.assign(el('img'), { src: p.src, alt: p.caption || '', loading: 'lazy' });
     img.addEventListener('load', () => { const r = img.naturalWidth / img.naturalHeight; if (r) media.style.aspectRatio = String(Math.min(1.91, Math.max(0.8, r))); });
     media.appendChild(img);
@@ -296,6 +340,7 @@ let reelsBox = null;
 function closeReels() {
   if (!reelsBox) return;
   for (const v of reelsBox.querySelectorAll('video')) v.pause();
+  for (const r of reelsBox._sounds || []) r.rs.stop();
   reelsBox.remove();
   reelsBox = null;
   document.body.classList.remove('reels-open');
@@ -307,7 +352,9 @@ async function openReels(startId, user) {
   if (at < 0 || !posts.length) { if (!startId) exploreNote('এখনো কোনো রিল নেই — প্রথম ভিডিওটি আপনিই দিন।'); return; }
   closeReels();
   let sound = true;
+  const reelSounds = [];
   const box = reelsBox = el('div', 'reels');
+  box._sounds = reelSounds;
   const close = el('button', 'reels-x');
   close.innerHTML = svg('close');
   close.setAttribute('aria-label', 'বন্ধ করুন');
@@ -323,7 +370,7 @@ async function openReels(startId, user) {
   const watcher = new IntersectionObserver(entries => {
     for (const e of entries) {
       const v = e.target.querySelector('video');
-      if (e.isIntersecting && e.intersectionRatio > 0.6) { v.muted = !sound; v.play().catch(() => { v.muted = true; v.play().catch(() => {}); }); }
+      if (e.isIntersecting && e.intersectionRatio > 0.6) { v.muted = !sound || v.dataset.orig === '0'; v.play().catch(() => { v.muted = true; v.play().catch(() => {}); }); }
       else v.pause();
     }
   }, { root: column, threshold: [0, 0.6, 1] });
@@ -373,12 +420,35 @@ async function openReels(startId, user) {
     act('share', '', () => sharePost(p));
     const [keep] = act('bookmark', '', () => toggleSave(p, () => keep.classList.toggle('on', p.saved)));
     keep.classList.toggle('on', p.saved);
-    const [mute] = act('sound', '', () => { sound = !sound; for (const x of box.querySelectorAll('video')) x.muted = !sound; for (const m of box.querySelectorAll('.mute')) m.classList.toggle('off', !sound); });
+    const [mute] = act('sound', '', () => {
+      sound = !sound;
+      MUSIC.unlock();
+      for (const x of box.querySelectorAll('video')) x.muted = !sound || x.dataset.orig === '0';
+      for (const m of box.querySelectorAll('.mute')) m.classList.toggle('off', !sound);
+      for (const r of reelSounds) { r.rs.mute(!sound); if (sound && !r.v.paused) r.rs.start(r.v.currentTime); }
+    });
     mute.classList.add('mute');
     act('more', '', () => postMenu(p, closeReels));
-    const audio = el('div', 'reel-audio no-tr');
-    audio.append(Object.assign(el('i'), { innerHTML: svg('sound') }), document.createTextNode(`${p.user.name} · ${LANG === 'en' ? 'Original audio' : 'মূল অডিও'}`));
+    const audio = el('button', 'reel-audio no-tr');
+    audio.append(Object.assign(el('i'), { innerHTML: svg('note') }), document.createTextNode(p.music ? soundLabel(p) : `${p.user.name} · ${LANG === 'en' ? 'Original audio' : 'মূল অডিও'}`));
+    // Instagram's "use audio": a new reel with this sound (another reel's own sound, or the same app track).
+    audio.addEventListener('click', () => {
+      const music = p.music ? (p.music.label.kind === 'gen' ? { id: 'gen:' + p.music.label.track, start: p.music.start } : p.music.label.kind === 'post' ? { id: 'post:' + p.music.label.post, start: p.music.start, src: p.music.label.src, by: p.music.label.by } : null)
+        : { id: 'post:' + p.id, start: 0, src: p.src, by: p.user.name };
+      closeReels();
+      if (music) openNewPost({ music, mode: 'reel' });
+    });
     info.appendChild(audio);
+    v.dataset.orig = p.orig ? '1' : '0';
+    if (p.fx) reel.classList.add('fx-' + p.fx);
+    const rs = postSound(p);
+    if (rs) {
+      let last = 0;
+      v.addEventListener('play', () => { rs.mute(!sound); rs.start(v.currentTime); });
+      v.addEventListener('pause', () => rs.stop());
+      v.addEventListener('timeupdate', () => { if (v.currentTime + .4 < last && !v.paused) rs.start(v.currentTime); last = v.currentTime; });
+      reelSounds.push({ v, rs });
+    }
     reel.append(v, svgEl('play', 'reel-paused'), info, side, line);
     column.appendChild(reel);
     watcher.observe(reel);
@@ -576,7 +646,7 @@ function uploadMedia(blob, type, onProgress) {
   });
 }
 
-function openNewPost() {
+function openQuickPost() {
   if (!ME) { openLogin(); return; }
   let file = null, place = null;
   const pick = el('button', 'post-pick');

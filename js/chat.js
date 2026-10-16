@@ -968,6 +968,22 @@ if (window.visualViewport) {
   visualViewport.addEventListener('resize', onViewport);
   visualViewport.addEventListener('scroll', onViewport);
 }
+// iPhones scroll the page to show the typing box once the keyboard is up — a moment after the resize event.
+// While that settles, the page is held at the top and the conversation re-measured every frame.
+function holdChatInPlace() {
+  if (!document.body.classList.contains('chat-open')) return;
+  const t0 = performance.now();
+  const step = () => {
+    if (window.scrollY || document.documentElement.scrollTop) window.scrollTo(0, 0);
+    fitChat();
+    if (performance.now() - t0 < 1200) requestAnimationFrame(step);
+    else { const box = $('chat-msgs'); box.scrollTop = box.scrollHeight; }
+  };
+  requestAnimationFrame(step);
+}
+$('chat-input').addEventListener('focus', holdChatInPlace);
+$('chat-input').addEventListener('blur', () => setTimeout(holdChatInPlace, 50));
+addEventListener('scroll', () => { if (document.body.classList.contains('chat-open')) { if (window.scrollY) window.scrollTo(0, 0); fitChat(); } }, { passive: true });
 addEventListener('hashchange', () => { if (!location.hash.includes('chat')) document.body.classList.remove('chat-open'); else if (CHAT.open != null) document.body.classList.add('chat-open'); });
 
 // ---- the live stream from the server ----

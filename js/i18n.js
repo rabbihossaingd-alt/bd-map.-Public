@@ -543,7 +543,31 @@ const EXACT = {
   'ফাইল, ছবি বা ভিডিও': 'File, photo or video',
   'ফোন থেকে বেছে নিন': 'Choose from your phone',
   'জায়গা': 'Place',
-  'আপনার লোকেশন বা ম্যাপে খোলা জায়গা': 'Your location or the place open on the map'
+  'আপনার লোকেশন বা ম্যাপে খোলা জায়গা': 'Your location or the place open on the map',
+  // Studio
+  'নতুন স্টোরি': 'New story',
+  'নতুন রিল': 'New reel',
+  'গ্যালারি থেকে বেছে নিন': 'Choose from gallery',
+  'ছবি ও ভিডিও এখানে': 'Photos and videos here',
+  'রিলের জন্য ভিডিও': 'A video for your reel',
+  '২৪ ঘণ্টার স্টোরি': 'A story for 24 hours',
+  'গ্যালারি থেকে বেছে নিন, অথবা এখনই ক্যামেরায় তুলুন।': 'Pick from your gallery, or shoot with the camera now.',
+  'গ্যালারি থেকে ভিডিও দিন, অথবা ক্যামেরায় রেকর্ড করুন — গান ও ফিল্টার পরে।': 'Pick a video, or record one — music and filters come next.',
+  'শুধু লেখা পোস্ট করুন': 'Post just words',
+  'এডিট': 'Edit',
+  'ফিল্টার': 'Filters',
+  'শেয়ার করুন': 'Share',
+  'গান বাছুন': 'Choose music',
+  'রিল বা পোস্টের সাথে বাজবে': 'Plays with your reel or post',
+  'কোথা থেকে বাজবে': 'Start at',
+  'বাছুন': 'Use',
+  'বাছা হয়েছে': 'Selected',
+  'গান সরান': 'Remove music',
+  'BD Map Music — কপিরাইট ছাড়া, যে কেউ ব্যবহার করতে পারেন': 'BD Map Music — free for anyone to use',
+  'রিলের মূল অডিও — অন্যদের রিলের শব্দ দিয়ে বানান': 'Original audio from reels — make yours with their sound',
+  'এখনো কোনো রিল নেই।': 'No reels yet.',
+  'পোস্ট হয়েছে।': 'Posted.',
+  'রিল পোস্ট হয়েছে।': 'Reel posted.'
 };
 
 // Sentences with a number or a name inside. First match wins; N is a number as the app prints it.

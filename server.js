@@ -1249,6 +1249,19 @@ db.exec('CREATE INDEX IF NOT EXISTS posts_user ON posts (user, id)');
 db.exec(`CREATE TABLE IF NOT EXISTS post_likes (post INTEGER NOT NULL, user INTEGER NOT NULL, PRIMARY KEY (post, user))`);
 if (!db.prepare("SELECT COUNT(*) AS n FROM pragma_table_info('post_likes') WHERE name = 'made'").get().n) db.exec('ALTER TABLE post_likes ADD COLUMN made INTEGER NOT NULL DEFAULT 0');
 if (!db.prepare("SELECT COUNT(*) AS n FROM pragma_table_info('posts') WHERE name = 'views'").get().n) db.exec('ALTER TABLE posts ADD COLUMN views INTEGER NOT NULL DEFAULT 0');
+// A post's look and sound: fx is a filter name; music is 'gen:<track>' (one of the app's own tracks) or 'post:<id>'
+// (another video's original sound), starting mstart seconds in; orig says whether the video's own sound is kept.
+for (const [col, def] of [['fx', "TEXT NOT NULL DEFAULT ''"], ['music', "TEXT NOT NULL DEFAULT ''"], ['mstart', 'REAL NOT NULL DEFAULT 0'], ['orig', 'INTEGER NOT NULL DEFAULT 1']])
+  if (!db.prepare("SELECT COUNT(*) AS n FROM pragma_table_info('posts') WHERE name = ?").get(col).n) db.exec(`ALTER TABLE posts ADD COLUMN ${col} ${def}`);
+const FX = ['', 'bright', 'warm', 'cool', 'mono', 'vintage', 'drama', 'soft', 'sunset', 'green', 'fade'];
+const GEN_TRACKS = ['dhaka-nights', 'sunrise', 'river-lofi', 'baul-road', 'monsoon', 'festival', 'tea-garden', 'city-run'];
+// What a post may say about its sound: a known track, or the original sound of a video post that still exists.
+function cleanMusic(m) {
+  const s = String(m || '');
+  if (s.startsWith('gen:') && GEN_TRACKS.includes(s.slice(4))) return s;
+  if (/^post:\d+$/.test(s) && db.prepare("SELECT 1 FROM posts WHERE id = ? AND kind = 'video'").get(Number(s.slice(5)))) return s;
+  return '';
+}
 db.exec(`CREATE TABLE IF NOT EXISTS post_saves (post INTEGER NOT NULL, user INTEGER NOT NULL, made INTEGER NOT NULL, PRIMARY KEY (post, user))`);
 // A story is a photo or video that shows for 24 hours and is then deleted, file and all.
 db.exec(`CREATE TABLE IF NOT EXISTS stories (id INTEGER PRIMARY KEY, user INTEGER NOT NULL, kind TEXT NOT NULL, file TEXT NOT NULL, poster TEXT NOT NULL DEFAULT '', created INTEGER NOT NULL)`);
@@ -1270,7 +1283,14 @@ const POST_SELECT = `SELECT p.*, u.name, u.pic_v, u.verified, (SELECT COUNT(*) F
   FROM posts p JOIN users u ON u.id = p.user WHERE u.banned = 0`;
 const shownPost = p => ({ id: p.id, kind: p.kind, src: p.file ? 'media/' + p.file : '', poster: p.poster ? 'media/' + p.poster : '', caption: p.caption, saved: !!p.saved,
   place: p.place ? { label: p.place, lat: p.lat, lon: p.lon } : null, created: p.created, likes: p.likes, comments: p.comments, liked: !!p.liked,
-  views: p.views || 0, user: { id: p.user, name: p.name, pic: p.pic_v, verified: !!p.verified } });
+  views: p.views || 0, fx: p.fx || '', music: p.music ? { id: p.music, start: p.mstart || 0, label: musicLabel(p.music) } : null, orig: p.orig !== 0,
+  user: { id: p.user, name: p.name, pic: p.pic_v, verified: !!p.verified } });
+// "dhaka-nights" for the app's own tracks; "<name> · original audio" (with where to find it) for another reel's sound.
+function musicLabel(m) {
+  if (m.startsWith('gen:')) return { kind: 'gen', track: m.slice(4) };
+  const src = db.prepare('SELECT p.id, p.file, u.name FROM posts p JOIN users u ON u.id = p.user WHERE p.id = ?').get(Number(m.slice(5)));
+  return src ? { kind: 'post', post: src.id, src: 'media/' + src.file, by: src.name } : { kind: 'gone' };
+}
 
 //   POST /api/explore/media   (the file itself as the body, Content-Type image/* or video/*) -> { media }
 //   POST /api/explore/post    {media, poster?: data URL, caption, place?: {label, lat, lon}}  -> { post }
@@ -1290,6 +1310,12 @@ async function exploreApi(req, res, action, query) {
                                AND (?6 = 0 OR EXISTS (SELECT 1 FROM post_saves s WHERE s.post = p.id AND s.user = ?1)) ORDER BY p.id DESC LIMIT 30`)
         .all(meId, before, user, kind, q ? '%' + q + '%' : '', query.get('saved') && meId ? 1 : 0);
       return json(res, 200, { posts: rows.map(shownPost) });
+    }
+    if (action === 'audios') {
+      const rows = db.prepare(`SELECT p.id, p.file, p.poster, p.caption, p.created, u.name, u.pic_v, u.id AS uid, (SELECT COUNT(*) FROM posts x WHERE x.music = 'post:' || p.id) AS uses
+        FROM posts p JOIN users u ON u.id = p.user WHERE p.kind = 'video' AND p.orig = 1 AND p.music = '' AND u.banned = 0 ORDER BY uses DESC, p.id DESC LIMIT 30`).all();
+      return json(res, 200, { tracks: GEN_TRACKS, audios: rows.map(r => ({ id: 'post:' + r.id, post: r.id, src: 'media/' + r.file, poster: r.poster ? 'media/' + r.poster : '', uses: r.uses, created: r.created,
+        user: { id: r.uid, name: r.name, pic: r.pic_v } })) });
     }
     if (action === 'stories') {
       // Everyone's stories from the last 24 hours, grouped by person: mine first, then the newest.
@@ -1373,8 +1399,10 @@ async function exploreApi(req, res, action, query) {
       return json(res, 200, { ok: true });
     }
     const place = body.place && inBangladesh(body.place) ? body.place : null;
-    const { lastInsertRowid } = db.prepare('INSERT INTO posts (user, kind, file, poster, caption, place, lat, lon, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
-      .run(me.id, up.kind, up.name, poster, cleanText(body.caption, 500), place ? cleanText(place.label, 80) : '', place ? place.lat : null, place ? place.lon : null, now);
+    const fx = FX.includes(body.fx) ? body.fx : '', music = cleanMusic(body.music);
+    const mstart = Math.max(0, Math.min(600, Number(body.mstart) || 0)), orig = body.orig === false ? 0 : 1;
+    const { lastInsertRowid } = db.prepare('INSERT INTO posts (user, kind, file, poster, caption, place, lat, lon, created, fx, music, mstart, orig) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(me.id, up.kind, up.name, poster, cleanText(body.caption, 500), place ? cleanText(place.label, 80) : '', place ? place.lat : null, place ? place.lon : null, now, fx, music, mstart, orig);
     db.prepare('UPDATE uploads SET used = 1 WHERE name = ?').run(up.name);
     return json(res, 200, { post: shownPost(db.prepare(`${POST_SELECT} AND p.id = ?2`).get(me.id, Number(lastInsertRowid))) });
   }
