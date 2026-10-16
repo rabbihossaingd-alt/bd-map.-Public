@@ -131,7 +131,30 @@ async function loadRecentFares() {
   });
   $('lead-more').addEventListener('click', openTop50);
   enter.community = () => { loadLeaders(); loadRecentFares(); };
-  if (current === 'community') enter.community();
+  // নগরপথ: local buses and reporting a fare, one tab each (as Transport has bus, train and launch)
+  const seg = $('cx-seg');
+  const showCity = (m, animate = true) => {
+    if (!['bus', 'fare'].includes(m)) m = 'bus';
+    for (const b of seg.querySelectorAll('button')) b.setAttribute('aria-selected', String(b.dataset.m === m));
+    for (const k of ['bus', 'fare']) {
+      const pane = $('cx-' + k), on = k === m;
+      if (on && pane.hidden) { pane.hidden = false; if (animate) { pane.classList.remove('in'); void pane.offsetWidth; pane.classList.add('in'); } }
+      else if (!on) pane.hidden = true;
+    }
+    try { localStorage.setItem('bdmap.cx', m); } catch { /* storage off */ }
+    if (m === 'fare') enter.community();
+  };
+  for (const b of seg.querySelectorAll('button')) b.addEventListener('click', () => showCity(b.dataset.m));
+  $('cx-c-bus').textContent = `${num(LOCAL_ROUTES.length)}টি বাস · ${num(Object.keys(STOPS).length)} থামার জায়গা`;
+  const busesBefore = enter.buses;
+  enter.buses = () => {
+    if (busesBefore) busesBefore();
+    let m = 'bus';
+    try { m = localStorage.getItem('bdmap.cx') || 'bus'; } catch { /* storage off */ }
+    showCity(m, false);
+  };
+  if (current === 'buses') enter.buses();
+
 })();
 
 // Fares people reported for the trip now on the map, added above the bus list.

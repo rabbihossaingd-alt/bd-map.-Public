@@ -231,6 +231,7 @@ function revealOnScroll(root) {
 function route() {
   let name = location.hash.replace(/^#\/?/, '') || 'home';
   if (name === 'intercity') name = 'districts';   // old link
+  if (name === 'community') { try { localStorage.setItem('bdmap.cx', 'fare'); } catch { /* storage off */ } history.replaceState(null, '', '#/buses'); name = 'buses'; }   // now a tab of নগরপথ
   current = PAGES.includes(name) ? name : 'home';
   for (const p of PAGES) $('page-' + p).classList.toggle('on', p === current);
   for (const a of document.querySelectorAll('[data-nav]')) a.classList.toggle('on', a.dataset.nav === current);

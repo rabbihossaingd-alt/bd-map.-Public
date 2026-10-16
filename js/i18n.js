@@ -38,7 +38,8 @@ const EXACT = {
 
   // trains, launches, fare reports, More page
   'সায়েদাবাদ': 'Sayedabad', 'গাবতলী': 'Gabtoli', 'মহাখালী': 'Mohakhali',
-  'ট্রেন': 'Train', 'আরও': 'More', 'ভাষা': 'Language', 'লঞ্চ': 'Launch', 'শহরে চলাচল': 'In the city', 'দূরপাল্লা': 'Long distance', 'BD Map-এর সব কিছু, এক জায়গায়।': 'Everything in BD Map, in one place.',
+  'ট্রেন': 'Train', 'আরও': 'More', 'ভাষা': 'Language', 'লঞ্চ': 'Launch', 'নগরপথ': 'City ways', 'শহরে কীভাবে যাবেন?': 'Getting around the city', 'কোন লোকাল বাস কোথায় যায়, আর আসল ভাড়া কত — যাঁরা যান, তাঁদের কাছ থেকে।': 'Which local bus goes where, and what the fare really is — from the people who ride.',
+  'ভাড়া জানান': 'Report a fare', 'প্রতিবার +১০ পয়েন্ট · লিডারবোর্ড': '+10 points each time · leaderboard', 'লোকাল বাস · ভাড়া জানান ও পয়েন্ট': 'Local buses · report fares, earn points', 'শহরে চলাচল': 'In the city', 'দূরপাল্লা': 'Long distance', 'BD Map-এর সব কিছু, এক জায়গায়।': 'Everything in BD Map, in one place.',
   'কোন বাস কোথায় যায়, কোথায় থামে': 'Which bus goes where, and where it stops', 'লোকাল বাস, সিএনজি, লঞ্চ · লিডারবোর্ড': 'Local bus, CNG, launch · leaderboard',
   'জেলা থেকে জেলা, ট্রেন, লঞ্চ': 'District to district, trains, launches', 'লোকাল বাস': 'Local bus', 'কোথায় যাবেন?': 'Where to?', 'কোথা থেকে': 'From', 'কোথায় যাবেন': 'To', 'বাস': 'Bus', 'বাস · ট্রেন · লঞ্চ': 'Bus · Train · Launch', 'দূরপাল্লার বাস, ট্রেন আর লঞ্চ — রুট, সময় আর ভাড়া এক জায়গায়।': 'Long-distance buses, trains and launches — routes, times and fares in one place.',
   'যেকোনো দুটি জেলার মধ্যে দূরপাল্লার বাসের ভাড়া, আর কোন রুটে কোন বাস চলে।': 'Bus fares between any two districts, and which buses run on the route.', 'বাস কোম্পানি': 'Bus companies', 'তারায় চাপ দিয়ে রেটিং দিন।': 'Tap a star to rate.',

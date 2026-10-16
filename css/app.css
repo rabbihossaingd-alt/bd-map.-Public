@@ -3140,3 +3140,20 @@ html { overscroll-behavior-x: none; }
 /* the fare-report kinds carry their icon */
 #give-modes .chip { display: inline-flex; align-items: center; gap: 7px; }
 #give-modes .chip .ic { display: grid; font-size: 16px; }
+
+/* ================= নগরপথ: local buses and reporting a fare ================= */
+.tmode.two { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 680px; }
+.tmode .m-city { --tint: #14b8a6; } .tmode .m-city .mi2 { background: linear-gradient(145deg, #2dd4bf, #0d9488); --sh: rgba(13, 148, 136, .34); }
+.tmode .m-fare { --tint: #f5a524; } .tmode .m-fare .mi2 { background: linear-gradient(145deg, #ffbe3d, #f08a00); --sh: rgba(240, 138, 0, .34); }
+.cx .lead-head { margin: 0 0 18px; padding: 0; text-align: left; }
+.cx .lead-head .eyebrow { display: none; }
+.cx .lead-head h2 { font-size: clamp(24px, 3.6vw, 30px); letter-spacing: -.02em; line-height: 1.2; margin: 0 0 6px; }
+.cx .lead-head p { font-size: 15px; color: var(--muted); max-width: 560px; margin: 0; }
+.cx .give-card, .cx .lead-card, .cx .points-info { border-radius: 24px; border: 1px solid var(--tx-line); background: var(--tx-card); box-shadow: var(--shadow-1); }
+.cx #bus-grid .card { border-radius: 20px; border: 1px solid var(--tx-line); background: var(--tx-card); transition: transform .45s var(--spring), box-shadow .45s var(--spring); }
+.cx #bus-grid .card:hover { transform: translateY(-2px); box-shadow: 0 12px 28px rgba(0, 0, 0, .15); }
+.cx #hubs { margin: 2px 0 6px; }
+/* a note line is a line, not a chat note (they shared the class name) */
+.label.note { position: static; display: block; width: auto; flex: initial; justify-items: initial; padding: 0; }
+.label.note:empty, .label.note[hidden] { display: none; }
+.cx .give-wrap { padding-top: 0; } .cx .lead-head h2 { margin-top: 0; }

@@ -20,7 +20,7 @@
     <a href="#/" data-nav="home"><i data-ic="home"></i><span>হোম</span></a>
     <a href="#/explore" data-nav="explore"><i data-ic="feed"></i><span>এক্সপ্লোর</span><em class="ndot" data-notify-dot hidden></em></a>
     <a href="#/trip" data-nav="trip"><i data-ic="route"></i><span>ম্যাপ</span></a>
-    <a href="#/buses" data-nav="buses" class="desk-only"><i data-ic="bus"></i><span>ঢাকার বাস</span></a>
+    <a href="#/buses" data-nav="buses" class="desk-only"><i data-ic="busFront"></i><span>নগরপথ</span></a>
     <a href="#/train" data-nav="train" class="desk-only"><i data-ic="trainFront"></i><span>যাতায়াত</span></a>
     <a href="#/chat" data-nav="chat" class="phone-only"><i data-ic="chat"></i><span>মেসেজ</span><em class="nbadge" data-chat-badge hidden></em></a>
     <a href="#/districts" data-nav="districts" class="desk-only"><i data-ic="city"></i><span>জেলা</span></a>
@@ -134,10 +134,21 @@
   </section>
 
   <!-- Dhaka buses -->
+  <!-- নগরপথ: getting about the city — local buses, and the fares people report -->
   <section class="page" id="page-buses">
-    <div class="wrap">
-      <div class="page-head"><h2>ঢাকার বাস</h2><p>বাসের নাম বা যেকোনো জায়গা লিখুন — কোন বাস যায় দেখাবে।</p></div>
-      <div class="filter" style="position: relative">
+    <div class="wrap tx cx">
+      <div class="tx-hero">
+        <span class="tx-eyebrow"><i data-ic="pin"></i><span>নগরপথ</span></span>
+        <h2>শহরে কীভাবে যাবেন?</h2>
+        <p>কোন লোকাল বাস কোথায় যায়, আর আসল ভাড়া কত — যাঁরা যান, তাঁদের কাছ থেকে।</p>
+      </div>
+      <div class="tmode two" id="cx-seg" role="tablist" aria-label="নগরপথ">
+        <button role="tab" data-m="bus" class="m-city" aria-selected="true"><span class="mi2"><i data-ic="busFront"></i></span><span class="mt"><b>লোকাল বাস</b><small id="cx-c-bus"></small></span></button>
+        <button role="tab" data-m="fare" class="m-fare" aria-selected="false"><span class="mi2"><i data-ic="coin"></i></span><span class="mt"><b>ভাড়া জানান</b><small>প্রতিবার +১০ পয়েন্ট · লিডারবোর্ড</small></span></button>
+      </div>
+      <div class="tx-pane" id="cx-bus" role="tabpanel">
+        <div class="tx-sub"><h3>লোকাল বাস</h3><p>বাসের নাম বা যেকোনো জায়গা লিখুন — কোন বাস যায় দেখাবে।</p></div>
+      <div class="filter tx-find" style="position: relative">
         <i data-ic="search"></i>
         <input id="bus-filter" autocomplete="off" placeholder="যেমন: তুরাগ, jatrabari, ঢাকা মেডিকেল" aria-label="বাস বা জায়গা খুঁজুন">
         <div class="suggest" id="bus-suggest" style="left: 0; right: 0" hidden></div>
@@ -145,12 +156,8 @@
       <div class="chips" id="hubs"></div>
       <div class="label note" id="bus-note" hidden></div>
       <div class="grid" id="bus-grid"></div>
-    </div>
-  </section>
-
-  <!-- Community: awareness, fares people know, points -->
-  <section class="page" id="page-community">
-    <div class="wrap give-wrap">
+      </div>
+      <div class="tx-pane give-wrap" id="cx-fare" role="tabpanel" hidden>
       <div class="lead-head">
         <span class="eyebrow">সবাই মিলে</span>
         <h2>আপনি জানেন,<br>অন্যরা জানে না।</h2>
@@ -193,8 +200,12 @@
 
       <div class="label" id="recent-label" hidden>সম্প্রতি যাঁরা জানিয়েছেন</div>
       <div class="recent-fares" id="recent-fares"></div>
+      </div>
     </div>
   </section>
+
+  <!-- Community: awareness, fares people know, points -->
+  <section class="page" id="page-community" hidden></section>
 
   <!-- Explore: everyone's photos and videos -->
   <section class="page" id="page-explore">
@@ -425,8 +436,7 @@
 
       <div class="label">শহরে চলাচল</div>
       <div class="card menu">
-        <a href="#/buses"><i class="mi c-teal" data-ic="busFront"></i><span><b>ঢাকার বাস</b><em>কোন বাস কোথায় যায়, কোথায় থামে</em></span><i class="chev" data-ic="chev"></i></a>
-        <a href="#/community"><i class="mi c-amber" data-ic="coin"></i><span><b>ভাড়া জানান ও পয়েন্ট</b><em>লোকাল বাস, সিএনজি, লঞ্চ · লিডারবোর্ড</em></span><i class="chev" data-ic="chev"></i></a>
+        <a href="#/buses"><i class="mi c-teal" data-ic="busFront"></i><span><b>নগরপথ</b><em>লোকাল বাস · ভাড়া জানান ও পয়েন্ট</em></span><i class="chev" data-ic="chev"></i></a>
       </div>
 
       <div class="label">দূরপাল্লা</div>
