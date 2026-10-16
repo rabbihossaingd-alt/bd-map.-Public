@@ -40,6 +40,7 @@ function closeStudio() {
   if (studio.preview) studio.preview.stop();
   if (studio.pre && studio.pre.xhr && !studio.pre.done) studio.pre.xhr.abort();
   if (studio.url) URL.revokeObjectURL(studio.url);
+  dropItems(studio);
   studio.box.remove();
   studio = null;
   document.body.classList.remove('studio-open');
@@ -67,8 +68,17 @@ const modeTitle = () => ({ post: 'নতুন পোস্ট', story: 'নত�
 function drawSource() {
   const st = studio;
   stopCamera();
-  const chooser = Object.assign(el('input'), { type: 'file', accept: st.mode === 'reel' ? 'video/*' : 'image/*,video/*', hidden: true });
-  chooser.addEventListener('change', () => { const f = chooser.files[0]; if (f) takeFile(f, false); });
+  const chooser = Object.assign(el('input'), { type: 'file', accept: st.mode === 'reel' ? 'video/*' : 'image/*,video/*', hidden: true, multiple: st.mode === 'post' });
+  chooser.addEventListener('change', () => {
+    const files = [...chooser.files];
+    if (files.length > 1 && st.mode === 'post') {
+      const photos = files.filter(f => f.type.startsWith('image')).slice(0, 10);
+      if (photos.length < files.length) chatToast(ME, files.length > 10 && photos.length === 10 ? tx('একটি পোস্টে ১০টি পর্যন্ত ছবি।', 'Up to 10 photos in one post.') : tx('একসাথে কয়েকটি বাছলে শুধু ছবি নেওয়া হয়; ভিডিও আলাদা পোস্ট করুন।', 'Several at once are photos only; post videos on their own.'));
+      if (photos.length > 1) { takeMany(photos); return; }
+      if (photos.length) { takeFile(photos[0], false); return; }
+    }
+    if (files[0]) takeFile(files[0], false);
+  });
   const stage = el('div', 'st-source');
   const art = el('div', 'st-art');
   art.innerHTML = `<span class="a">${svg('image')}</span><span class="b">${svg('play')}</span>`;
@@ -102,6 +112,7 @@ function takeFile(file, baked) {
   if (video && file.size > MAX_VIDEO) { chatToast(ME, LANG === 'en' ? 'The video is over 3 GB.' : 'ভিডিওটি ৩ জিবির বেশি। ছোট একটি দিন।'); return; }
   if (st.mode === 'reel' && !video) { chatToast(ME, 'রিলের জন্য একটি ভিডিও দিন।'); return; }
   if (st.url) URL.revokeObjectURL(st.url);
+  dropItems(st);
   const words = st.textStory != null && baked && !video;
   Object.assign(st, { file, kind: video ? 'video' : 'photo', url: URL.createObjectURL(file), baked, w: 0, h: 0, layers: words ? st.layers : [] });
   if (!words) st.textStory = null;
@@ -117,6 +128,27 @@ function preUpload(st) {
   pre.promise.catch(() => {});
 }
 const MAX_VIDEO = 3e9;
+// A carousel: st.items holds every photo with its own words and stickers; st.file/url/layers are the one being edited.
+function dropItems(st) {
+  if (!st.items) return;
+  for (const it of st.items) if (it.url !== st.url) URL.revokeObjectURL(it.url);
+  st.items = null;
+}
+async function takeMany(files) {
+  const st = studio;
+  if (st.url) URL.revokeObjectURL(st.url);
+  dropItems(st);
+  st.textStory = null;
+  st.items = files.map(f => ({ file: f, url: URL.createObjectURL(f), layers: [], w: 0, h: 0 }));
+  for (const it of st.items) await mediaSize(Object.assign(it, { kind: 'photo' }));      // the first one's shape is everyone's
+  showItem(0);
+}
+function showItem(i) {
+  const st = studio, it = st.items[i];
+  st.cur = i;
+  Object.assign(st, { file: it.file, url: it.url, kind: 'photo', baked: false, layers: it.layers, w: it.w, h: it.h });
+  drawEdit();
+}
 // The background of a words-only story: one of Instagram's gradients, as a picture.
 const WORD_GRADIENTS = [['#f58529', '#dd2a7b', '#8134af'], ['#00c6ff', '#0072ff', '#3a0ca3'], ['#11998e', '#38ef7d', '#0b6e4f'], ['#ff512f', '#f09819', '#ffd200'],
   ['#232526', '#414345', '#0f0f0f'], ['#fc466b', '#3f5efb', '#1d1d6b'], ['#006a4e', '#00a86b', '#f42a41']];
@@ -337,7 +369,7 @@ async function drawEdit() {
   const st = studio;
   await mediaSize(st);
   if (studio !== st) return;
-  const shape = st.shape = frameShape(st);
+  const shape = st.shape = frameShape(st.items ? { mode: st.mode, w: st.items[0].w, h: st.items[0].h } : st);
   const frame = el('div', 'st-frame ' + (shape.fit === 'contain' ? 'fit' : 'fill'));
   frame.style.aspectRatio = String(shape.ratio);
   frame.style.width = `min(100% - 20px, 560px, (100dvh - 236px) * ${shape.ratio.toFixed(4)})`;
@@ -436,9 +468,49 @@ async function drawEdit() {
   next.addEventListener('click', () => (st.mode === 'story' ? share() : drawDetails()));
   foot.append(shapeNote, next);
   const body = el('div', 'st-edit');
-  body.append(frame, strip, tools);
+  body.append(frame, strip);
+  if (st.items) body.appendChild(itemsRow(st));
+  body.appendChild(tools);
   st.box.replaceChildren(bar, body, foot);
   if (st.textStory != null && !st.layers.length) editText(null);
+}
+
+function itemsRow(st) {
+  const row = el('div', 'st-items');
+  st.items.forEach((it, i) => {
+    const b = el('button', 'st-item' + (i === st.cur ? ' on' : ''));
+    b.style.backgroundImage = `url("${it.url}")`;
+    b.appendChild(el('small', null, num(i + 1)));
+    b.addEventListener('click', () => { if (i !== st.cur) showItem(i); });
+    if (i === st.cur && st.items.length > 1) {
+      const x = el('i', 'del');
+      x.innerHTML = svg('close');
+      x.setAttribute('aria-label', tx('এই ছবি বাদ দিন', 'Remove this photo'));
+      x.addEventListener('click', e => {
+        e.stopPropagation();
+        URL.revokeObjectURL(it.url);
+        st.items.splice(i, 1);
+        if (st.items.length === 1) { const last = st.items[0]; st.items = null; Object.assign(st, { file: last.file, url: last.url, layers: last.layers, w: last.w, h: last.h }); drawEdit(); return; }
+        showItem(Math.min(i, st.items.length - 1));
+      });
+      b.appendChild(x);
+    }
+    row.appendChild(b);
+  });
+  if (st.items.length < 10) {
+    const add = el('button', 'st-item add');
+    add.innerHTML = svg('plus');
+    add.setAttribute('aria-label', tx('আরও ছবি', 'More photos'));
+    const pick = Object.assign(el('input'), { type: 'file', accept: 'image/*', multiple: true, hidden: true });
+    pick.addEventListener('change', async () => {
+      const more = [...pick.files].filter(f => f.type.startsWith('image')).slice(0, 10 - st.items.length);
+      for (const f of more) { const it = { file: f, url: URL.createObjectURL(f), layers: [], w: 0, h: 0, kind: 'photo' }; await mediaSize(it); st.items.push(it); }
+      showItem(st.cur);
+    });
+    add.addEventListener('click', () => pick.click());
+    row.append(add, pick);
+  }
+  return row;
 }
 
 // Voice: speak over the video while it plays; the recording becomes the post's sound (the video's own sound stays).
@@ -524,6 +596,7 @@ function drawDetails() {
     if (st.cover && st.cover.url) card.appendChild(Object.assign(el('img', 'sd-cover'), { src: st.cover.url, alt: '' }));
     if (st.layers.length) layerBox(pv, st.layers);
   } else if (st.layers.length) { const b = el('div', 'lyr full'); paintLayers(b, st.layers); card.appendChild(b); }
+  if (st.items) card.appendChild(el('span', 'sd-count', `1/${num(st.items.length)}`));
   const pvBtn = el('button', 'sd-chip top', LANG === 'en' ? 'Preview' : 'প্রিভিউ');
   pvBtn.addEventListener('click', () => openPreview(st));
   card.appendChild(pvBtn);
@@ -764,7 +837,8 @@ async function saveDraft(st, btn) {
   try {
     const thumb = st.kind === 'video' ? (st.cover && st.cover.url) || await videoPoster(st.file) : '';
     const d = { id: st.draftId || Date.now(), made: Date.now(), file: st.file, kind: st.kind, mode: st.mode, fx: st.fx, music: st.music, orig: st.orig, layers: st.layers, caption: st.caption || '',
-      place: st.place || null, tags: st.tags || [], audience: st.audience || 'all', at: st.at || 0, nocomm: !!st.nocomm, hidelikes: !!st.hidelikes, aname: st.aname || '', cover: st.cover || null, thumb, textStory: st.textStory };
+      place: st.place || null, tags: st.tags || [], audience: st.audience || 'all', at: st.at || 0, nocomm: !!st.nocomm, hidelikes: !!st.hidelikes, aname: st.aname || '', cover: st.cover || null, thumb, textStory: st.textStory,
+      items: st.items ? st.items.map(it => ({ file: it.file, layers: it.layers })) : null };
     await draftsTx('readwrite', s => s.put(d));
     closeStudio();
     chatToast(ME, LANG === 'en' ? 'Saved to drafts on this device.' : 'ড্রাফট সেভ হয়েছে — এই ডিভাইসে থাকবে।');
@@ -794,6 +868,12 @@ async function openDrafts() {
         const layers = d.layers || [];
         st.textStory = st.textStory != null ? st.textStory : null;
         if (st.url) URL.revokeObjectURL(st.url);
+        if (d.items && d.items.length > 1) {
+          dropItems(st);
+          st.items = d.items.map(it => ({ file: it.file, url: URL.createObjectURL(it.file), layers: it.layers || [], w: 0, h: 0, kind: 'photo' }));
+          Promise.all(st.items.map(mediaSize)).then(() => showItem(0));
+          return;
+        }
         Object.assign(st, { file: d.file, kind: d.kind, url: URL.createObjectURL(d.file), baked: false, w: 0, h: 0, layers });
         drawEdit();
       });
@@ -829,13 +909,27 @@ async function share(btn, progress, note) {
     let blob = st.file, type = st.file.type || 'video/mp4', fx = st.fx, poster = '', layers = [];
     const shape = st.shape || frameShape(st);
     let w = st.w, h = st.h;
-    if (st.kind === 'photo') {
+    let more = [];
+    if (st.items) {
+      const parts = [];
+      for (const it of st.items) parts.push(await bakeFrame(it, shape, canvasFilters ? fx : ''));
+      const total = parts.reduce((a, p) => a + p.blob.size, 0);
+      let done = 0;
+      const names = [];
+      for (const p of parts) {
+        names.push(await uploadMedia(p.blob, 'image/jpeg', (f, sent) => onProgress((done + sent) / total, done + sent, total)));
+        done += p.blob.size;
+      }
+      blob = null; w = parts[0].w; h = parts[0].h; type = 'image/jpeg';
+      if (canvasFilters) fx = '';
+      [st.preMedia, ...more] = names;
+    } else if (st.kind === 'photo') {
       const baked = await bakeFrame(st, shape, canvasFilters ? fx : '');
       blob = baked.blob; w = baked.w; h = baked.h;
       if (canvasFilters) fx = '';
       type = 'image/jpeg';
     } else { poster = (st.cover && st.cover.url) || await videoPoster(st.file); layers = st.layers; }
-    let media;
+    let media = st.items ? st.preMedia : null;
     if (st.kind === 'video' && st.pre && st.pre.file === st.file) {
       onProgress(st.pre.f, st.pre.sent, st.pre.total);
       st.pre.on = onProgress;
@@ -844,7 +938,7 @@ async function share(btn, progress, note) {
     if (!media) media = await uploadMedia(blob, type, onProgress);
     const send = m => st.mode === 'story' ? exploreApi('story', { media: m, poster, w, h, layers }) : exploreApi('post', { poster, w, h, layers, caption: st.caption || '', place: st.place || null, fx, music: st.music ? st.music.id : '', mstart: st.music ? st.music.start : 0,
       orig: st.kind === 'video' ? st.orig : true, audience: st.audience || 'all', at: st.at || 0, tags: (st.tags || []).map(t => t.id), nocomm: !!st.nocomm, hidelikes: !!st.hidelikes,
-      media: m, aname: st.aname || '', story: !!st.alsoStory });
+      media: m, more, aname: st.aname || '', story: !!st.alsoStory && !more.length });
     // an upload made long before Share (over an hour) is cleared by the server: then it goes up again
     try { await send(media); } catch (e) { if (e.message !== 'media') throw e; await send(await uploadMedia(blob, type, onProgress)); }
     if (st.draftId) draftsTx('readwrite', s => s.delete(st.draftId)).catch(() => {});

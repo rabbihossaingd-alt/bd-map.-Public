@@ -117,6 +117,7 @@ function feedCard(p, onGone) {
   head.append(who, more);
 
   const media = el('div', 'fc-media' + (p.fx ? ' fx-' + p.fx : ''));
+  const bar0 = el('div', 'fc-bar');
   // Instagram's shapes: as the picture is, between 1.91:1 and 4:5 (a 16:9 YouTube-size video stays 16:9).
   // A video may be as tall as a reel (9:16), as in Instagram's feed.
   const shapeIt = (w, h) => { if (w && h) media.style.aspectRatio = String(Math.min(1.91, Math.max(p.kind === 'video' ? 9 / 16 : 0.8, w / h))); };
@@ -196,9 +197,16 @@ function feedCard(p, onGone) {
       photoMusic().observe(media);
       media._sound = sound;
     }
-    const img = Object.assign(el('img'), { src: p.src, alt: p.caption || '', loading: 'lazy' });
-    if (!p.w) img.addEventListener('load', () => shapeIt(img.naturalWidth, img.naturalHeight));
-    media.appendChild(img);
+    if (p.more && p.more.length) {
+      const [car, count, l, r] = carousel(p, bar0);
+      media.classList.add('multi');
+      media.append(car, count, l, r);
+      if (!p.w) car.firstChild.addEventListener('load', () => shapeIt(car.firstChild.naturalWidth, car.firstChild.naturalHeight));
+    } else {
+      const img = Object.assign(el('img'), { src: p.src, alt: p.caption || '', loading: 'lazy' });
+      if (!p.w) img.addEventListener('load', () => shapeIt(img.naturalWidth, img.naturalHeight));
+      media.appendChild(img);
+    }
     // Double tap (or double click) on a photo likes it, with a heart over the picture.
     let last = 0;
     media.addEventListener('click', () => {
@@ -212,7 +220,7 @@ function feedCard(p, onGone) {
   }
   media.appendChild(burst);
 
-  const bar = el('div', 'fc-bar');
+  const bar = bar0;
   const talk = el('button', 'fc-btn');
   talk.innerHTML = svg('chat');
   talk.setAttribute('aria-label', 'মন্তব্য');
@@ -284,6 +292,7 @@ function postTile(p, onGone, user) {
   if (p.kind === 'text') { tile.classList.add('texty', 'g' + (p.id % 5)); tile.appendChild(Object.assign(el('span', 'tt no-tr'), { textContent: p.caption })); }
   else if (p.kind === 'video' && !p.poster) tile.classList.add('blank'); else tile.appendChild(img);
   if (p.kind === 'video') tile.appendChild(svgEl('play', 'play'));
+  if (p.more && p.more.length) tile.appendChild(svgEl('copy', 'multi'));
   const meta = el('span', 'meta');
   meta.append(svgEl('heart'), document.createTextNode(num(p.likes)));
   tile.appendChild(meta);
@@ -325,6 +334,12 @@ async function openPost(id, onGone) {
   const media = el('div', 'post-media');
   if (p.kind === 'text') { media.className = 'fc-text g' + (p.id % 5); media.appendChild(Object.assign(el('p', 'no-tr'), { textContent: p.caption })); }
   else if (p.kind === 'video') media.appendChild(Object.assign(el('video'), { src: p.src, poster: p.poster, controls: true, playsInline: true, preload: 'metadata' }));
+  else if (p.more && p.more.length) {
+    const [car, count, l, r, dots] = carousel(p);
+    media.classList.add('multi');
+    if (p.w && p.h) media.style.aspectRatio = String(Math.min(1.91, Math.max(.8, p.w / p.h)));
+    media.append(car, count, l, r, dots);
+  }
   else media.appendChild(Object.assign(el('img'), { src: p.src, alt: p.caption }));
 
   const who = el('div', 'person tap post-who');
@@ -392,6 +407,33 @@ function closeReels() {
   reelsBox = null;
   document.body.classList.remove('reels-open');
 }
+// A post of several photos: swiped sideways, with dots and a "1/3" that fades, as on Instagram.
+function carousel(p, dotsHost) {
+  const srcs = [p.src, ...(p.more || [])];
+  const car = el('div', 'fc-car');
+  for (const src of srcs) car.appendChild(Object.assign(el('img'), { src, alt: p.caption || '', loading: 'lazy', draggable: false }));
+  const count = el('span', 'fc-count', `1/${num(srcs.length)}`);
+  const dots = el('div', 'fc-dots');
+  for (let i = 0; i < srcs.length; i++) dots.appendChild(el('i', i ? '' : 'on'));
+  let at = 0, fade = 0;
+  car.addEventListener('scroll', () => {
+    const i = Math.round(car.scrollLeft / car.clientWidth);
+    if (i === at) return;
+    at = i;
+    count.textContent = `${num(i + 1)}/${num(srcs.length)}`;
+    [...dots.children].forEach((d, n) => d.classList.toggle('on', n === i));
+    count.classList.add('show');
+    clearTimeout(fade);
+    fade = setTimeout(() => count.classList.remove('show'), 1600);
+  }, { passive: true });
+  // a mouse: arrows on the sides
+  const arrow = (dir) => { const b = el('button', 'fc-arrow ' + (dir < 0 ? 'l' : 'r')); b.innerHTML = svg('chev'); b.setAttribute('aria-label', dir < 0 ? 'আগের ছবি' : 'পরের ছবি'); b.addEventListener('click', e => { e.stopPropagation(); car.scrollBy({ left: dir * car.clientWidth, behavior: 'smooth' }); }); return b; };
+  count.classList.add('show');
+  setTimeout(() => count.classList.remove('show'), 2200);
+  if (dotsHost) dotsHost.appendChild(dots);
+  return [car, count, arrow(-1), arrow(1), dots];
+}
+
 // Instagram's "use audio": a new reel with a post's sound (its own sound, or the track it uses).
 function audioOf(p) {
   const l = p.music && p.music.label;

@@ -772,6 +772,7 @@ async function iceServers() {
   } catch (e) { console.error('turn credentials failed:', e.message); }
   return [...ICE, ...meteredIce.list];
 }
+const relayTests = [];
 const hasTurn = () => !!process.env.TURN_URL || !!(process.env.METERED_APP && process.env.METERED_KEY);
 
 //   GET  /api/chat/stream            server-sent events: message, read, typing, presence, friends, signal
@@ -883,6 +884,11 @@ async function chatApi(req, res, action, query) {
       return json(res, 200, { messages: cq.history.all(...pair(me.id, other), before).reverse().map(shown), ok: chatOpen(me.id, other) });
     }
     if (action === 'ice') return json(res, 200, { iceServers: await iceServers(), relay: hasTurn() });
+    if (action === 'relaytest') {                  // the app checked, quietly, that it can reach the relay
+      relayTests.unshift({ at: Date.now(), ok: query.get('ok') === '1', kinds: String(query.get('k') || '').slice(0, 60), ms: Number(query.get('ms')) || 0 });
+      relayTests.length = Math.min(relayTests.length, 20);
+      return json(res, 200, { ok: true });
+    }
     if (action === 'calldiag') {                    // a call that failed tells what each side could find (shows in the server log)
       console.log('call diag', me.id, String(query.get('d') || '').slice(0, 300));
       return json(res, 200, { ok: true });
@@ -1273,7 +1279,7 @@ for (const [col, def] of [['fx', "TEXT NOT NULL DEFAULT ''"], ['music', "TEXT NO
 // when scheduled); tags: the people in it (JSON ids); nocomm: comments off; hidelikes: only the owner sees the
 // count; aname: what its original sound is called.
 for (const [col, def] of [['audience', "TEXT NOT NULL DEFAULT 'all'"], ['at', 'INTEGER NOT NULL DEFAULT 0'], ['tags', "TEXT NOT NULL DEFAULT ''"],
-                          ['nocomm', 'INTEGER NOT NULL DEFAULT 0'], ['hidelikes', 'INTEGER NOT NULL DEFAULT 0'], ['aname', "TEXT NOT NULL DEFAULT ''"]])
+                          ['nocomm', 'INTEGER NOT NULL DEFAULT 0'], ['hidelikes', 'INTEGER NOT NULL DEFAULT 0'], ['aname', "TEXT NOT NULL DEFAULT ''"], ['more', "TEXT NOT NULL DEFAULT ''"]])
   if (!db.prepare("SELECT COUNT(*) AS n FROM pragma_table_info('posts') WHERE name = ?").get(col).n) db.exec(`ALTER TABLE posts ADD COLUMN ${col} ${def}`);
 const LAYER_FONTS = ['classic', 'modern', 'neon', 'type', 'strong'];
 function cleanLayers(v) {
@@ -1345,6 +1351,7 @@ db.exec(`CREATE TABLE IF NOT EXISTS post_comments (id INTEGER PRIMARY KEY, post 
 const unlinkMedia = name => { if (name) fs.unlink(path.join(MEDIA_DIR, path.basename(name)), () => {}); };
 function deletePost(p) {
   unlinkMedia(p.file); unlinkMedia(p.poster);
+  for (const f of layersOf(p.more)) unlinkMedia(f);
   for (const sql of ['DELETE FROM post_likes WHERE post = ?', 'DELETE FROM post_saves WHERE post = ?', 'DELETE FROM post_comments WHERE post = ?', 'DELETE FROM notifications WHERE post = ?', 'DELETE FROM posts WHERE id = ?']) db.prepare(sql).run(p.id);
 }
 setInterval(() => {
@@ -1362,7 +1369,7 @@ const forViewer = (p, meId) => (p.hidelikes && p.user.id !== meId ? { ...p, like
 const shownPost = p => ({ id: p.id, kind: p.kind, src: p.file ? 'media/' + p.file : '', poster: p.poster ? 'media/' + p.poster : '', caption: p.caption, saved: !!p.saved,
   place: p.place ? { label: p.place, lat: p.lat, lon: p.lon } : null, created: p.created, likes: p.likes, comments: p.comments, liked: !!p.liked,
   w: p.w || 0, h: p.h || 0, layers: layersOf(p.layers), views: p.views || 0, audience: p.audience || 'all', at: p.at || p.created,
-  tags: tagsOf(p.tags), nocomm: !!p.nocomm, hidelikes: !!p.hidelikes, aname: p.aname || '', fx: p.fx || '', music: p.music ? { id: p.music, start: p.mstart || 0, label: musicLabel(p.music) } : null, orig: p.orig !== 0,
+  tags: tagsOf(p.tags), nocomm: !!p.nocomm, hidelikes: !!p.hidelikes, aname: p.aname || '', more: layersOf(p.more).map(f => 'media/' + f), fx: p.fx || '', music: p.music ? { id: p.music, start: p.mstart || 0, label: musicLabel(p.music) } : null, orig: p.orig !== 0,
   user: { id: p.user, name: p.name, pic: p.pic_v, verified: !!p.verified } });
 // "dhaka-nights" for the app's own tracks; "<name> · original audio" (with where to find it) for another reel's sound.
 function musicLabel(m) {
@@ -1522,15 +1529,18 @@ async function exploreApi(req, res, action, query) {
     const fx = FX.includes(body.fx) ? body.fx : '', music = cleanMusic(body.music);
     const mstart = Math.max(0, Math.min(600, Number(body.mstart) || 0)), orig = body.orig === false ? 0 : 1;
     const audience = ['all', 'friends', 'me'].includes(body.audience) ? body.audience : 'all';
+    // the other photos of a carousel (up to 10 in all): my own unused photo uploads
+    const more = up.kind !== 'photo' ? [] : [...new Set((Array.isArray(body.more) ? body.more : []).map(String))].filter(n => n !== up.name).slice(0, 9)
+      .filter(n => db.prepare("SELECT 1 FROM uploads WHERE name = ? AND user = ? AND used = 0 AND kind = 'photo'").get(n, me.id));
     const at = Math.max(now, Math.min(now + 75 * 864e5, Number(body.at) || now));          // scheduled up to 75 days ahead
     const tagged = [...new Set((Array.isArray(body.tags) ? body.tags : []).map(Number).filter(n => Number.isInteger(n) && n > 0 && n !== me.id))].slice(0, 20)
       .filter(id => db.prepare('SELECT 1 FROM users WHERE id = ? AND banned = 0').get(id));
-    const { lastInsertRowid } = db.prepare(`INSERT INTO posts (user, kind, file, poster, caption, place, lat, lon, created, fx, music, mstart, orig, w, h, layers, audience, at, tags, nocomm, hidelikes, aname)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    const { lastInsertRowid } = db.prepare(`INSERT INTO posts (user, kind, file, poster, caption, place, lat, lon, created, fx, music, mstart, orig, w, h, layers, audience, at, tags, nocomm, hidelikes, aname, more)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run(me.id, up.kind, up.name, poster, cleanText(body.caption, 500), place ? cleanText(place.label, 80) : '', place ? place.lat : null, place ? place.lon : null, now, fx, music, mstart, orig,
         sizeOf(body.w), sizeOf(body.h), up.kind === 'video' ? cleanLayers(body.layers) : '', audience, at, tagged.length ? JSON.stringify(tagged) : '',
-        body.nocomm ? 1 : 0, body.hidelikes ? 1 : 0, cleanText(body.aname, 60));
-    db.prepare('UPDATE uploads SET used = 1 WHERE name = ?').run(up.name);
+        body.nocomm ? 1 : 0, body.hidelikes ? 1 : 0, cleanText(body.aname, 60), more.length ? JSON.stringify(more) : '');
+    for (const n of [up.name, ...more]) db.prepare('UPDATE uploads SET used = 1 WHERE name = ?').run(n);
     const postId = Number(lastInsertRowid);
     if (audience !== 'me') for (const id of tagged) notify(id, me.id, 'tag', postId);
     // Also as a story: the same file under a second name (a hard link where the disk allows, so 3 GB is not copied).
@@ -2335,7 +2345,8 @@ const server = http.createServer((req, res) => {
   if (pathname.startsWith('/api/chat/')) return chatApi(req, res, pathname.slice(10), searchParams).catch(e => { console.error(e); if (!res.headersSent) json(res, 500, { error: 'server error' }); });
   if (pathname === '/api/turn-check') return iceServers().then(list => json(res, 200, {
     relay: hasTurn(), metered: !!(process.env.METERED_APP && process.env.METERED_KEY), turnUser: !!(process.env.TURN_USER || '').trim(), turnPass: !!(process.env.TURN_PASS || '').trim(),
-    urls: list.flatMap(x => [].concat(x.urls || x.url || [])), withCredentials: list.filter(x => x.username && x.credential).length }));
+    urls: list.flatMap(x => [].concat(x.urls || x.url || [])), withCredentials: list.filter(x => x.username && x.credential).length,
+    lastTests: relayTests.slice(0, 8).map(t => ({ ago: Math.round((Date.now() - t.at) / 1000) + 's', ok: t.ok, kinds: t.kinds, ms: t.ms })) }));
   if (pathname.startsWith('/api/live/')) return liveApi(req, res, pathname.slice(10)).catch(e => { console.error(e); if (!res.headersSent) json(res, 500, { error: 'server error' }); });
   if (pathname.startsWith('/api/notify/')) return notifyApi(req, res, pathname.slice(12)).catch(e => { console.error(e); if (!res.headersSent) json(res, 500, { error: 'server error' }); });
   if (pathname.startsWith('/api/creator/')) return creatorApi(req, res, pathname.slice(13)).catch(e => { console.error(e); if (!res.headersSent) json(res, 500, { error: 'server error' }); });

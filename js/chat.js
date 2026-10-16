@@ -1010,6 +1010,29 @@ $('chat-input').addEventListener('blur', () => setTimeout(holdChatInPlace, 50));
 addEventListener('scroll', () => { if (document.body.classList.contains('chat-open')) fitChat(); }, { passive: true });
 addEventListener('hashchange', () => { if (!location.hash.includes('chat')) document.body.classList.remove('chat-open'); else if (CHAT.open != null) document.body.classList.add('chat-open'); });
 
+// Can this phone reach the relay (TURN) that calls across networks need? Checked quietly twice a day, only
+// relay routes allowed; the answer (yes/no and which ways, never a password) goes to the server's turn check.
+async function relayTest() {
+  try {
+    const last = Number(localStorage.getItem('bdmap.relaytest') || 0);
+    if (Date.now() - last < 12 * 36e5) return;
+    localStorage.setItem('bdmap.relaytest', String(Date.now()));
+  } catch { return; }
+  try {
+    const d = await chatApi('ice');
+    if (!d.relay || !window.RTCPeerConnection) return;
+    const pc = new RTCPeerConnection({ iceServers: d.iceServers, iceTransportPolicy: 'relay' });
+    pc.createDataChannel('t');
+    const kinds = new Set(), t0 = performance.now();
+    let first = 0;
+    pc.onicecandidate = e => { if (e.candidate && / typ relay/.test(e.candidate.candidate)) { kinds.add(e.candidate.relayProtocol || e.candidate.protocol || 'relay'); first = first || Math.round(performance.now() - t0); } };
+    await pc.setLocalDescription(await pc.createOffer());
+    await new Promise(r => { const done = () => r(); pc.onicegatheringstatechange = () => { if (pc.iceGatheringState === 'complete') done(); }; setTimeout(done, 9000); });
+    pc.close();
+    fetch(`api/chat/relaytest?ok=${kinds.size ? 1 : 0}&k=${encodeURIComponent([...kinds].join(','))}&ms=${first}`).catch(() => {});
+  } catch { /* a browser without WebRTC */ }
+}
+
 // ---- the live stream from the server ----
 function connectChat() {
   if (CHAT.stream || !ME || !window.EventSource) return;
@@ -1067,7 +1090,7 @@ function chatAuthChanged() {
   $('chat-gate').hidden = !!ME;
   $('chat').hidden = !ME;
   for (const b of document.querySelectorAll('.chat-btn')) b.hidden = false;
-  if (ME) { connectChat(); loadChat(); } else { endCall(); disconnectChat(); closeThread(); renderList(); }
+  if (ME) { connectChat(); loadChat(); setTimeout(relayTest, 6000); } else { endCall(); disconnectChat(); closeThread(); renderList(); }
 }
 
 // Why someone is being reported. The report goes to the people who run the app; the person is blocked too.
@@ -1158,11 +1181,11 @@ async function newPeer() {
     callFailed();
   };
   pc.oniceconnectionstatechange = () => {
-    if ((pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') && call.state !== 'live') goLive();
+    if ((pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') && call.state !== 'live') callConnected();
     if (pc.iceConnectionState === 'failed') failed();
   };
   pc.onconnectionstatechange = () => {
-    if (pc.connectionState === 'connected' && call.state !== 'live') goLive();
+    if (pc.connectionState === 'connected' && call.state !== 'live') callConnected();
     if (pc.connectionState === 'failed') failed();
   };
   $('call-local').srcObject = call.media;
@@ -1192,7 +1215,7 @@ function callFailed() {
     : tx('দুই নেটওয়ার্কের মধ্যে সংযোগ হলো না। একটু পরে আবার চেষ্টা করুন।', 'The two networks would not connect. Try again in a moment.');
   endCall(why, true);
 }
-function goLive() {
+function callConnected() {
   call.state = 'live';
   call.started = Date.now();
   clearTimeout(call.ring);

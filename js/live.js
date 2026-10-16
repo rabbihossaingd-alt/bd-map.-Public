@@ -129,7 +129,7 @@ function commentBar(room, extra) {
 const liveClock = t0 => { const s = Math.floor((Date.now() - t0) / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 
 // ---- go live ----
-async function goLive() {
+async function startStream() {
   if (!ME) { openLogin(); return; }
   if (LIVE) return;
   const room = liveRoom(true);
@@ -299,7 +299,7 @@ async function openLiveHub() {
   x.innerHTML = svg('close');
   x.setAttribute('aria-label', tl('বন্ধ করুন', 'Close'));
   const title = el('div', 'lh-title');
-  title.append(el('i', 'live-dot'), el('b', null, 'Stream'));
+  title.append(Object.assign(el('span', 'lh-ic'), { innerHTML: svg('broadcast') }), el('b', null, 'Stream'));
   const go2 = el('button', 'lv-start small');
   go2.append(svgEl('camera'), el('span', null, tl('স্ট্রিম শুরু', 'Go live')));
   top.append(x, title, go2);
@@ -314,7 +314,7 @@ async function openLiveHub() {
   const leave = () => { if (LIVE && !LIVE.host && LIVE.close) LIVE.close(); onPage = null; };
   const close = () => { clearInterval(timer); leave(); watcher.disconnect(); box.remove(); if (!document.querySelector('.live-room')) document.body.classList.remove('reels-open'); restoreTab(); };
   x.addEventListener('click', close);
-  go2.addEventListener('click', () => { close(); goLive(); });
+  go2.addEventListener('click', () => { close(); startStream(); });
   // the page on screen joins its live; the one that leaves, leaves
   const watcher = new IntersectionObserver(entries => {
     for (const e of entries) {
@@ -344,10 +344,10 @@ async function openLiveHub() {
     none.innerHTML = '<span class="orb o1"></span><span class="orb o2"></span><span class="orb o3"></span>';
     const inner = el('div', 'sp-empty-in');
     const mark = el('span', 'sp-mark');
-    mark.append(el('i', 'live-dot big'));
+    mark.innerHTML = svg('broadcast');
     const cta = el('button', 'lv-start');
     cta.append(svgEl('camera'), el('span', null, tl('স্ট্রিম শুরু করুন', 'Start a stream')));
-    cta.addEventListener('click', () => { close(); goLive(); });
+    cta.addEventListener('click', () => { close(); startStream(); });
     inner.append(mark, el('b', null, tl('এখন কেউ স্ট্রিমে নেই', 'No one is streaming right now')),
       el('span', null, tl('প্রথম স্ট্রিমটি আপনার হোক — যাঁরা আপনাকে ফলো করেন তাঁরা সাথে সাথে জানতে পারবেন।', 'Be the first — your followers are told the moment you start.')), cta);
     none.appendChild(inner);
