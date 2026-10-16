@@ -1226,11 +1226,11 @@ async function supportApi(req, res, action, query) {
 // A post is one photo or one video with a caption and, optionally, the place it shows. Everyone can see every
 // post; people can like and comment. The files live on disk under DATA_DIR/media (not in the database) and are
 // served from /media/<name>. A photo is shrunk in the browser before it is sent; a video is sent as it is and
-// may be up to 50 MB. An upload not turned into a post within an hour is removed.
+// may be up to 3 GB (streamed to disk as it arrives, never held in memory). An upload not turned into a post within an hour is removed.
 const MEDIA_DIR = path.join(DATA_DIR, 'media');
 fs.mkdirSync(MEDIA_DIR, { recursive: true });
 const MEDIA_TYPES = { 'image/jpeg': ['.jpg', 'photo', 4e6], 'image/png': ['.png', 'photo', 4e6], 'image/webp': ['.webp', 'photo', 4e6],
-                      'video/mp4': ['.mp4', 'video', 50e6], 'video/webm': ['.webm', 'video', 50e6], 'video/quicktime': ['.mov', 'video', 50e6],
+                      'video/mp4': ['.mp4', 'video', 3e9], 'video/webm': ['.webm', 'video', 3e9], 'video/quicktime': ['.mov', 'video', 3e9], 'video/x-m4v': ['.mp4', 'video', 3e9],
                       // voice messages, recorded in the browser (Chrome and Firefox make webm or ogg, Safari makes mp4)
                       'audio/webm': ['.weba', 'audio', 10e6], 'audio/ogg': ['.ogg', 'audio', 10e6], 'audio/mp4': ['.m4a', 'audio', 10e6], 'audio/mpeg': ['.mp3', 'audio', 10e6] };
 db.exec(`CREATE TABLE IF NOT EXISTS uploads (name TEXT PRIMARY KEY, user INTEGER NOT NULL, kind TEXT NOT NULL, created INTEGER NOT NULL, used INTEGER NOT NULL DEFAULT 0)`);
@@ -1253,6 +1253,30 @@ if (!db.prepare("SELECT COUNT(*) AS n FROM pragma_table_info('posts') WHERE name
 // (another video's original sound), starting mstart seconds in; orig says whether the video's own sound is kept.
 for (const [col, def] of [['fx', "TEXT NOT NULL DEFAULT ''"], ['music', "TEXT NOT NULL DEFAULT ''"], ['mstart', 'REAL NOT NULL DEFAULT 0'], ['orig', 'INTEGER NOT NULL DEFAULT 1']])
   if (!db.prepare("SELECT COUNT(*) AS n FROM pragma_table_info('posts') WHERE name = ?").get(col).n) db.exec(`ALTER TABLE posts ADD COLUMN ${col} ${def}`);
+// w and h: the picture's or video's own size, so the feed can give it its shape before it loads. layers: the words,
+// emoji and stickers put on a video (a photo has them drawn in), as JSON — see cleanLayers.
+const LAYER_FONTS = ['classic', 'modern', 'neon', 'type', 'strong'];
+function cleanLayers(v) {
+  if (!Array.isArray(v)) return '';
+  const n = (x, lo, hi, d) => { x = Number(x); return Number.isFinite(x) ? Math.max(lo, Math.min(hi, Math.round(x * 1000) / 1000)) : d; };
+  const out = [];
+  for (const l of v.slice(0, 30)) {
+    if (!l || !['text', 'emoji', 'tag'].includes(l.t)) continue;
+    const text = cleanText(String(l.s || ''), l.t === 'text' ? 300 : 60);
+    if (!text) continue;
+    const one = { t: l.t, s: text, x: n(l.x, 0, 1, .5), y: n(l.y, 0, 1, .5), sc: n(l.sc, .2, 8, 1), r: n(l.r, -7, 7, 0) };
+    if (l.t !== 'emoji') {
+      one.c = /^#[0-9a-f]{6}$/i.test(l.c) ? l.c.toLowerCase() : '#ffffff';
+      one.bg = [0, 1, 2].includes(l.bg) ? l.bg : 0;
+    }
+    if (l.t === 'text') { one.f = LAYER_FONTS.includes(l.f) ? l.f : 'classic'; one.a = ['l', 'c', 'r'].includes(l.a) ? l.a : 'c'; }
+    if (l.t === 'tag') one.k = ['place', 'time', 'mention', 'hash', 'bd'].includes(l.k) ? l.k : 'hash';
+    out.push(one);
+  }
+  return out.length ? JSON.stringify(out) : '';
+}
+const sizeOf = v => Math.max(0, Math.min(20000, Math.round(Number(v) || 0)));
+const layersOf = s => { try { return s ? JSON.parse(s) : []; } catch { return []; } };
 const FX = ['', 'bright', 'warm', 'cool', 'mono', 'vintage', 'drama', 'soft', 'sunset', 'green', 'fade'];
 const GEN_TRACKS = ['dhaka-nights', 'sunrise', 'river-lofi', 'baul-road', 'monsoon', 'festival', 'tea-garden', 'city-run'];
 // Sounds people upload for their reels (they confirm the rights), and tracks from Jamendo's Creative Commons
@@ -1288,6 +1312,10 @@ async function jamendo(params) {
 db.exec(`CREATE TABLE IF NOT EXISTS post_saves (post INTEGER NOT NULL, user INTEGER NOT NULL, made INTEGER NOT NULL, PRIMARY KEY (post, user))`);
 // A story is a photo or video that shows for 24 hours and is then deleted, file and all.
 db.exec(`CREATE TABLE IF NOT EXISTS stories (id INTEGER PRIMARY KEY, user INTEGER NOT NULL, kind TEXT NOT NULL, file TEXT NOT NULL, poster TEXT NOT NULL DEFAULT '', created INTEGER NOT NULL)`);
+// (w, h and layers of posts and stories: see cleanLayers)
+for (const t of ['posts', 'stories'])
+  for (const [col, def] of [['w', 'INTEGER NOT NULL DEFAULT 0'], ['h', 'INTEGER NOT NULL DEFAULT 0'], ['layers', "TEXT NOT NULL DEFAULT ''"]])
+    if (!db.prepare(`SELECT COUNT(*) AS n FROM pragma_table_info('${t}') WHERE name = ?`).get(col).n) db.exec(`ALTER TABLE ${t} ADD COLUMN ${col} ${def}`);
 function deleteStory(st) { unlinkMedia(st.file); unlinkMedia(st.poster); db.prepare('DELETE FROM stories WHERE id = ?').run(st.id); }
 db.exec(`CREATE TABLE IF NOT EXISTS post_comments (id INTEGER PRIMARY KEY, post INTEGER NOT NULL, user INTEGER NOT NULL, body TEXT NOT NULL, created INTEGER NOT NULL)`);
 const unlinkMedia = name => { if (name) fs.unlink(path.join(MEDIA_DIR, path.basename(name)), () => {}); };
@@ -1306,7 +1334,7 @@ const POST_SELECT = `SELECT p.*, u.name, u.pic_v, u.verified, (SELECT COUNT(*) F
   FROM posts p JOIN users u ON u.id = p.user WHERE u.banned = 0`;
 const shownPost = p => ({ id: p.id, kind: p.kind, src: p.file ? 'media/' + p.file : '', poster: p.poster ? 'media/' + p.poster : '', caption: p.caption, saved: !!p.saved,
   place: p.place ? { label: p.place, lat: p.lat, lon: p.lon } : null, created: p.created, likes: p.likes, comments: p.comments, liked: !!p.liked,
-  views: p.views || 0, fx: p.fx || '', music: p.music ? { id: p.music, start: p.mstart || 0, label: musicLabel(p.music) } : null, orig: p.orig !== 0,
+  w: p.w || 0, h: p.h || 0, layers: layersOf(p.layers), views: p.views || 0, fx: p.fx || '', music: p.music ? { id: p.music, start: p.mstart || 0, label: musicLabel(p.music) } : null, orig: p.orig !== 0,
   user: { id: p.user, name: p.name, pic: p.pic_v, verified: !!p.verified } });
 // "dhaka-nights" for the app's own tracks; "<name> · original audio" (with where to find it) for another reel's sound.
 function musicLabel(m) {
@@ -1367,7 +1395,7 @@ async function exploreApi(req, res, action, query) {
       const by = new Map();
       for (const r of rows) {
         if (!by.has(r.user)) by.set(r.user, { user: { id: r.user, name: r.name, pic: r.pic_v }, items: [] });
-        by.get(r.user).items.push({ id: r.id, kind: r.kind, src: 'media/' + r.file, poster: r.poster ? 'media/' + r.poster : '', created: r.created });
+        by.get(r.user).items.push({ id: r.id, kind: r.kind, src: 'media/' + r.file, poster: r.poster ? 'media/' + r.poster : '', created: r.created, w: r.w || 0, h: r.h || 0, layers: layersOf(r.layers) });
       }
       const list = [...by.values()].sort((x, y) => (y.user.id === meId) - (x.user.id === meId) || y.items.at(-1).created - x.items.at(-1).created);
       return json(res, 200, { stories: list });
@@ -1401,17 +1429,26 @@ async function exploreApi(req, res, action, query) {
     const [ext, kind, limit] = type;
     if (Number(req.headers['content-length']) > limit) { req.resume(); return json(res, 413, { error: 'big' }); }
     if (count('SELECT COUNT(*) AS n FROM uploads WHERE user = ? AND created > ?', me.id, now - 864e5) >= 40) { req.resume(); return json(res, 429, { error: 'slow' }); }
+    const length = Number(req.headers['content-length']) || 0;
+    try { const f = fs.statfsSync(MEDIA_DIR); if (length && f.bavail * f.bsize < length + 300e6) { req.resume(); return json(res, 507, { error: 'space' }); } } catch { /* no statfs here */ }
     const name = crypto.randomBytes(12).toString('hex') + ext, file = path.join(MEDIA_DIR, name);
     const out = fs.createWriteStream(file);
     let size = 0, failed = false;
-    const fail = (status, error) => { if (failed) return; failed = true; out.destroy(); fs.unlink(file, () => {}); req.resume(); json(res, status, { error }); };
-    req.on('data', chunk => { size += chunk.length; if (size > limit) fail(413, 'big'); else if (!failed) out.write(chunk); });
+    const fail = (status, error) => { if (failed) return; failed = true; out.destroy(); fs.unlink(file, () => {}); req.resume(); if (!res.headersSent) json(res, status, { error }); };
+    req.on('data', chunk => {
+      size += chunk.length;
+      if (size > limit) return fail(413, 'big');
+      if (failed) return;
+      if (!out.write(chunk)) { req.pause(); out.once('drain', () => req.resume()); }   // the network can be faster than the disk
+    });
+    out.on('error', () => fail(507, 'space'));
     req.on('error', () => fail(400, 'bad request'));
+    req.on('aborted', () => fail(400, 'bad request'));
     req.on('end', () => {
       if (failed) return;
       out.end(() => {
         if (size < 200) return fail(400, 'bad request');
-        db.prepare('INSERT INTO uploads (name, user, kind, created) VALUES (?, ?, ?, ?)').run(name, me.id, kind, now);
+        db.prepare('INSERT INTO uploads (name, user, kind, created) VALUES (?, ?, ?, ?)').run(name, me.id, kind, Date.now());
         json(res, 200, { media: name });
       });
     });
@@ -1438,15 +1475,16 @@ async function exploreApi(req, res, action, query) {
       if (buf && buf.length > 200 && buf.length < 400_000) { poster = crypto.randomBytes(12).toString('hex') + '.jpg'; fs.writeFileSync(path.join(MEDIA_DIR, poster), buf); }
     }
     if (action === 'story') {
-      db.prepare('INSERT INTO stories (user, kind, file, poster, created) VALUES (?, ?, ?, ?, ?)').run(me.id, up.kind, up.name, poster, now);
+      db.prepare('INSERT INTO stories (user, kind, file, poster, created, w, h, layers) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(me.id, up.kind, up.name, poster, now, sizeOf(body.w), sizeOf(body.h), up.kind === 'video' ? cleanLayers(body.layers) : '');
       db.prepare('UPDATE uploads SET used = 1 WHERE name = ?').run(up.name);
       return json(res, 200, { ok: true });
     }
     const place = body.place && inBangladesh(body.place) ? body.place : null;
     const fx = FX.includes(body.fx) ? body.fx : '', music = cleanMusic(body.music);
     const mstart = Math.max(0, Math.min(600, Number(body.mstart) || 0)), orig = body.orig === false ? 0 : 1;
-    const { lastInsertRowid } = db.prepare('INSERT INTO posts (user, kind, file, poster, caption, place, lat, lon, created, fx, music, mstart, orig) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-      .run(me.id, up.kind, up.name, poster, cleanText(body.caption, 500), place ? cleanText(place.label, 80) : '', place ? place.lat : null, place ? place.lon : null, now, fx, music, mstart, orig);
+    const { lastInsertRowid } = db.prepare('INSERT INTO posts (user, kind, file, poster, caption, place, lat, lon, created, fx, music, mstart, orig, w, h, layers) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(me.id, up.kind, up.name, poster, cleanText(body.caption, 500), place ? cleanText(place.label, 80) : '', place ? place.lat : null, place ? place.lon : null, now, fx, music, mstart, orig,
+        sizeOf(body.w), sizeOf(body.h), up.kind === 'video' ? cleanLayers(body.layers) : '');
     db.prepare('UPDATE uploads SET used = 1 WHERE name = ?').run(up.name);
     return json(res, 200, { post: shownPost(db.prepare(`${POST_SELECT} AND p.id = ?2`).get(me.id, Number(lastInsertRowid))) });
   }
@@ -2162,7 +2200,7 @@ function serveFile(req, res, pathname) {
   });
 }
 
-http.createServer((req, res) => {
+const server = http.createServer((req, res) => {
   const { pathname, searchParams } = new URL(req.url, 'http://localhost');
   if (pathname === '/api/ratings') return api(req, res).catch(() => json(res, 500, { error: 'server error' }));
   if (pathname === '/api/fares') return faresApi(req, res).catch(() => json(res, 500, { error: 'server error' }));
@@ -2181,7 +2219,10 @@ http.createServer((req, res) => {
   if (pathname.startsWith('/api/')) return json(res, 404, { error: 'not found' });
   if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405).end(); return; }
   serveFile(req, res, pathname);
-}).listen(PORT, '0.0.0.0', () => {
+});
+server.requestTimeout = 0;           // uploads of big videos; idle sockets are still closed by keepAliveTimeout
+server.headersTimeout = 60_000;
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`BD Map is running.\n  On this computer:  http://localhost:${PORT}`);
   for (const list of Object.values(os.networkInterfaces())) {
     for (const a of list || []) if (a.family === 'IPv4' && !a.internal) console.log(`  On the same Wi-Fi: http://${a.address}:${PORT}`);

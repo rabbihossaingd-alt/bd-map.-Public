@@ -108,6 +108,9 @@ function feedCard(p, onGone) {
   head.append(who, more);
 
   const media = el('div', 'fc-media' + (p.fx ? ' fx-' + p.fx : ''));
+  // Instagram's shapes: as the picture is, between 1.91:1 and 4:5 (a 16:9 YouTube-size video stays 16:9).
+  const shapeIt = (w, h) => { if (w && h) media.style.aspectRatio = String(Math.min(1.91, Math.max(0.8, w / h))); };
+  if (p.kind !== 'text') shapeIt(p.w, p.h);
   const burst = svgEl('heart', 'burst');
   const sound = postSound(p);
   const like = el('button', 'fc-btn like-btn'), count = el('b', 'fc-likes');
@@ -139,7 +142,9 @@ function feedCard(p, onGone) {
       v.addEventListener('pause', () => sound.stop());
       v.addEventListener('timeupdate', () => { if (v.currentTime + .4 < last && !v.paused) sound.start(v.currentTime); last = v.currentTime; });   // the video looped
     }
+    if (!p.w) v.addEventListener('loadedmetadata', () => shapeIt(v.videoWidth, v.videoHeight));
     media.append(v, svgEl('play', 'reel-mark'), speaker);
+    if (p.layers && p.layers.length) layerBox(v, p.layers);
     media.classList.add('video');
     media.addEventListener('click', () => { v.pause(); openReels(p.id); });
     if (feedWatcher) feedWatcher.observe(v);
@@ -155,7 +160,7 @@ function feedCard(p, onGone) {
       media._sound = sound;
     }
     const img = Object.assign(el('img'), { src: p.src, alt: p.caption || '', loading: 'lazy' });
-    img.addEventListener('load', () => { const r = img.naturalWidth / img.naturalHeight; if (r) media.style.aspectRatio = String(Math.min(1.91, Math.max(0.8, r))); });
+    if (!p.w) img.addEventListener('load', () => shapeIt(img.naturalWidth, img.naturalHeight));
     media.appendChild(img);
     // Double tap (or double click) on a photo likes it, with a heart over the picture.
     let last = 0;
@@ -379,6 +384,9 @@ async function openReels(startId, user) {
     const reel = el('section', 'reel');
     const v = el('video');
     Object.assign(v, { src: p.src, poster: p.poster, loop: true, playsInline: true, preload: 'metadata' });
+    // A reel in its own shape: a tall one fills the screen, any other is whole in the middle with black above and below.
+    const tall = (w, h) => reel.classList.toggle('tall', !!w && w / h < .66);
+    if (p.w) tall(p.w, p.h); else v.addEventListener('loadedmetadata', () => tall(v.videoWidth, v.videoHeight));
     v.addEventListener('click', () => { if (v.paused) v.play(); else v.pause(); });
     v.addEventListener('pause', () => reel.classList.add('paused'));
     v.addEventListener('play', () => reel.classList.remove('paused'));
@@ -452,6 +460,7 @@ async function openReels(startId, user) {
       reelSounds.push({ v, rs });
     }
     reel.append(v, svgEl('play', 'reel-paused'), info, side, line);
+    if (p.layers && p.layers.length) layerBox(v, p.layers);
     column.appendChild(reel);
     watcher.observe(reel);
   }
@@ -528,22 +537,7 @@ async function loadStories(row) {
 }
 function addStory() {
   if (!ME) { openLogin(); return; }
-  const chooser = Object.assign(el('input'), { type: 'file', accept: 'image/*,video/mp4,video/webm,video/quicktime' });
-  chooser.addEventListener('change', async () => {
-    const file = chooser.files[0];
-    if (!file) return;
-    if (file.type.startsWith('video') && file.size > 50e6) { exploreNote('ভিডিওটি ৫০ এমবির বেশি।'); return; }
-    exploreNote('স্টোরি আপলোড হচ্ছে…');
-    try {
-      const video = file.type.startsWith('video');
-      const media = await uploadMedia(video ? file : await shrinkPhoto(file), video ? (file.type || 'video/mp4') : 'image/jpeg', () => {});
-      await exploreApi('story', { media, poster: video ? await videoPoster(file) : '' });
-      exploreNote('স্টোরি দেওয়া হয়েছে — ২৪ ঘণ্টা থাকবে।');
-      loadStories($('explore-people'));
-      refreshStoryRings();
-    } catch { exploreNote('স্টোরি দেওয়া যায়নি। আবার চেষ্টা করুন।'); }
-  });
-  chooser.click();
+  openNewPost({ mode: 'story' });
 }
 // The viewer: one story at a time, bars across the top, tap the right side for the next and the left for the last.
 function openStories(groups, start, onClose) {
@@ -585,9 +579,10 @@ function openStories(groups, start, onClose) {
     };
     if (st.kind === 'video') {
       const v = Object.assign(el('video'), { src: st.src, poster: st.poster, playsInline: true, autoplay: true });
-      v.addEventListener('loadedmetadata', () => run(Math.min(30, v.duration || 15) * 1000));
+      v.addEventListener('loadedmetadata', () => { if (v.videoWidth / v.videoHeight < .66) v.style.objectFit = 'cover'; run(Math.min(30, v.duration || 15) * 1000); });
       v.play().catch(() => { v.muted = true; v.play().catch(() => {}); });
       stage.replaceChildren(v);
+      if (st.layers && st.layers.length) layerBox(v, st.layers);
     } else { stage.replaceChildren(Object.assign(el('img'), { src: st.src, alt: '' })); run(5000); }
   }
   const prev = el('button', 'st-zone left'), next = el('button', 'st-zone right');
@@ -641,7 +636,7 @@ function uploadMedia(blob, type, onProgress) {
     const x = new XMLHttpRequest();
     x.open('POST', 'api/explore/media');
     x.setRequestHeader('Content-Type', type);
-    x.upload.onprogress = e => { if (e.lengthComputable) onProgress(e.loaded / e.total); };
+    x.upload.onprogress = e => { if (e.lengthComputable) onProgress(e.loaded / e.total, e.loaded, e.total); };
     x.onload = () => { try { const d = JSON.parse(x.responseText); x.status === 200 ? resolve(d.media) : reject(new Error(d.error || 'server')); } catch { reject(new Error('server')); } };
     x.onerror = () => reject(new Error('server'));
     x.send(blob);
@@ -660,7 +655,7 @@ function openQuickPost() {
   chooser.addEventListener('change', () => {
     file = chooser.files[0] || null;
     if (!file) return;
-    if (file.type.startsWith('video') && file.size > 50e6) { file = null; fail('ভিডিওটি ৫০ এমবির বেশি। ছোট একটি ভিডিও দিন।'); return; }
+    if (file.type.startsWith('video') && file.size > 3e9) { file = null; fail('ভিডিওটি ৩ জিবির বেশি। ছোট একটি ভিডিও দিন।'); return; }
     note.textContent = '';
     const url = URL.createObjectURL(file);
     const view = file.type.startsWith('video') ? Object.assign(el('video'), { src: url, controls: true, muted: true, playsInline: true }) : Object.assign(el('img'), { src: url, alt: '' });
