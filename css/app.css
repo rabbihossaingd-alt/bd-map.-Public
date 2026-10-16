@@ -3523,3 +3523,6 @@ button.dg-wiki { background: none; border: 0; padding: 0; cursor: pointer; font:
 .tp-hero > .dg-img { filter: saturate(1.15) contrast(1.06); }
 .ph-art svg { stroke-linecap: round; stroke-linejoin: round; }
 .tp-sum-top { gap: 4px; } .tp-sum-top > b { line-height: 1.35; padding: 2px 0; }
+#page-districts .dx-link { margin: 28px 0 22px; }
+.tour-card canvas { width: min(560px, 100%); border-radius: 32px; }
+.tp-float.away { opacity: 0; pointer-events: none; transform: translate(-50%, 20px) scale(.96); }

@@ -125,7 +125,6 @@ const coverStyle = (img, division) => {
       const c = el('button', 'dg-gi-card' + (story && story.img ? ' has-ph' : ''));
       const ph = el('span', 'gi-ph');
       photo(ph, story && story.img, d.division, 500, kind === 'f' ? 'fork' : 'bag');
-      ph.appendChild(el('span', 'gi-mark', 'GI'));
       const t = el('span', 't');
       t.append(el('b', null, LANG === 'en' ? en : bn), el('small', null, d.bn));
       c.append(ph, t);
@@ -219,15 +218,16 @@ const coverStyle = (img, division) => {
     x.setAttribute('aria-label', tl2('বন্ধ করুন', 'Close'));
     const title = el('div', 'dg-title');
     const badge = el('span', 'gi-badge');
-    badge.append(el('span', 'gi-mark', 'GI'), el('span', null, tl2(`জিআই জার্নাল নং ${num(p.no)}`, `GI journal no. ${p.no}`)));
+    badge.append(el('span', null, tl2(`জিআই জার্নাল নং ${num(p.no)}`, `GI journal no. ${p.no}`)));
     title.append(badge, el('h2', null, LANG === 'en' ? p.en : p.bn));
     const go = el('button', 'gi-district');
     go.append(ic('pin'), el('span', null, tl2(`${d.bn} জেলা · ${p.kind === 'f' ? 'খাবার' : 'পণ্য'}`, `${d.bn} · ${p.kind === 'f' ? 'food' : 'goods'}`)), ic('chev'));
     title.appendChild(go);
     hero.append(x, title);
-    if (story && story.file) { const cr = el('a', 'dg-credit', tl2('ছবি', 'Photo')); cr.href = commonsLink(story.file); cr.target = '_blank'; cr.rel = 'noopener'; hero.appendChild(cr); }
+    if (story && (story.src || story.file)) { const cr = el('a', 'dg-credit', tl2('ছবি', 'Photo')); cr.href = story.src || commonsLink(story.file); cr.title = story.credit || ''; cr.target = '_blank'; cr.rel = 'noopener'; hero.appendChild(cr); }
     const body = el('div', 'dg-body gi-body');
-    if (story && story.imgGeneric) body.appendChild(el('p', 'dg-note', tl2('ছবিটি এই ধরনের পণ্যের — এই জেলারই তোলা নয়।', 'The photo shows this kind of product, not one from this district.')));
+    if (story && story.imgCaption) body.appendChild(el('p', 'dg-note', story.imgCaption));
+    else if (story && story.imgGeneric) body.appendChild(el('p', 'dg-note', tl2('ছবিটি এই ধরনের পণ্যের — এই জেলারই তোলা নয়।', 'The photo shows this kind of product, not one from this district.')));
     if (story && story.text) {
       // general only if the text does not speak of this place either (কাঁচাগোল্লা's article is about Natore's)
       const stem = p.bn.split(' ')[0].replace(/(র|ের|এর)$/, '');
@@ -246,7 +246,8 @@ const coverStyle = (img, division) => {
       for (const o of others) { const b = el('button', 'dg-fam ' + o.kind); b.append(Object.assign(el('span', 'fi'), { innerHTML: svg(o.kind === 'f' ? 'fork' : 'bag') }), el('b', null, LANG === 'en' ? o.en : o.bn)); b.addEventListener('click', () => { close(); openStory({ id: p.id, ...o }); }); row.appendChild(b); }
       body.appendChild(row);
     }
-    body.appendChild(el('p', 'tx-source', tl2('লেখা: বাংলা উইকিপিডিয়া (CC BY-SA) · ছবি: উইকিমিডিয়া কমন্স · ' + GI_SOURCE.bn, 'Text: Bangla Wikipedia (CC BY-SA) · Photo: Wikimedia Commons · ' + GI_SOURCE.en)));
+    const photoBy = story && story.credit ? story.credit : tl2('উইকিমিডিয়া কমন্স', 'Wikimedia Commons');
+    body.appendChild(el('p', 'tx-source', tl2(`লেখা: বাংলা উইকিপিডিয়া (CC BY-SA) · ছবি: ${photoBy} · ` + GI_SOURCE.bn, `Text: Bangla Wikipedia (CC BY-SA) · Photo: ${photoBy} · ` + GI_SOURCE.en)));
     scroller.append(hero, body);
     box.appendChild(scroller);
     document.body.appendChild(box);
