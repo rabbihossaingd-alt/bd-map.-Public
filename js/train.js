@@ -261,29 +261,81 @@ function openChange(c) {
     const name = names.split('|')[L];
     return numbers == null ? [name] : numbers.split(',').map(n => n ? `${name} ${L ? n : num(+n)}` : name);
   });
-  for (const l of LAUNCHES) {
+  const launchCards = LAUNCHES.map(l => {
     const h = x => num(x, Number.isInteger(x) ? 0 : 1);
     const hours = l.hours[0] === l.hours[1] ? h(l.hours[0]) : `${h(l.hours[0])}–${h(l.hours[1])}`;
-    const card = el('div', 'card op-card launch');
-    card.append(el('b', null, l.to[L]),
-      el('span', null, `${l.when[L]} · ${hours} ${L ? 'hours' : 'ঘণ্টা'}`),
-      el('span', 'fare', `${L ? 'Deck' : 'ডেক'} ${fareRange(l.deck[0], l.deck[1])}${l.note ? ' · ' + l.note[L] : ''}`));
-    const chips = el('div', 'chips');
-    chips.append(...vessels(l.names).map(n => el('span', 'badge', n)));
-    card.appendChild(chips);
+    const list = vessels(l.names);
+    const card = el('article', 'lx-card');
+    const top = el('div', 'lx-top');
+    const icon = el('span', 'lx-ic');
+    icon.innerHTML = svg('launchBoat');
+    const routeBox = el('div', 'lx-route');
+    routeBox.append(el('small', null, L ? 'Sadarghat, Dhaka' : 'সদরঘাট, ঢাকা'), el('b', null, l.to[L]));
+    const fare = el('div', 'lx-fare');
+    fare.append(el('small', null, L ? 'Deck' : 'ডেক'), el('b', null, fareRange(l.deck[0], l.deck[1])));
+    top.append(icon, routeBox, fare);
+    const meta = el('div', 'lx-meta');
+    const item = (ico, text) => { const s = el('span'); s.append(ic(ico), el('span', null, text)); return s; };
+    meta.append(item('clock', l.when[L]), item('hourglass', `${hours} ${L ? 'hours' : 'ঘণ্টা'}`));
+    card.append(top, meta);
+    if (l.note) card.appendChild(el('div', 'lx-note', l.note[L]));
+    const more = el('button', 'lx-more');
+    more.append(el('span', null, L ? `${list.length} launch${list.length > 1 ? 'es' : ''}` : `${num(list.length)}টি লঞ্চ`), ic('chev'));
+    const chips = el('div', 'lx-vessels');
+    chips.append(...list.map(n => el('span', 'badge', n)));
+    chips.hidden = true;
+    more.addEventListener('click', () => { chips.hidden = !chips.hidden; card.classList.toggle('open', !chips.hidden); });
+    card.append(more, chips);
+    card._find = (l.to[0] + ' ' + l.to[1] + ' ' + list.join(' ')).toLowerCase();
     $('launch-grid').appendChild(card);
-  }
+    return card;
+  });
+  $('launch-filter').addEventListener('input', e => {
+    const q = e.target.value.trim().toLowerCase();
+    let shown = 0;
+    for (const c of launchCards) { c.hidden = !!q && !c._find.includes(q); shown += !c.hidden; }
+    let none = $('launch-grid').querySelector('.empty');
+    if (!shown && !none) { none = el('div', 'empty', L ? 'No launch to that place in the list.' : 'এই জায়গার লঞ্চ তালিকায় নেই।'); $('launch-grid').appendChild(none); }
+    if (shown && none) none.remove();
+  });
   $('launch-note').textContent = LAUNCH_CLOSED[L] + (L ? ' Source: the open bd-launch-json-data set; only launches it marks as running are listed.'
                                                         : ' সূত্র: খোলা bd-launch-json-data তথ্য; শুধু যেগুলো চালু বলে চিহ্নিত, সেগুলোই দেওয়া হয়েছে।');
 
-  enter.train = async () => {
+  const seg = $('tx-seg'), pill = seg.querySelector('.tseg-pill');
+  const placePill = () => {
+    const b = seg.querySelector('[aria-selected="true"]');
+    if (!b || !b.offsetWidth) return;
+    pill.style.width = b.offsetWidth + 'px';
+    pill.style.transform = `translateX(${b.offsetLeft - 4}px)`;
+  };
+  function showMode(m, animate = true) {
+    if (!['bus', 'train', 'launch'].includes(m)) m = 'bus';
+    seg.classList.toggle('still', !animate);
+    for (const b of seg.querySelectorAll('button')) b.setAttribute('aria-selected', String(b.dataset.m === m));
+    for (const k of ['bus', 'train', 'launch']) {
+      const pane = $('tx-' + k), on = k === m;
+      if (on && pane.hidden) { pane.hidden = false; pane.classList.remove('in'); void pane.offsetWidth; pane.classList.add('in'); }
+      else if (!on) pane.hidden = true;
+    }
+    placePill();
+    try { localStorage.setItem('bdmap.tx', m); } catch { /* storage off */ }
+    if (m === 'bus' && enter.districts) enter.districts();
+    if (m === 'train') loadTrains();
+  }
+  for (const b of seg.querySelectorAll('button')) b.addEventListener('click', () => showMode(b.dataset.m));
+  addEventListener('resize', placePill);
+  let savedMode = 'bus';
+  try { savedMode = localStorage.getItem('bdmap.tx') || 'bus'; } catch { /* storage off */ }
+  enter.train = () => { showMode(new URLSearchParams(location.search).get('m') || savedMode, false); savedMode = seg.querySelector('[aria-selected="true"]').dataset.m; };
+
+  async function loadTrains() {
     if (RAIL) return;
     note.textContent = 'ট্রেনের তালিকা আসছে…';
     try { await loadRail(); } catch { note.textContent = 'ট্রেনের তালিকা আনা যায়নি। ইন্টারনেট সংযোগ দেখে আবার চেষ্টা করুন।'; return; }
     $('train-updated').textContent = `ট্রেনের সময়সূচি: বাংলাদেশ রেলওয়ের তথ্য থেকে, হালনাগাদ ${RAIL.updated}।`;
     pick('from', RAIL.list.find(s => s.code === 'DA'));
     pick('to', RAIL.list.find(s => s.code === 'CTG'));
-  };
+  }
   if (current === 'train') enter.train();
 })();
 
@@ -307,3 +359,5 @@ async function renderTrainPane() {
   tab.hidden = false;
   $('seg').hidden = false;
 }
+// The districts page's link opens the Transport page on its bus tab.
+for (const a of document.querySelectorAll('.dx-link')) a.addEventListener('click', () => { try { localStorage.setItem('bdmap.tx', 'bus'); } catch { /* storage off */ } });

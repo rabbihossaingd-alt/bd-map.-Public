@@ -21,7 +21,7 @@
     <a href="#/explore" data-nav="explore"><i data-ic="feed"></i><span>এক্সপ্লোর</span><em class="ndot" data-notify-dot hidden></em></a>
     <a href="#/trip" data-nav="trip"><i data-ic="route"></i><span>ম্যাপ</span></a>
     <a href="#/buses" data-nav="buses" class="desk-only"><i data-ic="bus"></i><span>ঢাকার বাস</span></a>
-    <a href="#/train" data-nav="train" class="desk-only"><i data-ic="train"></i><span>ট্রেন</span></a>
+    <a href="#/train" data-nav="train" class="desk-only"><i data-ic="trainFront"></i><span>যাতায়াত</span></a>
     <a href="#/chat" data-nav="chat" class="phone-only"><i data-ic="chat"></i><span>মেসেজ</span><em class="nbadge" data-chat-badge hidden></em></a>
     <a href="#/districts" data-nav="districts" class="desk-only"><i data-ic="city"></i><span>জেলা</span></a>
     <a href="#/nearby" data-nav="nearby" class="desk-only"><i data-ic="compass"></i><span>কাছাকাছি</span></a>
@@ -53,7 +53,7 @@
       <div class="apps">
         <a href="#/trip"><i class="mi c-green" data-ic="route"></i><span>ম্যাপ</span></a>
         <a href="#/buses"><i class="mi c-teal" data-ic="bus"></i><span>ঢাকার বাস</span></a>
-        <a href="#/train"><i class="mi c-blue" data-ic="train"></i><span>ট্রেন ও লঞ্চ</span></a>
+        <a href="#/train"><i class="mi c-blue" data-ic="trainFront"></i><span>বাস · ট্রেন · লঞ্চ</span></a>
         <a href="#/nearby"><i class="mi c-violet" data-ic="compass"></i><span>কাছাকাছি</span></a>
         <a href="#/districts"><i class="mi c-ink" data-ic="city"></i><span>৬৪ জেলা</span></a>
         <a href="#/community"><i class="mi c-amber" data-ic="star"></i><span>ভাড়া জানান</span></a>
@@ -364,10 +364,30 @@
     </div>
   </section>
 
-  <!-- Trains and launches -->
+  <!-- Transport: long-distance buses, trains and launches, one tab each -->
   <section class="page" id="page-train">
-    <div class="wrap">
-      <div class="page-head"><h2>ট্রেন</h2><p>দুটি স্টেশন বেছে নিন — কোন ট্রেন, কখন ছাড়ে, ভাড়া কত।</p></div>
+    <div class="wrap tx">
+      <div class="page-head tx-head"><h2>যাতায়াত</h2><p>দূরপাল্লার বাস, ট্রেন আর লঞ্চ — রুট, সময় আর ভাড়া এক জায়গায়।</p></div>
+      <div class="tseg" id="tx-seg" role="tablist" aria-label="যাতায়াতের ধরন">
+        <span class="tseg-pill" aria-hidden="true"></span>
+        <button role="tab" data-m="bus" aria-selected="true"><i data-ic="busFront"></i><span>বাস</span></button>
+        <button role="tab" data-m="train" aria-selected="false"><i data-ic="trainFront"></i><span>ট্রেন</span></button>
+        <button role="tab" data-m="launch" aria-selected="false"><i data-ic="launchBoat"></i><span>লঞ্চ</span></button>
+      </div>
+      <div class="tx-pane" id="tx-bus" role="tabpanel">
+      <div class="tx-sub"><h3>জেলা থেকে জেলা</h3><p>যেকোনো দুটি জেলার মধ্যে দূরপাল্লার বাসের ভাড়া, আর কোন রুটে কোন বাস চলে।</p></div>
+      <div class="card picker">
+        <select id="ic-from" aria-label="কোন জেলা থেকে"></select>
+        <button class="icon-btn" id="ic-swap" aria-label="অদলবদল"><i data-ic="swap-h"></i></button>
+        <select id="ic-to" aria-label="কোন জেলায়"></select>
+      </div>
+      <div class="card result" id="ic-result"></div>
+
+      <div class="tx-sub" style="margin-top: 44px"><h3>বাস কোম্পানি</h3><p>তারায় চাপ দিয়ে রেটিং দিন।</p></div>
+      <div class="grid" id="op-grid" style="margin-top: 0"></div>
+      </div>
+      <div class="tx-pane" id="tx-train" role="tabpanel" hidden>
+        <div class="tx-sub"><h3>ট্রেন</h3><p>দুটি স্টেশন বেছে নিন — কোন ট্রেন, কখন ছাড়ে, ভাড়া কত।</p></div>
       <div class="card" style="padding: 12px; max-width: 560px">
         <div class="od">
           <div class="dots"><i class="a"></i><i class="l"></i><i class="b"></i></div>
@@ -382,10 +402,13 @@
       <div class="label note" id="train-note"></div>
       <div id="train-list" style="margin-top: 20px; max-width: 720px"></div>
       <div class="foot" id="train-updated" style="text-align: left; max-width: 720px"></div>
-
-      <div class="page-head" style="margin-top: 64px"><h2>লঞ্চ</h2><p>ঢাকার সদরঘাট থেকে নদীপথে। সময় ও ভাড়া বদলায় — যাওয়ার আগে ঘাটে যাচাই করে নিন।</p></div>
-      <div class="grid" id="launch-grid" style="margin-top: 0"></div>
-      <div class="foot" id="launch-note" style="text-align: left"></div>
+      </div>
+      <div class="tx-pane" id="tx-launch" role="tabpanel" hidden>
+        <div class="tx-sub"><h3>লঞ্চ</h3><p>ঢাকার সদরঘাট থেকে নদীপথে। সময় ও ভাড়া বদলায় — যাওয়ার আগে ঘাটে যাচাই করে নিন।</p></div>
+        <label class="filter tx-find"><i data-ic="search"></i><input id="launch-filter" autocomplete="off" placeholder="কোথায় যাবেন — যেমন: বরিশাল, ভোলা" aria-label="গন্তব্য খুঁজুন"></label>
+        <div id="launch-grid" class="lx-list"></div>
+        <div class="foot" id="launch-note" style="text-align: left"></div>
+      </div>
     </div>
   </section>
 
@@ -404,7 +427,7 @@
       <div class="label">যাতায়াত</div>
       <div class="card menu">
         <a href="#/buses"><i class="mi c-teal" data-ic="bus"></i><span><b>ঢাকার বাস</b><em>কোন বাস কোথায় যায়</em></span><i class="chev" data-ic="chev"></i></a>
-        <a href="#/train"><i class="mi c-green" data-ic="train"></i><span><b>ট্রেন ও লঞ্চ</b><em>সময়সূচি, ভাড়া, কোন ট্রেনে যাবেন</em></span><i class="chev" data-ic="chev"></i></a>
+        <a href="#/train"><i class="mi c-green" data-ic="trainFront"></i><span><b>বাস · ট্রেন · লঞ্চ</b><em>দূরপাল্লার বাস, ট্রেন ও লঞ্চের সময়, ভাড়া, কোন ট্রেনে যাবেন</em></span><i class="chev" data-ic="chev"></i></a>
         <a href="#/districts"><i class="mi c-blue" data-ic="city"></i><span><b>৬৪ জেলা</b><em>ঢাকা থেকে ভাড়া, বাস ও দর্শনীয় স্থান</em></span><i class="chev" data-ic="chev"></i></a>
         <a href="#/fares"><i class="mi c-amber" data-ic="tag"></i><span><b>ভাড়ার হিসাব</b><em>কিমি প্রতি কত, মোট কত</em></span><i class="chev" data-ic="chev"></i></a>
       </div>
@@ -429,19 +452,10 @@
   <section class="page" id="page-districts">
     <div class="wrap">
       <div class="page-head"><h2>৬৪ জেলা</h2><p>জেলায় চাপ দিন — ঢাকা থেকে ভাড়া, বাস আর দর্শনীয় স্থান দেখুন।</p></div>
+      <a class="dx-link" href="#/train"><i class="mi c-teal" data-ic="busFront"></i><span><b>জেলা থেকে জেলার বাস ভাড়া</b><em>যেকোনো দুটি জেলা — ভাড়া আর কোন বাস চলে, যাতায়াত পাতায়</em></span><i data-ic="chev"></i></a>
       <label class="filter"><i data-ic="search"></i><input id="district-filter" autocomplete="off" placeholder="জেলার নাম — যেমন: রংপুর, coxbazar" aria-label="জেলা খুঁজুন"></label>
       <div id="district-list"></div>
 
-      <div class="page-head" style="margin-top: 64px"><h2>জেলা থেকে জেলা</h2><p>যেকোনো দুটি জেলার মধ্যে ভাড়া আর বাস।</p></div>
-      <div class="card picker">
-        <select id="ic-from" aria-label="কোন জেলা থেকে"></select>
-        <button class="icon-btn" id="ic-swap" aria-label="অদলবদল"><i data-ic="swap-h"></i></button>
-        <select id="ic-to" aria-label="কোন জেলায়"></select>
-      </div>
-      <div class="card result" id="ic-result"></div>
-
-      <div class="label" style="margin-top: 44px">বাস কোম্পানি — তারায় চাপ দিয়ে রেটিং দিন</div>
-      <div class="grid" id="op-grid" style="margin-top: 0"></div>
     </div>
   </section>
 
