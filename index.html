@@ -464,6 +464,13 @@
   <!-- Districts and intercity -->
   <section class="page" id="page-districts">
     <div class="wrap tx dg">
+      <div class="rb-top">
+        <div class="rb-seg" id="rb-seg" role="tablist" aria-label="রূপসী বাংলা">
+          <span class="rb-thumb" aria-hidden="true"></span>
+          <button role="tab" data-m="guide" aria-selected="true"><i data-ic="compass"></i><span>জেলা ঘুরি</span></button>
+          <button role="tab" data-m="tour" aria-selected="false"><i data-ic="bag"></i><span>ট্যুর প্ল্যান</span></button>
+        </div>
+      </div>
       <div class="tx-hero rb-hero">
         <div class="rb-copy">
           <span class="tx-eyebrow"><i data-ic="pin"></i><span>রূপসী বাংলা</span></span>
@@ -476,10 +483,7 @@
           <em>যেসব জেলায় গিয়েছি</em>
         </button>
       </div>
-      <div class="tmode two" id="rb-seg" role="tablist" aria-label="রূপসী বাংলা">
-        <button role="tab" data-m="guide" class="m-guide" aria-selected="true"><span class="mi2"><i data-ic="compass"></i></span><span class="mt"><b>জেলা ঘুরি</b><small>জায়গা, বিখ্যাত খাবার, ভাড়া</small></span></button>
-        <button role="tab" data-m="tour" class="m-tour" aria-selected="false"><span class="mi2"><i data-ic="star"></i></span><span class="mt"><b>ট্যুর প্ল্যান</b><small>খরচের হিসাব আর শেয়ারের কার্ড</small></span></button>
-      </div>
+
       <div class="tx-pane" id="rb-guide" role="tabpanel">
       <label class="filter tx-find dg-find"><i data-ic="search"></i><input id="district-filter" autocomplete="off" placeholder="জেলার নাম — যেমন: সিলেট, coxbazar" aria-label="জেলা খুঁজুন"></label>
 
@@ -503,68 +507,81 @@
       <a class="dx-link" href="#/train"><i class="mi c-teal" data-ic="busFront"></i><span><b>জেলা থেকে জেলার বাস ভাড়া</b><em>যেকোনো দুটি জেলা — ভাড়া আর কোন বাস চলে, যাতায়াত পাতায়</em></span><i data-ic="chev"></i></a>
       <p class="tx-source">দর্শনীয় স্থান ও ছবি: বাংলা উইকিপিডিয়া ও উইকিমিডিয়া কমন্স · বিখ্যাত খাবার ও পণ্য: পেটেন্ট, শিল্প-নকশা ও ট্রেডমার্কস অধিদপ্তরের জিআই জার্নাল · ভাড়া: বিআরটিএ।</p>
       </div>
-      <div class="tx-pane" id="rb-tour" role="tabpanel" hidden>
-        <div class="tx-sub"><h3>ট্যুর প্ল্যান</h3><p>কোথায় যাবেন, কতজন, কত দিন — খরচের হিসাব, আর বন্ধুদের সাথে শেয়ার করার কার্ড।</p></div>
-        <div class="tour-grid">
-        <div class="card tour-form">
-          <div class="label">কোথা থেকে কোথায়</div>
-          <div class="picker" style="padding: 0">
-            <select id="tour-from" aria-label="কোন জেলা থেকে"></select>
-            <span class="icon-btn" aria-hidden="true"><i data-ic="arrow"></i></span>
-            <select id="tour-to" aria-label="কোন জেলায়"></select>
+      <div class="tx-pane tp" id="rb-tour" role="tabpanel" hidden>
+        <section class="tp-hero" id="tp-hero">
+          <div class="tp-hero-in">
+            <span class="tp-kicker"><i data-ic="route"></i>ট্যুর প্ল্যান</span>
+            <div class="tp-route">
+              <label class="tp-place"><small>যাত্রা শুরু</small><select id="tour-from" aria-label="কোন জেলা থেকে"></select></label>
+              <span class="tp-way" aria-hidden="true"><i></i><em><i data-ic="arrow"></i></em></span>
+              <label class="tp-place to"><small>গন্তব্য</small><select id="tour-to" aria-label="কোন জেলায়"></select></label>
+            </div>
+            <p class="tp-note" id="tour-route-note"></p>
           </div>
-          <div class="empty" id="tour-route-note"></div>
-
-          <div class="tour-two">
-            <div><div class="label">কতজন</div><div class="stepper" id="tour-people"></div></div>
-            <div><div class="label">কত রাত</div><div class="stepper" id="tour-nights"></div></div>
-          </div>
-
-          <div class="label">যাতায়াত</div>
-          <div class="tour-two">
-            <div class="seg" id="tour-mode"></div>
-            <div class="seg" id="tour-way"></div>
-          </div>
-          <div id="tour-bus-opts" style="margin-top: 12px"><div class="seg" id="tour-class"></div></div>
-          <label class="money" id="tour-air-opt" hidden><span>বিমান ভাড়া — জনপ্রতি, এক দিকে (৳)</span><input id="tour-air-fare" type="number" min="0" step="100" inputmode="numeric"></label>
-          <div class="empty" id="tour-bus-each"></div>
-          <div class="chips" id="tour-ops"></div>
-
-          <div class="label">হোটেল</div>
-          <div class="seg" id="tour-tier"></div>
-          <div class="tour-two">
-            <label class="money"><span>প্রতি রুম, প্রতি রাত (৳)</span><input id="tour-room-price" type="number" min="0" step="100" inputmode="numeric"></label>
-            <div><div class="label" style="margin-top: 0">রুম</div><div class="stepper" id="tour-rooms"></div></div>
-          </div>
-
-          <div class="label" id="tour-hotels-label" hidden>এই জায়গার কিছু হোটেল (ম্যাপ থেকে)</div>
-          <div class="chips" id="tour-hotels"></div>
-          <div class="tour-two">
-            <label class="money"><span>খাবার — জনপ্রতি, প্রতিদিন (৳)</span><input id="tour-food" type="number" min="0" step="50" inputmode="numeric"></label>
-            <label class="money"><span>অন্যান্য — জনপ্রতি, প্রতিদিন (৳)</span><input id="tour-other" type="number" min="0" step="50" inputmode="numeric"></label>
-          </div>
+        </section>
+        <div class="tour-grid tp-grid">
+        <div class="tour-form tp-form">
+          <section class="tp-card">
+            <header><span class="tp-ic c1"><i data-ic="users"></i></span><div><h4>কতজন, কত দিন</h4><p>দল আর থাকার রাত</p></div></header>
+            <div class="tour-two">
+              <div><div class="label">কতজন</div><div class="stepper" id="tour-people"></div></div>
+              <div><div class="label">কত রাত</div><div class="stepper" id="tour-nights"></div></div>
+            </div>
+          </section>
+          <section class="tp-card">
+            <header><span class="tp-ic c2"><i data-ic="bus"></i></span><div><h4>যাতায়াত</h4><p>বাস না বিমান, এক দিক না আসা-যাওয়া</p></div></header>
+            <div class="tour-two">
+              <div class="seg" id="tour-mode"></div>
+              <div class="seg" id="tour-way"></div>
+            </div>
+            <div id="tour-bus-opts" class="tp-gap"><div class="seg" id="tour-class"></div></div>
+            <label class="money" id="tour-air-opt" hidden><span>বিমান ভাড়া — জনপ্রতি, এক দিকে (৳)</span><input id="tour-air-fare" type="number" min="0" step="100" inputmode="numeric"></label>
+            <div class="tp-fare" id="tour-bus-each"></div>
+            <div class="chips" id="tour-ops"></div>
+          </section>
+          <section class="tp-card">
+            <header><span class="tp-ic c3"><i data-ic="bed"></i></span><div><h4>থাকা</h4><p>হোটেলের ধরন, রুম আর ভাড়া</p></div></header>
+            <div class="seg" id="tour-tier"></div>
+            <div class="tour-two">
+              <label class="money"><span>প্রতি রুম, প্রতি রাত (৳)</span><input id="tour-room-price" type="number" min="0" step="100" inputmode="numeric"></label>
+              <div><div class="label">রুম</div><div class="stepper" id="tour-rooms"></div></div>
+            </div>
+            <div class="label" id="tour-hotels-label" hidden>এই জায়গার কিছু হোটেল (ম্যাপ থেকে)</div>
+            <div class="chips" id="tour-hotels"></div>
+          </section>
+          <section class="tp-card">
+            <header><span class="tp-ic c4"><i data-ic="fork"></i></span><div><h4>খাবার ও ঘোরাঘুরি</h4><p>জনপ্রতি, প্রতিদিন</p></div></header>
+            <div class="tour-two">
+              <label class="money"><span>খাবার (৳)</span><input id="tour-food" type="number" min="0" step="50" inputmode="numeric"></label>
+              <label class="money"><span>অন্যান্য (৳)</span><input id="tour-other" type="number" min="0" step="50" inputmode="numeric"></label>
+            </div>
+          </section>
         </div>
 
         <div class="tour-side">
-          <div class="card tour-sum">
-            <div class="label">খরচের হিসাব</div>
-            <div id="tour-rows"></div>
-            <div class="rule total"><span>মোট</span><b id="tour-total"></b></div>
-            <div class="per-head"><span>জনপ্রতি খরচ</span><b id="tour-per-head"></b></div>
-            <div class="foot" style="text-align: left">হোটেল, বিমান, খাবার ও অন্যান্য খরচ আমাদের আনুমানিক ধরা — আসল দাম নয়। নিজের মতো বদলে নিন।</div>
+          <div class="card tour-sum tp-sum" id="tp-sum">
+            <div class="tp-sum-top">
+              <span>জনপ্রতি খরচ</span>
+              <b id="tour-per-head"></b>
+              <small>মোট <b id="tour-total"></b></small>
+            </div>
+            <div class="tp-bar" id="tp-bar" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+            <div id="tour-rows" class="tp-rows"></div>
+            <div class="foot">হোটেল, বিমান, খাবার ও অন্যান্য খরচ আমাদের আনুমানিক ধরা — আসল দাম নয়। নিজের মতো বদলে নিন।</div>
           </div>
 
-          <div class="card tour-sum">
-            <div class="label">ট্যুর কার্ড</div>
-            <p class="empty" style="padding-top: 0">সবার ছবি দিন (৫টি পর্যন্ত), তারপর কার্ড বানান। ছবি আপনার ডিভাইসেই থাকে — কোথাও আপলোড হয় না।</p>
+          <div class="card tour-sum tp-make">
+            <header><span class="tp-ic c5"><i data-ic="star"></i></span><div><h4>ট্যুর কার্ড</h4><p>দলের ছবি দিয়ে শেয়ার করার কার্ড আর ভিডিও</p></div></header>
+            <p class="tp-small">ছবি দিন (৫টি পর্যন্ত)। ছবি আপনার ডিভাইসেই থাকে — কোথাও আপলোড হয় না।</p>
             <div class="tour-thumbs" id="tour-photos"></div>
             <input id="tour-file" type="file" accept="image/*" multiple hidden>
-            <label class="money"><span>ট্যুরের নাম</span><input id="tour-name" type="text" maxlength="40" placeholder="ট্যুরের নাম — যেমন: বন্ধুদের কক্সবাজার ট্যুর"></label>
+            <label class="money"><span>ট্যুরের নাম</span><input id="tour-name" type="text" maxlength="40" placeholder="যেমন: বন্ধুদের কক্সবাজার ট্যুর"></label>
             <label class="money"><span>তারিখ</span><input id="tour-date" type="date"></label>
-            <button class="btn" id="tour-make" style="width: 100%; justify-content: center; margin-top: 14px"><i data-ic="star"></i>কার্ড বানান</button>
+            <button class="btn tp-go" id="tour-make"><i data-ic="star"></i>কার্ড বানান</button>
           </div>
         </div>
       </div>
+        <button class="tp-float" id="tp-float" type="button"><span>জনপ্রতি</span><b id="tp-float-n">…</b><i data-ic="chev"></i></button>
 
       <div class="tour-card" id="tour-card" hidden>
         <canvas id="tour-canvas" width="1080" height="1350"></canvas>

@@ -171,7 +171,27 @@
     $('tour-total').textContent = money(c.total);
     $('tour-per-head').textContent = money(c.perHead);
     $('tour-make').disabled = same || c.total == null;
+    // the bar under the total: each cost's share, in the colours of its row
+    const parts = [c.bus || 0, c.hotel, c.food, c.other], whole = parts.reduce((x, y) => x + y, 0) || 1;
+    [...$('tp-bar').children].forEach((b, i) => { b.style.flexGrow = String(parts[i] / whole); });
+    $('tp-float-n').textContent = money(c.perHead);
+    paintHero();
   }
+
+  // The trip's header shows the destination's own picture (from the district guide, once it has loaded).
+  let heroFor = '';
+  function paintHero() {
+    if (heroFor === plan.to.id) return;
+    const g = typeof GUIDE !== 'undefined' && GUIDE && GUIDE[plan.to.id];
+    if (!g) { if (typeof loadGuide === 'function') loadGuide().then(() => { if (GUIDE) paintHero(); }).catch(() => {}); return; }
+    heroFor = plan.to.id;
+    const hero = $('tp-hero');
+    hero.querySelector('.dg-img')?.remove();
+    photo(hero, coverOf(g), plan.to.division, 1280);
+  }
+  $('tp-float').addEventListener('click', () => $('tp-sum').scrollIntoView({ behavior: 'smooth', block: 'center' }));
+  // the floating total shows only while the tour tab is open and its summary is out of sight
+  if ('IntersectionObserver' in window) new IntersectionObserver(([e]) => $('tp-float').classList.toggle('show', !e.isIntersecting && e.boundingClientRect.top > 0)).observe($('tp-sum'));
 
   // ---- photos ----
   function drawThumbs() {

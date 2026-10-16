@@ -20,12 +20,28 @@ const wikiLink = page => page ? `https://bn.wikipedia.org/wiki/${encodeURICompon
 // A Wikimedia thumbnail at another of its standard widths (a card needs 500 px, not 1280); an original stays as it is.
 const sized = (url, w) => url ? url.replace(/\/(\d+)px-([^/?]+)(\?|$)/, (m, old, name, q) => `/${Math.min(+old, w)}px-${name}${q}`) : '';
 // A picture over its colour: the colour shows at once, the picture fades in only once it has all arrived.
-function photo(box, url, division, w) {
+// Line drawings for a place without a photo, chosen by what its name says it is.
+const KIND_ART = [
+  [/জমিদার|রাজবাড়|প্রাসাদ|বাড়ি|কুঠি|ভিটা/, '<path d="M3 21h18M5 21V10l7-5 7 5v11"/><path d="M9 21v-5h6v5M8 12h1M15 12h1M12 5V2.5"/><path d="M3 10.5l9-6.5 9 6.5"/>'],
+  [/মসজিদ|মাজার|দরগা/, '<path d="M4 21h16M6 21v-7a6 6 0 0112 0v7"/><path d="M12 4.5c1.5 1.4 2 2.6 0 4-2-1.4-1.5-2.6 0-4zM10 21v-4a2 2 0 014 0v4M3 21V9M21 21V9M3 9l-.5-2h1zM21 9l-.5-2h1z"/>'],
+  [/মন্দির|মঠ|থান|গির্জা|বিহার/, '<path d="M4 21h16M6 21V13h12v8M8 13l4-9 4 9M12 4V2M10 21v-4h4v4"/>'],
+  [/ঝর্ণা|জলপ্রপাত/, '<path d="M4 4h16M7 4v9M12 4v12M17 4v9"/><path d="M3 19c2 0 2-1.5 4.5-1.5S10 19 12 19s2.5-1.5 4.5-1.5S19 19 21 19"/>'],
+  [/দিঘি|দীঘি|দীঘী|সাগর|বিল|হাওর|বাওড়|পুখিরি|জলাবন/, '<path d="M3 15c2 0 2-1.5 4.5-1.5S10 15 12 15s2.5-1.5 4.5-1.5S19 15 21 15M3 19c2 0 2-1.5 4.5-1.5S10 19 12 19s2.5-1.5 4.5-1.5S19 19 21 19"/><path d="M8 10V6M8 6l-2 2M8 6l2 2M16 11V5M16 5l-2.5 2.5M16 5l2.5 2.5"/>'],
+  [/জাদুঘর|গ্রন্থাগার|হোমস|মিল/, '<path d="M3 21h18M4 10h16M12 3l9 5H3zM6 10v8M10 10v8M14 10v8M18 10v8M4 18h16"/>'],
+  [/সেতু|রেলপথ/, '<path d="M2 17h20M4 17v-4M20 17v-4M2 9c4 0 6 4 10 4s6-4 10-4M8 12.2V17M16 12.2V17"/>'],
+  [/সৈকত|দ্বীপ|চর|বন্দর|পল্লী/, '<circle cx="17" cy="6" r="2.5"/><path d="M3 19c2 0 2-1.5 4.5-1.5S10 19 12 19s2.5-1.5 4.5-1.5S19 19 21 19M8 16V8M8 8c-3 0-4 2-4 2M8 8c3 0 4 2 4 2M8 8c-1-2.5-3-3-3-3M8 8c1-2.5 3-3 3-3"/>'],
+  [/শালবন|অরণ্য|পার্ক|ইকোপার্ক|বন/, '<path d="M7 21v-4M17 21v-5M12 21v-6M7 17l-4 0 4-6-2.5 0L7 6l2.5 5H7l4 6zM17 16h-3.5l3.5-5.5h-2L17 6l2 4.5h-2l3.5 5.5z"/>'],
+  [/স্মৃতিসৌধ|বধ্যভূমি|কবর|শহীদ|স্মৃতি/, '<path d="M4 21h16M12 3l2 18M12 3l-2 18M8 21l1.5-10M16 21l-1.5-10"/>']
+];
+const kindArt = name => (KIND_ART.find(([re]) => re.test(name || '')) || [])[1];
+// Without a picture (or when it fails to load) the box shows its kind — a plate, a craft, a place — drawn large and faint.
+function photo(box, url, division, w, icon) {
   box.style.background = coverStyle('', division);
-  if (!url) return;
+  const art = () => { if (icon && !box.querySelector('.ph-art')) box.prepend(Object.assign(el('span', 'ph-art'), { innerHTML: icon.startsWith('<') ? `<svg viewBox="0 0 24 24" aria-hidden="true">${icon}</svg>` : svg(icon) })); };
+  if (!url) { art(); return; }
   const img = Object.assign(el('img', 'dg-img'), { alt: '', loading: 'lazy', decoding: 'async', src: sized(url, w) });
   img.addEventListener('load', () => img.classList.add('in'));
-  img.addEventListener('error', () => img.remove());
+  img.addEventListener('error', () => { img.remove(); art(); });
   box.prepend(img);
 }
 // A district's own picture, unless its article shows a map; then its first place's.
@@ -44,7 +60,7 @@ const coverStyle = (img, division) => {
     const g = (GUIDE || {})[d.id] || {}, gi = giOf(d.id), sights = (g.sights || []).length;
     const c = el('button', 'dg-card');
     const cover = el('span', 'dg-cover');
-    photo(cover, coverOf(g), d.division, 500);
+    photo(cover, coverOf(g), d.division, 500, 'pin');
     const meta = el('span', 'dg-meta');
     meta.append(el('b', null, d.bn), el('small', null, [sights ? tl2(`${num(sights)}টি জায়গা`, `${sights} places`) : '', gi[0] ? gi[0].bn.replace(/^.+?র /, '') : ''].filter(Boolean).join(' · ') || tl2(`${d.division} বিভাগ`, d.division)));
     c.append(cover, meta);
@@ -87,7 +103,7 @@ const coverStyle = (img, division) => {
     rail.replaceChildren(...top.map((s, i) => {
       const c = el('button', 'dg-place');
       const ph = el('span', 'ph');
-      photo(ph, s.img, s.d.division, 500);
+      photo(ph, s.img, s.d.division, 500, kindArt(s.name) || 'pin');
       ph.appendChild(el('em', null, num(i + 1)));
       const t = el('span', 't');
       t.append(el('b', 'no-tr', s.name), el('small', null, s.d.bn));
@@ -108,7 +124,7 @@ const coverStyle = (img, division) => {
       const d = districtById(id), story = GI_STORY[bn];
       const c = el('button', 'dg-gi-card' + (story && story.img ? ' has-ph' : ''));
       const ph = el('span', 'gi-ph');
-      if (story && story.img) photo(ph, story.img, d.division, 500);
+      photo(ph, story && story.img, d.division, 500, kind === 'f' ? 'fork' : 'bag');
       ph.appendChild(el('span', 'gi-mark', 'GI'));
       const t = el('span', 't');
       t.append(el('b', null, LANG === 'en' ? en : bn), el('small', null, d.bn));
@@ -123,13 +139,81 @@ const coverStyle = (img, division) => {
     }
   }
 
+  // ---- the reader: a whole Wikipedia article, here, in the app's type — headings, paragraphs, its pictures ----
+  const SKIP_SECTIONS = /তথ্যসূত্র|আরও দেখুন|বহিঃসংযোগ|টীকা|পাদটীকা|গ্রন্থপঞ্জি|উৎস|বহিঃ সংযোগ|আরো দেখুন|গ্যালারি|চিত্রশালা|References|See also|External links/;
+  async function openArticle(page, { title, img, file, sub, place } = {}) {
+    const box = el('div', 'dg-sheet ar-sheet');
+    const scroller = el('div', 'dg-scroll');
+    const hero = el('header', 'dg-hero ar-hero');
+    photo(hero, img, '', 1280, kindArt(title) || 'info');
+    const x = el('button', 'lv-icon dg-x');
+    x.innerHTML = svg('close');
+    x.setAttribute('aria-label', tl2('বন্ধ করুন', 'Close'));
+    const head = el('div', 'dg-title');
+    if (sub) head.appendChild(el('small', null, sub));
+    head.appendChild(el('h2', 'no-tr', title || page));
+    hero.append(x, head);
+    if (img && file) { const cr = el('a', 'dg-credit', tl2('ছবি', 'Photo')); cr.href = commonsLink(file); cr.target = '_blank'; cr.rel = 'noopener'; hero.appendChild(cr); }
+    const body = el('article', 'dg-body ar-body');
+    const wait = el('div', 'ar-wait');
+    for (let i = 0; i < 6; i++) wait.appendChild(el('i'));
+    body.appendChild(wait);
+    scroller.append(hero, body);
+    box.appendChild(scroller);
+    document.body.appendChild(box);
+    document.body.classList.add('reels-open');
+    const close = () => { box.classList.add('out'); setTimeout(() => box.remove(), 280); if (!document.querySelector('.dg-sheet:not(.out):not(.ar-sheet)')) document.body.classList.remove('reels-open'); };
+    x.addEventListener('click', close);
+    scroller.addEventListener('scroll', () => hero.style.setProperty('--k', Math.min(1, scroller.scrollTop / 260).toFixed(3)), { passive: true });
+    const W = 'https://bn.wikipedia.org/w/api.php?format=json&formatversion=2&origin=*&redirects=1&';
+    try {
+      const [txt, pics] = await Promise.all([
+        fetch(W + 'action=query&prop=extracts&explaintext=1&exsectionformat=wiki&titles=' + encodeURIComponent(page)).then(r => r.json()),
+        fetch(W + 'action=query&generator=images&gimlimit=30&prop=imageinfo&iiprop=url|size&iiurlwidth=640&titles=' + encodeURIComponent(page)).then(r => r.json()).catch(() => ({}))
+      ]);
+      const text = ((txt.query && txt.query.pages[0]) || {}).extract || '';
+      wait.remove();
+      if (!text) throw new Error('empty');
+      // == heading == lines start sections; the end matter (references, links) is left out
+      let skip = false, first = true;
+      for (const raw of text.split('\n')) {
+        const line = raw.trim();
+        if (!line) continue;
+        const h = /^(=+)\s*(.+?)\s*=+$/.exec(line);
+        if (h) { skip = SKIP_SECTIONS.test(h[2]); if (!skip) body.appendChild(el(h[1].length <= 2 ? 'h3' : 'h4', 'ar-h no-tr', h[2])); continue; }
+        if (skip) continue;
+        body.appendChild(el('p', 'ar-p no-tr' + (first ? ' lead' : ''), line));
+        first = false;
+      }
+      // the article's own pictures, without maps, flags and icons
+      const gallery = ((pics.query && pics.query.pages) || []).map(p => p.imageinfo && p.imageinfo[0]).filter(i => i && i.thumburl && i.width >= 400 && !/map|locator|flag|logo|icon|symbol|emblem|seal|\.svg/i.test(i.url)).slice(0, 10);
+      if (gallery.length) {
+        body.appendChild(el('h3', 'ar-h', tl2('ছবি', 'Pictures')));
+        const strip = el('div', 'ar-gallery');
+        for (const g of gallery) { const f = el('a', 'ar-shot'); f.href = g.descriptionurl || g.url; f.target = '_blank'; f.rel = 'noopener'; photo(f, g.thumburl, '', 640); strip.appendChild(f); }
+        body.appendChild(strip);
+      }
+    } catch {
+      wait.remove();
+      body.appendChild(el('p', 'ar-p', tl2('লেখাটি আনা গেল না। ইন্টারনেট সংযোগ দেখে আবার খুলুন।', 'Could not load the article. Check the connection and open it again.')));
+    }
+    if (place) body.appendChild(button('pin', tl2('ম্যাপে দেখুন', 'See on the map'), () => { for (const b of document.querySelectorAll('.dg-sheet')) b.remove(); document.body.classList.remove('reels-open'); goTo({ lat: place.lat, lon: place.lon, label: place.name }); }));
+    const src = el('p', 'tx-source');
+    src.append(document.createTextNode(tl2('লেখা: বাংলা উইকিপিডিয়া, ক্রিয়েটিভ কমন্স অ্যাট্রিবিউশন-শেয়ারঅ্যালাইক (CC BY-SA 4.0) লাইসেন্সে। ', 'Text: Bangla Wikipedia, under CC BY-SA 4.0. ')));
+    const a = el('a', null, tl2('মূল নিবন্ধ ও লেখকদের তালিকা', 'The original article and its authors'));
+    a.href = wikiLink(page); a.target = '_blank'; a.rel = 'noopener';
+    src.appendChild(a);
+    body.appendChild(src);
+  }
+  window.openArticle = openArticle;
+
   // ---- a GI product's story: its picture, the district, and what Wikipedia tells of it ----
   function openStory(p) {
     const d = districtById(p.id), story = GI_STORY[p.bn];
     const box = el('div', 'dg-sheet gi-story');
     const scroller = el('div', 'dg-scroll');
     const hero = el('header', 'dg-hero gi-hero');
-    photo(hero, story && story.img, d.division, 1280);
+    photo(hero, story && story.img, d.division, 1280, p.kind === 'f' ? 'fork' : 'bag');
     const x = el('button', 'lv-icon dg-x');
     x.innerHTML = svg('close');
     x.setAttribute('aria-label', tl2('বন্ধ করুন', 'Close'));
@@ -143,14 +227,15 @@ const coverStyle = (img, division) => {
     hero.append(x, title);
     if (story && story.file) { const cr = el('a', 'dg-credit', tl2('ছবি', 'Photo')); cr.href = commonsLink(story.file); cr.target = '_blank'; cr.rel = 'noopener'; hero.appendChild(cr); }
     const body = el('div', 'dg-body gi-body');
+    if (story && story.imgGeneric) body.appendChild(el('p', 'dg-note', tl2('ছবিটি এই ধরনের পণ্যের — এই জেলারই তোলা নয়।', 'The photo shows this kind of product, not one from this district.')));
     if (story && story.text) {
       // general only if the text does not speak of this place either (কাঁচাগোল্লা's article is about Natore's)
       const stem = p.bn.split(' ')[0].replace(/(র|ের|এর)$/, '');
       const general = story.general && !story.text.includes(d.bn) && !story.text.includes(stem);
       if (general) body.appendChild(el('p', 'dg-note gi-general', tl2(`এই জেলার পণ্যটি নিয়ে উইকিপিডিয়ায় আলাদা নিবন্ধ নেই — নিচে «${story.page}» নিয়ে যা লেখা আছে।`, `Wikipedia has no article on this district's product itself — below is what it says about «${story.page}».`)));
       for (const para of story.text.split('\n').filter(Boolean)) body.appendChild(el('p', 'gi-text no-tr', para));
-      const more = el('a', 'dg-wiki', tl2('উইকিপিডিয়ায় পুরোটা পড়ুন', 'Read it all on Wikipedia'));
-      more.href = wikiLink(story.page); more.target = '_blank'; more.rel = 'noopener';
+      const more = el('button', 'dg-wiki', tl2('পুরোটা পড়ুন', 'Read it all'));
+      more.addEventListener('click', () => openArticle(story.page, { title: LANG === 'en' ? p.en : p.bn, img: story.img, file: story.file, sub: tl2(`${d.bn} জেলা`, d.bn) }));
       body.appendChild(more);
     } else body.appendChild(el('p', 'gi-text', tl2('এই পণ্যটি নিয়ে বাংলা উইকিপিডিয়ায় এখনো কোনো নিবন্ধ নেই। এটি সরকারের জিআই তালিকায় নিবন্ধিত — অর্থাৎ এর নাম, স্বাদ বা গুণ এই এলাকার সাথেই জড়িয়ে আছে।', 'Bangla Wikipedia has no article on this yet. It is registered as a GI — its name and quality belong to this place.')));
     // the same district's other famous things
@@ -181,7 +266,7 @@ const coverStyle = (img, division) => {
     const scroller = el('div', 'dg-scroll');
     const hero = el('header', 'dg-hero');
     const heroImg = coverOf(g);
-    photo(hero, heroImg, d.division, 1280);
+    photo(hero, heroImg, d.division, 1280, 'pin');
     const x = el('button', 'lv-icon dg-x');
     x.innerHTML = svg('close');
     x.setAttribute('aria-label', tl2('বন্ধ করুন', 'Close'));
@@ -201,8 +286,8 @@ const coverStyle = (img, division) => {
     const body = el('div', 'dg-body');
     if (g.intro) {
       const p = el('p', 'dg-intro no-tr', g.intro);
-      const more = el('a', 'dg-wiki', tl2('উইকিপিডিয়ায় আরও পড়ুন', 'Read more on Wikipedia'));
-      more.href = wikiLink(g.page); more.target = '_blank'; more.rel = 'noopener';
+      const more = el('button', 'dg-wiki', tl2('জেলার কথা — পুরোটা পড়ুন', 'About the district — read it all'));
+      more.addEventListener('click', () => openArticle(g.page, { title: d.bn, img: coverOf(g), sub: tl2(`${d.division} বিভাগ`, d.division) }));
       body.append(p, more);
     }
     if (gi.length) {
@@ -224,14 +309,14 @@ const coverStyle = (img, division) => {
       for (const s of g.sights) {
         const c = el('article', 'dg-sight' + (s.page === focusPage ? ' focus' : ''));
         const ph = el('div', 'ph');
-        photo(ph, s.img, d.division, 960);
+        photo(ph, s.img, d.division, 960, kindArt(s.name) || 'pin');
         if (s.file) { const cr = el('a', 'dg-credit', '©'); cr.href = commonsLink(s.file); cr.target = '_blank'; cr.rel = 'noopener'; cr.title = tl2('ছবির উৎস ও লাইসেন্স', 'Photo source and licence'); ph.appendChild(cr); }
         const t = el('div', 't');
         t.append(el('b', 'no-tr', s.name));
         if (s.text) t.appendChild(el('p', 'no-tr', s.text));
         const acts = el('div', 'acts');
         if (s.lat != null) { const m = button('pin', tl2('ম্যাপে', 'On map'), () => { box.remove(); document.body.classList.remove('reels-open'); goTo({ lat: s.lat, lon: s.lon, label: s.name }); }, true); acts.appendChild(m); }
-        const w = el('a', 'btn quiet', tl2('বিস্তারিত', 'More')); w.href = wikiLink(s.page); w.target = '_blank'; w.rel = 'noopener';
+        const w = button('info', tl2('বিস্তারিত', 'More'), () => openArticle(s.page, { title: s.name, img: s.img, file: s.file, sub: d.bn, place: s.lat != null ? s : null }), true);
         acts.appendChild(w);
         t.appendChild(acts);
         c.append(ph, t);
@@ -292,6 +377,7 @@ const coverStyle = (img, division) => {
   const showTab = (m, animate = true) => {
     if (!['guide', 'tour'].includes(m)) m = 'guide';
     for (const b of seg.querySelectorAll('button')) b.setAttribute('aria-selected', String(b.dataset.m === m));
+    seg.dataset.on = m; $('page-districts').dataset.tab = m;
     for (const k of ['guide', 'tour']) {
       const pane = $('rb-' + k), on = k === m;
       if (on && pane.hidden) { pane.hidden = false; if (animate) { pane.classList.remove('in'); void pane.offsetWidth; pane.classList.add('in'); } }
