@@ -328,7 +328,7 @@ setInterval(() => {
 function deleteUser(id) {
   aq.endAll.run(id);
   for (const g of db.prepare('SELECT grp FROM group_members WHERE user = ?').all(id)) leaveGroup(g.grp, id);
-  for (const sql of ['DELETE FROM friends WHERE a = ?1 OR b = ?1', 'DELETE FROM messages WHERE a = ?1 OR b = ?1 OR sender = ?1', 'DELETE FROM notes WHERE user = ?1', 'DELETE FROM chat_prefs WHERE user = ?1', 'DELETE FROM earnings WHERE user = ?1', 'DELETE FROM payouts WHERE user = ?1', 'DELETE FROM reports WHERE reporter = ?1 OR about = ?1',
+  for (const sql of ['DELETE FROM friends WHERE a = ?1 OR b = ?1', 'DELETE FROM messages WHERE a = ?1 OR b = ?1 OR sender = ?1', 'DELETE FROM notes WHERE user = ?1', 'DELETE FROM chat_prefs WHERE user = ?1', 'DELETE FROM earnings WHERE user = ?1', 'DELETE FROM payouts WHERE user = ?1', 'DELETE FROM notifications WHERE user = ?1 OR actor = ?1', 'DELETE FROM reports WHERE reporter = ?1 OR about = ?1',
                      'DELETE FROM ticket_msgs WHERE ticket IN (SELECT id FROM tickets WHERE user = ?1)', 'DELETE FROM tickets WHERE user = ?1', 'DELETE FROM contributions WHERE user = ?1', 'DELETE FROM post_likes WHERE user = ?1', 'DELETE FROM post_saves WHERE user = ?1', 'DELETE FROM post_comments WHERE user = ?1',
                      'DELETE FROM chat_ok WHERE a = ?1 OR b = ?1']) db.prepare(sql).run(id);
   for (const st of db.prepare('SELECT * FROM stories WHERE user = ?').all(id)) deleteStory(st);
@@ -706,6 +706,19 @@ function deliverTo(userId) {
   db.prepare('UPDATE messages SET got = ?2 WHERE (a = ?1 OR b = ?1) AND grp = 0 AND sender <> ?1 AND got = 0').run(userId, Date.now());
   for (const s of senders) push(s.sender, 'delivered', { by: userId });
 }
+// ---- notifications (the heart in Explore): likes, comments, new followers, follow-backs ----
+db.exec(`CREATE TABLE IF NOT EXISTS notifications (id INTEGER PRIMARY KEY, user INTEGER NOT NULL, actor INTEGER NOT NULL, kind TEXT NOT NULL, post INTEGER NOT NULL DEFAULT 0,
+  body TEXT NOT NULL DEFAULT '', created INTEGER NOT NULL, seen INTEGER NOT NULL DEFAULT 0)`);
+db.exec('CREATE INDEX IF NOT EXISTS notifications_user ON notifications (user, id)');
+function notify(user, actor, kind, post = 0, body = '') {
+  if (!user || user === actor) return;
+  // One like, one follow per person and post: liking again replaces the old line instead of adding another.
+  if (kind !== 'comment') db.prepare('DELETE FROM notifications WHERE user = ? AND actor = ? AND kind = ? AND post = ?').run(user, actor, kind, post);
+  db.prepare('INSERT INTO notifications (user, actor, kind, post, body, created) VALUES (?, ?, ?, ?, ?, ?)').run(user, actor, kind, post, body, Date.now());
+  push(user, 'notify', {});
+}
+const unnotify = (user, actor, kind, post = 0) => db.prepare('DELETE FROM notifications WHERE user = ? AND actor = ? AND kind = ? AND post = ?').run(user, actor, kind, post);
+
 // People who should hear about a change to someone: friends, and those who follow them.
 function tellFollowers(userId, event, data) {
   for (const l of cq.links.all(userId)) if (l.state === 'friends' || (l.state === 'pending' && l.actor !== userId)) push(l.id, event, data);
@@ -734,8 +747,22 @@ function allowSend(id) {
 
 // The STUN server lets two browsers find a direct path. Behind strict mobile networks a TURN relay is also
 // needed: set TURN_URL, TURN_USER and TURN_PASS to use one.
-const ICE = [{ urls: 'stun:stun.l.google.com:19302' }];
-if (process.env.TURN_URL) ICE.push({ urls: process.env.TURN_URL, username: process.env.TURN_USER || '', credential: process.env.TURN_PASS || '' });
+const ICE = [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302', 'stun:stun.cloudflare.com:3478'] }];
+// TURN_URL may list several relays separated by commas (turn: and turns:, UDP and TCP), sharing TURN_USER / TURN_PASS.
+if (process.env.TURN_URL) ICE.push({ urls: process.env.TURN_URL.split(',').map(s => s.trim()).filter(Boolean), username: process.env.TURN_USER || '', credential: process.env.TURN_PASS || '' });
+// Or a metered.ca account: METERED_APP (the part before .metered.live) and METERED_KEY; its relays are fetched and kept for an hour.
+let meteredIce = { at: 0, list: [] };
+async function iceServers() {
+  if (!process.env.METERED_APP || !process.env.METERED_KEY) return ICE;
+  if (Date.now() - meteredIce.at < 36e5 && meteredIce.list.length) return [...ICE, ...meteredIce.list];
+  try {
+    const r = await fetch(`https://${process.env.METERED_APP}.metered.live/api/v1/turn/credentials?apiKey=${encodeURIComponent(process.env.METERED_KEY)}`, { signal: AbortSignal.timeout(5000) });
+    const list = await r.json();
+    if (Array.isArray(list) && list.length) meteredIce = { at: Date.now(), list };
+  } catch (e) { console.error('turn credentials failed:', e.message); }
+  return [...ICE, ...meteredIce.list];
+}
+const hasTurn = () => !!process.env.TURN_URL || !!(process.env.METERED_APP && process.env.METERED_KEY);
 
 //   GET  /api/chat/stream            server-sent events: message, read, typing, presence, friends, signal
 //   GET  /api/chat/list              -> { friends, incoming, outgoing, blocked }
@@ -845,7 +872,7 @@ async function chatApi(req, res, action, query) {
       if (!Number.isInteger(other) || (linkOf(me.id, other) || {}).state === 'blocked') return json(res, 403, { error: 'friends' });
       return json(res, 200, { messages: cq.history.all(...pair(me.id, other), before).reverse().map(shown), ok: chatOpen(me.id, other) });
     }
-    if (action === 'ice') return json(res, 200, { iceServers: ICE });
+    if (action === 'ice') return json(res, 200, { iceServers: await iceServers(), relay: hasTurn() });
     return json(res, 404, { error: 'not found' });
   }
 
@@ -937,8 +964,8 @@ async function chatApi(req, res, action, query) {
 
   if (action === 'friend') {
     if (link && link.state === 'blocked') return json(res, 403, { error: 'blocked' });
-    if (!link) { if (!allowWrite(req.socket.remoteAddress)) return json(res, 429, { error: 'slow' }); cq.setLink.run(a, b, 'pending', me.id, now); }
-    else if (link.state === 'pending' && link.actor !== me.id) cq.setLink.run(a, b, 'friends', me.id, now);
+    if (!link) { if (!allowWrite(req.socket.remoteAddress)) return json(res, 429, { error: 'slow' }); cq.setLink.run(a, b, 'pending', me.id, now); notify(other, me.id, 'follow'); }
+    else if (link.state === 'pending' && link.actor !== me.id) { cq.setLink.run(a, b, 'friends', me.id, now); notify(other, me.id, 'followback'); }
     refresh();
     return json(res, 200, { ok: true });
   }
@@ -1230,7 +1257,7 @@ db.exec(`CREATE TABLE IF NOT EXISTS post_comments (id INTEGER PRIMARY KEY, post 
 const unlinkMedia = name => { if (name) fs.unlink(path.join(MEDIA_DIR, path.basename(name)), () => {}); };
 function deletePost(p) {
   unlinkMedia(p.file); unlinkMedia(p.poster);
-  for (const sql of ['DELETE FROM post_likes WHERE post = ?', 'DELETE FROM post_saves WHERE post = ?', 'DELETE FROM post_comments WHERE post = ?', 'DELETE FROM posts WHERE id = ?']) db.prepare(sql).run(p.id);
+  for (const sql of ['DELETE FROM post_likes WHERE post = ?', 'DELETE FROM post_saves WHERE post = ?', 'DELETE FROM post_comments WHERE post = ?', 'DELETE FROM notifications WHERE post = ?', 'DELETE FROM posts WHERE id = ?']) db.prepare(sql).run(p.id);
 }
 setInterval(() => {
   for (const st of db.prepare('SELECT * FROM stories WHERE created < ?').all(Date.now() - 864e5)) deleteStory(st);
@@ -1365,7 +1392,8 @@ async function exploreApi(req, res, action, query) {
   }
   if (action === 'like') {
     const liked = !db.prepare('DELETE FROM post_likes WHERE post = ? AND user = ?').run(p.id, me.id).changes;
-    if (liked) db.prepare('INSERT INTO post_likes (post, user, made) VALUES (?, ?, ?)').run(p.id, me.id, now);
+    if (liked) { db.prepare('INSERT INTO post_likes (post, user, made) VALUES (?, ?, ?)').run(p.id, me.id, now); notify(p.user, me.id, 'like', p.id); }
+    else unnotify(p.user, me.id, 'like', p.id);
     return json(res, 200, { liked, likes: count('SELECT COUNT(*) AS n FROM post_likes WHERE post = ?', p.id) });
   }
   if (action === 'comment') {
@@ -1373,6 +1401,7 @@ async function exploreApi(req, res, action, query) {
     if (!text) return json(res, 400, { error: 'bad request' });
     if (!allowSend(me.id)) return json(res, 429, { error: 'slow' });
     const id = Number(db.prepare('INSERT INTO post_comments (post, user, body, created) VALUES (?, ?, ?, ?)').run(p.id, me.id, text, now).lastInsertRowid);
+    notify(p.user, me.id, 'comment', p.id, text.slice(0, 120));
     return json(res, 200, { comment: { id, body: text, created: now, user: { id: me.id, name: me.name, pic: me.pic_v } } });
   }
   if (action === 'delete') {
@@ -1620,6 +1649,25 @@ async function creatorApi(req, res, action) {
   json(res, 404, { error: 'not found' });
 }
 
+//   GET /api/notify/list -> { items, unread }     GET /api/notify/count -> { unread }     POST /api/notify/read
+async function notifyApi(req, res, action) {
+  const me = userOf(req);
+  if (!me) return json(res, 401, { error: 'login' });
+  if (action === 'count') return json(res, 200, { unread: count('SELECT COUNT(*) AS n FROM notifications WHERE user = ? AND seen = 0', me.id) });
+  if (action === 'list') {
+    const rows = db.prepare(`SELECT n.*, u.name, u.username, u.pic_v, u.verified, p.kind AS pkind, p.file, p.poster, p.caption FROM notifications n JOIN users u ON u.id = n.actor
+      LEFT JOIN posts p ON p.id = n.post WHERE n.user = ? AND u.banned = 0 ORDER BY n.id DESC LIMIT 80`).all(me.id);
+    return json(res, 200, { unread: rows.filter(r => !r.seen).length, items: rows.map(r => ({ id: r.id, kind: r.kind, body: r.body, created: r.created, seen: !!r.seen,
+      actor: { id: r.actor, name: r.name, username: r.username, pic: r.pic_v, verified: !!r.verified, relation: relationOf(me.id, r.actor) },
+      post: r.post && r.pkind ? { id: r.post, kind: r.pkind, thumb: r.pkind === 'video' ? (r.poster ? 'media/' + r.poster : '') : r.pkind === 'photo' ? 'media/' + r.file : '', text: r.pkind === 'text' ? r.caption.slice(0, 60) : '' } : null })) });
+  }
+  if (action === 'read' && req.method === 'POST') {
+    db.prepare('UPDATE notifications SET seen = 1 WHERE user = ? AND seen = 0').run(me.id);
+    return json(res, 200, { ok: true });
+  }
+  json(res, 404, { error: 'not found' });
+}
+
 // ---- Admin ----
 // For accounts whose role is staff or admin. Staff answer tickets and handle reports; only an admin changes
 // roles, deletes accounts, edits the notice or removes fare reports. Private messages are never shown here:
@@ -1760,7 +1808,7 @@ async function adminApi(req, res, action, query) {
     if (action === 'system') {
       let size = 0;
       try { size = fs.statSync(path.join(DATA_DIR, 'ratings.db')).size; } catch { /* not created yet */ }
-      return json(res, 200, { mail: mailReady, mailFrom: MAIL.from || '', turn: ICE.length > 1, admins: ADMIN_EMAILS, dbBytes: size, dataDir: process.env.DATA_DIR ? 'DATA_DIR' : 'app folder',
+      return json(res, 200, { mail: mailReady, mailFrom: MAIL.from || '', turn: hasTurn(), admins: ADMIN_EMAILS, dbBytes: size, dataDir: process.env.DATA_DIR ? 'DATA_DIR' : 'app folder',
                               uptime: Math.round(process.uptime()), node: process.version, notice: (sq.setting.get('notice') || {}).value || '' });
     }
     return json(res, 404, { error: 'not found' });
@@ -2032,6 +2080,7 @@ http.createServer((req, res) => {
   if (pathname === '/api/ratings') return api(req, res).catch(() => json(res, 500, { error: 'server error' }));
   if (pathname === '/api/fares') return faresApi(req, res).catch(() => json(res, 500, { error: 'server error' }));
   if (pathname.startsWith('/api/chat/')) return chatApi(req, res, pathname.slice(10), searchParams).catch(e => { console.error(e); if (!res.headersSent) json(res, 500, { error: 'server error' }); });
+  if (pathname.startsWith('/api/notify/')) return notifyApi(req, res, pathname.slice(12)).catch(e => { console.error(e); if (!res.headersSent) json(res, 500, { error: 'server error' }); });
   if (pathname.startsWith('/api/creator/')) return creatorApi(req, res, pathname.slice(13)).catch(e => { console.error(e); if (!res.headersSent) json(res, 500, { error: 'server error' }); });
   if (pathname.startsWith('/api/avatar/')) return avatarApi(req, res, pathname.slice(12));
   if (pathname.startsWith('/media/')) return serveMedia(req, res, pathname.slice(7));

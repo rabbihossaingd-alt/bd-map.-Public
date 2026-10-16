@@ -107,7 +107,7 @@ function chatToast(person, text, onClick, title) {
 const allThreads = () => [...CHAT.friends, ...CHAT.groups];
 
 function setBadges() {
-  const n = allThreads().reduce((sum, t) => sum + (t.muted ? 0 : t.unread), 0) + CHAT.incoming.length + CHAT.requests.length;
+  const n = allThreads().reduce((sum, t) => sum + (t.muted ? 0 : t.unread), 0) + CHAT.requests.length;
   for (const b of document.querySelectorAll('[data-chat-badge]')) {
     b.textContent = n > 99 ? '99+' : num(n);
     b.hidden = !n;
@@ -169,7 +169,7 @@ function threadRow(t) {
 }
 function renderList() {
   const reqBox = $('chat-requests'), list = $('chat-list');
-  const waiting = CHAT.requests.length + CHAT.incoming.length;
+  const waiting = CHAT.requests.length;
   $('chat-me').textContent = ME ? (ME.username || ME.name) : '';
   for (const t of $('chat-tabs').children) {
     t.classList.toggle('on', t.dataset.tab === inbox.tab);
@@ -195,21 +195,9 @@ function renderList() {
     reqBox.appendChild(row);
   }
   if (CHAT.requests.length) reqBox.appendChild(el('div', 'form-note req-note', 'রিকোয়েস্ট গ্রহণ না করা পর্যন্ত তিনি জানবেন না যে আপনি মেসেজটি দেখেছেন।'));
-  if (CHAT.incoming.length) reqBox.appendChild(el('div', 'label', 'আপনাকে ফলো করছেন'));
-  for (const p of CHAT.incoming) {
-    const row = el('div', 'person req');
-    const t = el('div', 't');
-    t.append(nameEl(p), Object.assign(el('span', 'no-tr'), { textContent: p.bio || '' }));
-    const yes = el('button', 'pill-btn', 'ফলো ব্যাক'), no = el('button', 'pill-btn quiet', 'সরান');
-    t.addEventListener('click', () => openProfilePage(p.id));
-    yes.addEventListener('click', () => chatApi('friend', { id: p.id }).then(loadChat));
-    no.addEventListener('click', () => chatApi('unfriend', { id: p.id }).then(loadChat));
-    row.append(avatar(p), t, yes, no);
-    reqBox.appendChild(row);
-  }
   if (!waiting) {
     const none = el('div', 'chat-none small');
-    none.append(ic('inbox'), el('b', null, 'কোনো রিকোয়েস্ট নেই'), el('span', null, 'যাঁরা আপনাকে ফলো করেন না, তাঁদের প্রথম মেসেজ এখানে আসবে।'));
+    none.append(ic('inbox'), el('b', null, 'কোনো মেসেজ রিকোয়েস্ট নেই'), el('span', null, 'যাঁদের আপনি ফলো করেন না, তাঁদের প্রথম মেসেজ এখানে আসবে। নতুন ফলোয়ারের খবর এক্সপ্লোরের ❤️-তে।'));
     reqBox.appendChild(none);
   }
 
@@ -252,7 +240,7 @@ function renderHead() {
   const tt = el('div', 't');
   const status = typing ? (t.members ? tx(`${firstName(typing.name)} লিখছে…`, `${firstName(typing.name)} is typing…`) : tx('লিখছে…', 'typing…'))
     : t.members ? tx(`${num(t.members.length)} জন সদস্য`, `${t.members.length} members`)
-    : !t.ok ? 'রিকোয়েস্ট পাঠানো হয়েছে' : t.online ? 'অনলাইন' : CHAT.prefs.active ? 'অফলাইন' : '';
+    : !t.ok ? tx('রিকোয়েস্ট পাঠানো হয়েছে', 'Request sent') : t.online ? tx('অনলাইন', 'Active now') : CHAT.prefs.active ? tx('অফলাইন', 'Offline') : '';
   tt.append(t.members ? Object.assign(el('b', 'no-tr'), { textContent: titleOf(t) }) : nameEl(t), el('span', 'no-tr' + (typing ? ' typing' : ''), status));
   who.replaceChildren(threadAvatar(t, 'sm'), tt);
   const open = !!t.members || t.ok;                    // a group is always open; one person once they accept
@@ -443,6 +431,8 @@ function jumpTo(id) {
 
 async function openThread(key) {
   CHAT.open = key;
+  document.body.classList.add('chat-open');
+  fitChat();
   clearReply();
   $('chat-info').hidden = true;
   $('chat').classList.add('open');
@@ -500,6 +490,7 @@ function sendFile(file, extra = {}) {
 
 function closeThread() {
   CHAT.open = null;
+  document.body.classList.remove('chat-open');
   clearReply();
   $('chat-info').hidden = true;
   $('chat').classList.remove('open');
@@ -864,7 +855,7 @@ async function openInfo(view = 'main') {
   // The main view.
   const top = el('div', 'info-top');
   top.append(threadAvatar(t, 'xl'), t.members ? Object.assign(el('b', 'no-tr'), { textContent: titleOf(t) }) : nameEl(t),
-    el('span', 'no-tr', t.members ? tx(`${num(t.members.length)} জন সদস্য`, `${t.members.length} members`) : t.online ? 'অনলাইন' : (t.bio || '')));
+    el('span', 'no-tr', t.members ? tx(`${num(t.members.length)} জন সদস্য`, `${t.members.length} members`) : t.online ? tx('অনলাইন', 'Active now') : (t.bio || '')));
   const quick = el('div', 'info-quick');
   const qb = (icon, label, fn, on) => { const b = el('button', on ? 'on' : ''); const i = el('span', 'qi'); i.innerHTML = svg(icon); b.append(i, el('span', null, label)); b.addEventListener('click', fn); quick.appendChild(b); };
   if (t.members) qb('userplus', 'যোগ করুন', () => openComposer(t));
@@ -958,6 +949,27 @@ function leaveGroup(t) {
   openModal('গ্রুপ ছাড়বেন?', 'আর এই গ্রুপের মেসেজ পাবেন না। কেউ আবার যোগ না করলে ফেরা যাবে না।', [], [button('close', 'থাক', closeModal, true), yes]);
 }
 
+// The part of the screen the keyboard leaves free (visualViewport), written as two CSS variables.
+function fitChat() {
+  const vv = window.visualViewport, root = document.documentElement.style;
+  root.setProperty('--vvh', Math.round(vv ? vv.height : innerHeight) + 'px');
+  root.setProperty('--vvt', Math.round(vv ? vv.offsetTop : 0) + 'px');
+}
+if (window.visualViewport) {
+  let wasShort = false;
+  const onViewport = () => {
+    fitChat();
+    if (!document.body.classList.contains('chat-open')) return;
+    // When the keyboard comes up, keep the newest messages in sight.
+    const short = visualViewport.height < innerHeight * 0.8;
+    if (short && !wasShort) { const box = $('chat-msgs'); box.scrollTop = box.scrollHeight; }
+    wasShort = short;
+  };
+  visualViewport.addEventListener('resize', onViewport);
+  visualViewport.addEventListener('scroll', onViewport);
+}
+addEventListener('hashchange', () => { if (!location.hash.includes('chat')) document.body.classList.remove('chat-open'); else if (CHAT.open != null) document.body.classList.add('chat-open'); });
+
 // ---- the live stream from the server ----
 function connectChat() {
   if (CHAT.stream || !ME || !window.EventSource) return;
@@ -995,6 +1007,7 @@ function connectChat() {
   on('gsignal', p => onGroupSignal(p));
   on('creator', () => { if (current === 'insights' && typeof drawInsights === 'function') drawInsights(); });
   on('support', () => { if (typeof loadTickets === 'function') loadTickets(); });
+  on('notify', () => { if (typeof refreshNotify === 'function') refreshNotify(); });
   es.onopen = () => { if (CHAT.loaded) loadChat(); };      // back online: catch up on anything missed
 }
 function refreshTyping(key) {
@@ -1084,13 +1097,23 @@ async function newPeer() {
   const pc = call.pc = new RTCPeerConnection({ iceServers });
   for (const track of call.media.getTracks()) pc.addTrack(track, call.media);
   pc.onicecandidate = e => { if (e.candidate) signal({ type: 'ice', candidate: e.candidate }).catch(() => {}); };
-  pc.ontrack = e => { $('call-remote').srcObject = e.streams[0]; };
+  pc.ontrack = e => { const v = $('call-remote'); v.srcObject = e.streams[0]; v.play().catch(() => {}); };
+  pc.oniceconnectionstatechange = () => {
+    if ((pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') && call.state !== 'live') goLive();
+    if (pc.iceConnectionState === 'failed') endCall(tx('নেটওয়ার্কের কারণে সংযোগ হলো না। দুজনেই Wi-Fi-তে থেকে আবার চেষ্টা করুন।', 'The networks would not connect. Try again with both on Wi-Fi.'), true);
+  };
   pc.onconnectionstatechange = () => {
     if (pc.connectionState === 'connected' && call.state !== 'live') goLive();
-    if (pc.connectionState === 'failed') endCall('সংযোগ করা যায়নি। দুজনের নেটওয়ার্ক দেখে আবার চেষ্টা করুন।', true);
+    if (pc.connectionState === 'failed') endCall(tx('নেটওয়ার্কের কারণে সংযোগ হলো না। দুজনেই Wi-Fi-তে থেকে আবার চেষ্টা করুন।', 'The networks would not connect. Try again with both on Wi-Fi.'), true);
   };
   $('call-local').srcObject = call.media;
   return pc;
+}
+// Answered, but the two networks never found a way to each other (common on mobile data without a relay).
+function connectTimeout() {
+  if (call.state === 'live' || call.state === 'idle') return;
+  signal({ type: 'end' }).catch(() => {});
+  endCall(tx('নেটওয়ার্কের কারণে সংযোগ হলো না। দুজনেই Wi-Fi-তে থেকে আবার চেষ্টা করুন।', 'The networks would not connect. Try again with both on Wi-Fi.'), true);
 }
 function goLive() {
   call.state = 'live';
@@ -1142,6 +1165,8 @@ async function acceptCall() {
     await signal({ type: 'answer', sdp: answer.sdp });
     call.state = 'connecting';
     showCall('সংযোগ হচ্ছে…');
+    clearTimeout(call.ring);
+    call.ring = setTimeout(connectTimeout, 25000);
   } catch { signal({ type: 'end' }).catch(() => {}); endCall('কল ধরা যায়নি।', true); }
 }
 
@@ -1160,6 +1185,7 @@ async function onSignal(from, data) {
     await call.pc.setRemoteDescription({ type: 'answer', sdp: data.sdp }).catch(() => {});
     for (const c of call.ice.splice(0)) await call.pc.addIceCandidate(c).catch(() => {});
     clearTimeout(call.ring);
+    call.ring = setTimeout(connectTimeout, 25000);
     $('call-status').textContent = 'সংযোগ হচ্ছে…';
   } else if (data.type === 'ice') {
     if (call.pc && call.pc.remoteDescription) call.pc.addIceCandidate(data.candidate).catch(() => {});

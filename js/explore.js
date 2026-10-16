@@ -758,3 +758,78 @@ async function loadHomePosts() {
   };
   if (current === 'home') enter.home();
 })();
+
+// ---- notifications: the heart in Explore ----
+// Likes and comments on your posts, new followers and follow-backs. A red dot until they have been looked at.
+function setNotifyDot(n) { for (const d of document.querySelectorAll('[data-notify-dot]')) d.hidden = !n; }
+async function refreshNotify() {
+  if (!ME) { setNotifyDot(0); return; }
+  try { const r = await fetch('api/notify/count'); if (r.ok) setNotifyDot((await r.json()).unread); } catch { /* the dot waits for the next try */ }
+}
+const NOTIFY_TEXT = {
+  like: ['আপনার পোস্টে লাইক দিয়েছেন।', 'liked your post.'],
+  comment: ['মন্তব্য করেছেন:', 'commented:'],
+  follow: ['আপনাকে ফলো করা শুরু করেছেন।', 'started following you.'],
+  followback: ['আপনাকে ফলো ব্যাক করেছেন।', 'followed you back.']
+};
+async function openNotifications() {
+  if (!ME) { openLogin(); return; }
+  const box = el('div', 'notif');
+  const head = el('header', 'notif-head');
+  const back = el('button', 'icon-btn');
+  back.innerHTML = svg('back');
+  back.setAttribute('aria-label', 'ফিরে যান');
+  head.append(back, el('b', null, 'নোটিফিকেশন'));
+  const list = el('div', 'notif-list');
+  list.append(el('div', 'skeleton'), el('div', 'skeleton'));
+  const sheet = el('div', 'notif-sheet');
+  sheet.append(head, list);
+  box.appendChild(sheet);
+  const close = () => { box.classList.add('out'); setTimeout(() => box.remove(), 260); removeEventListener('keydown', key); };
+  const key = e => { if (e.key === 'Escape') close(); };
+  back.addEventListener('click', close);
+  box.addEventListener('click', e => { if (e.target === box) close(); });
+  addEventListener('keydown', key);
+  document.body.appendChild(box);
+  let d;
+  try { d = await (await fetch('api/notify/list')).json(); } catch { list.replaceChildren(el('div', 'empty', 'দেখানো যায়নি।')); return; }
+  fetch('api/notify/read', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(() => {});
+  setNotifyDot(0);
+  if (!d.items.length) {
+    const none = el('div', 'notif-none');
+    none.append(Object.assign(el('span', 'ring'), { innerHTML: svg('heart') }), el('b', null, 'এখনো কিছু নেই'), el('span', null, 'কেউ আপনার পোস্টে লাইক বা মন্তব্য করলে, বা আপনাকে ফলো করলে এখানে দেখবেন।'));
+    list.replaceChildren(none);
+    return;
+  }
+  const day = 864e5, now = Date.now();
+  const bucket = t => now - t < day ? 'আজ' : now - t < 7 * day ? 'এই সপ্তাহে' : now - t < 30 * day ? 'এই মাসে' : 'আগের';
+  const rows = [];
+  let last = '';
+  for (const n of d.items) {
+    const b = bucket(n.created);
+    if (b !== last) { rows.push(el('div', 'notif-label', b)); last = b; }
+    const row = el('div', 'notif-row' + (n.seen ? '' : ' new'));
+    const t = el('div', 't no-tr');
+    const who = Object.assign(el('b'), { textContent: n.actor.username || n.actor.name });
+    if (isVerified(n.actor)) who.appendChild(vbadge());
+    const [bn, en] = NOTIFY_TEXT[n.kind] || ['', ''];
+    t.append(who, document.createTextNode(' ' + (LANG === 'en' ? en : bn) + (n.kind === 'comment' ? ' ' + n.body : '') + ' '), el('time', null, shortAgo(n.created)));
+    row.append(avatar(n.actor), t);
+    if (n.kind === 'follow' || n.kind === 'followback') {
+      if (n.actor.relation === 'follower') row.appendChild(followButton(n.actor, null, false));
+      else if (n.actor.relation === 'mutual' || n.actor.relation === 'following') row.appendChild(el('span', 'notif-tag', LANG === 'en' ? 'Following' : 'ফলো করছেন'));
+      row.addEventListener('click', e => { if (!e.target.closest('button')) { close(); openProfilePage(n.actor.id); } });
+    } else if (n.post) {
+      const thumb = el('span', 'notif-thumb');
+      if (n.post.thumb) thumb.appendChild(Object.assign(el('img'), { src: n.post.thumb, alt: '', loading: 'lazy' }));
+      else thumb.appendChild(Object.assign(el('span', 'tt no-tr'), { textContent: n.post.text || '▶' }));
+      row.appendChild(thumb);
+      row.addEventListener('click', () => { close(); openPost(n.post.id); });
+    }
+    rows.push(row);
+  }
+  list.replaceChildren(...rows);
+}
+$('explore-heart').addEventListener('click', openNotifications);
+refreshNotify();
+setInterval(() => { if (!document.hidden) refreshNotify(); }, 120_000);

@@ -531,7 +531,19 @@ const EXACT = {
   'ছবি বা ভিডিও': 'Photo or video',
   'ফিড': 'Feed',
   'রিলস': 'Reels',
-  'এখনো কোনো রিল নেই — প্রথম ভিডিওটি আপনিই দিন।': 'No reels yet — post the first video.'
+  'এখনো কোনো রিল নেই — প্রথম ভিডিওটি আপনিই দিন।': 'No reels yet — post the first video.',
+  // Notifications
+  'নোটিফিকেশন': 'Notifications',
+  'এখনো কিছু নেই': 'Nothing yet',
+  'কেউ আপনার পোস্টে লাইক বা মন্তব্য করলে, বা আপনাকে ফলো করলে এখানে দেখবেন।': 'When someone likes or comments on your posts, or follows you, you’ll see it here.',
+  'এই সপ্তাহে': 'This week',
+  'এই মাসে': 'This month',
+  'কোনো মেসেজ রিকোয়েস্ট নেই': 'No message requests',
+  'যাঁদের আপনি ফলো করেন না, তাঁদের প্রথম মেসেজ এখানে আসবে। নতুন ফলোয়ারের খবর এক্সপ্লোরের ❤️-তে।': 'First messages from people you don’t follow arrive here. New followers show up under the ❤️ in Explore.',
+  'ফাইল, ছবি বা ভিডিও': 'File, photo or video',
+  'ফোন থেকে বেছে নিন': 'Choose from your phone',
+  'জায়গা': 'Place',
+  'আপনার লোকেশন বা ম্যাপে খোলা জায়গা': 'Your location or the place open on the map'
 };
 
 // Sentences with a number or a name inside. First match wins; N is a number as the app prints it.

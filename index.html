@@ -18,7 +18,7 @@
   <a class="brand" href="#/"><span class="logo"></span>BD Map</a>
   <div class="links">
     <a href="#/" data-nav="home"><i data-ic="home"></i><span>হোম</span></a>
-    <a href="#/explore" data-nav="explore"><i data-ic="image"></i><span>এক্সপ্লোর</span></a>
+    <a href="#/explore" data-nav="explore"><i data-ic="feed"></i><span>এক্সপ্লোর</span><em class="ndot" data-notify-dot hidden></em></a>
     <a href="#/trip" data-nav="trip"><i data-ic="route"></i><span>ম্যাপ</span></a>
     <a href="#/buses" data-nav="buses" class="desk-only"><i data-ic="bus"></i><span>ঢাকার বাস</span></a>
     <a href="#/train" data-nav="train" class="desk-only"><i data-ic="train"></i><span>ট্রেন</span></a>
@@ -199,8 +199,9 @@
   <section class="page" id="page-explore">
     <div class="wrap explore">
       <div class="ex-top">
-        <label class="ex-search"><i data-ic="search"></i><input id="explore-q" type="search" autocomplete="off" placeholder="খুঁজুন — মানুষ, জায়গা, পোস্ট" aria-label="খুঁজুন"></label>
-        <button class="ex-new" id="explore-new" title="নতুন পোস্ট" aria-label="নতুন পোস্ট"><i data-ic="plus"></i></button>
+        <button class="ex-icon" id="explore-new" title="নতুন পোস্ট" aria-label="নতুন পোস্ট"><i data-ic="plusSquare"></i></button>
+        <label class="ex-search"><i data-ic="search"></i><input id="explore-q" type="search" autocomplete="off" placeholder="খুঁজুন" aria-label="খুঁজুন — মানুষ, জায়গা, পোস্ট"></label>
+        <button class="ex-icon" id="explore-heart" title="নোটিফিকেশন" aria-label="নোটিফিকেশন"><i data-ic="heart"></i><em class="ndot" data-notify-dot hidden></em></button>
       </div>
       <div class="ex-tabs" id="ex-tabs"><button class="on" data-t="feed"><i data-ic="home"></i><span>ফিড</span></button><button data-t="reels"><i data-ic="play"></i><span>রিলস</span></button></div>
       <div class="faces" id="explore-people" hidden></div>

@@ -119,6 +119,7 @@ function authChanged() {
   if (typeof drawProfile === 'function' && current === 'profile') { if (!ME) PROFILE.id = null; drawProfile(); }
   if (enter.settings && current === 'settings') enter.settings();
   if (enter.insights && current === 'insights') enter.insights();
+  if (typeof refreshNotify === 'function') refreshNotify();
 }
 
 function field(label, attrs, tag = 'input') {
