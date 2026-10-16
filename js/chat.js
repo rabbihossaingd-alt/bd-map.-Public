@@ -333,6 +333,30 @@ function bubble(m, t) {
   return row;
 }
 
+// Instagram's colour that changes down the screen: one gradient the height of the conversation, each of my
+// bubbles showing its own slice of it. (CSS background-attachment: fixed does this on a computer, but iPhones
+// paint it wrong inside a scrolling box — bubbles came out blank or cut — so the slice is placed here.)
+let bubbleTops = [], bubbleFrame = 0;
+function measureBubbles() {
+  const box = $('chat-msgs');
+  if (!box) return;
+  const top = box.getBoundingClientRect().top - box.scrollTop;
+  bubbleTops = [...box.querySelectorAll('.msg.me .bubble:not(.emoji):not(.media):not(.gone)')].map(b => [b, b.getBoundingClientRect().top - top]);
+  box.style.setProperty('--ch', box.clientHeight + 'px');
+  paintBubbles();
+}
+function paintBubbles() {
+  if (bubbleFrame) return;
+  bubbleFrame = requestAnimationFrame(() => {
+    bubbleFrame = 0;
+    const box = $('chat-msgs'), st = box.scrollTop, h = box.clientHeight;
+    for (const [b, y] of bubbleTops) {
+      const at = y - st;
+      if (at < -400 || at > h + 400) continue;            // only what is on screen (and near it)
+      b.style.backgroundPosition = `0 ${-Math.round(at)}px`;
+    }
+  });
+}
 function renderMsgs(scroll = true) {
   const t = threadOf(CHAT.open), box = $('chat-msgs');
   if (!t) return;
@@ -418,6 +442,7 @@ function renderMsgs(scroll = true) {
     box.appendChild(dots);
   }
   if (scroll) box.scrollTop = box.scrollHeight;
+  measureBubbles();
 }
 // Scroll to a message (a reply's original, a search result) and make it glow for a moment.
 function jumpTo(id) {
@@ -972,18 +997,17 @@ if (window.visualViewport) {
 // While that settles, the page is held at the top and the conversation re-measured every frame.
 function holdChatInPlace() {
   if (!document.body.classList.contains('chat-open')) return;
-  const t0 = performance.now();
-  const step = () => {
+  // iPhones slide the page up to show the field. Correcting that on every frame fought the phone and made the
+  // chat shake; now it is put back a few times while the keyboard settles, and the box follows the visible area.
+  for (const ms of [0, 120, 320, 650]) setTimeout(() => {
     if (window.scrollY || document.documentElement.scrollTop) window.scrollTo(0, 0);
     fitChat();
-    if (performance.now() - t0 < 1200) requestAnimationFrame(step);
-    else { const box = $('chat-msgs'); box.scrollTop = box.scrollHeight; }
-  };
-  requestAnimationFrame(step);
+    if (ms === 650) { const box = $('chat-msgs'); box.scrollTop = box.scrollHeight; measureBubbles(); }
+  }, ms);
 }
 $('chat-input').addEventListener('focus', holdChatInPlace);
 $('chat-input').addEventListener('blur', () => setTimeout(holdChatInPlace, 50));
-addEventListener('scroll', () => { if (document.body.classList.contains('chat-open')) { if (window.scrollY) window.scrollTo(0, 0); fitChat(); } }, { passive: true });
+addEventListener('scroll', () => { if (document.body.classList.contains('chat-open')) fitChat(); }, { passive: true });
 addEventListener('hashchange', () => { if (!location.hash.includes('chat')) document.body.classList.remove('chat-open'); else if (CHAT.open != null) document.body.classList.add('chat-open'); });
 
 // ---- the live stream from the server ----
@@ -1109,28 +1133,64 @@ function showCall(status) {
   if (!call.video) $('call-cam').hidden = true;
 }
 
+// What each side's network offered (host = same Wi-Fi, srflx = through the router, relay = through TURN) —
+// told to the server when a call fails, so the reason can be seen.
+const candType = c => (/ typ (\w+)/.exec(c && (c.candidate || c)) || [])[1] || '?';
 async function newPeer() {
-  if (!iceServers) iceServers = (await chatApi('ice')).iceServers;
+  // fetched for each call: relay passwords from metered.ca change
+  try { const d = await chatApi('ice'); iceServers = d.iceServers; call.relay = d.relay; } catch { if (!iceServers) throw new Error('ice'); }
   const pc = call.pc = new RTCPeerConnection({ iceServers });
+  call.diag = { mine: new Set(), theirs: new Set(), restarted: false };
   for (const track of call.media.getTracks()) pc.addTrack(track, call.media);
-  pc.onicecandidate = e => { if (e.candidate) signal({ type: 'ice', candidate: e.candidate }).catch(() => {}); };
+  pc.onicecandidate = e => { if (e.candidate) { call.diag.mine.add(candType(e.candidate)); signal({ type: 'ice', candidate: e.candidate }).catch(() => {}); } };
   pc.ontrack = e => { const v = $('call-remote'); v.srcObject = e.streams[0]; v.play().catch(() => {}); };
+  const failed = () => {
+    if (call.pc !== pc) return;
+    // One more try with fresh routes (an ICE restart) before giving up; the caller starts it.
+    if (!call.diag.restarted) {
+      call.diag.restarted = true;
+      $('call-status').textContent = tx('আবার সংযোগের চেষ্টা হচ্ছে…', 'Trying again…');
+      clearTimeout(call.ring);
+      call.ring = setTimeout(connectTimeout, 20000);
+      if (call.mine) restartIce(pc);
+      return;
+    }
+    callFailed();
+  };
   pc.oniceconnectionstatechange = () => {
     if ((pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') && call.state !== 'live') goLive();
-    if (pc.iceConnectionState === 'failed') endCall(tx('নেটওয়ার্কের কারণে সংযোগ হলো না। দুজনেই Wi-Fi-তে থেকে আবার চেষ্টা করুন।', 'The networks would not connect. Try again with both on Wi-Fi.'), true);
+    if (pc.iceConnectionState === 'failed') failed();
   };
   pc.onconnectionstatechange = () => {
     if (pc.connectionState === 'connected' && call.state !== 'live') goLive();
-    if (pc.connectionState === 'failed') endCall(tx('নেটওয়ার্কের কারণে সংযোগ হলো না। দুজনেই Wi-Fi-তে থেকে আবার চেষ্টা করুন।', 'The networks would not connect. Try again with both on Wi-Fi.'), true);
+    if (pc.connectionState === 'failed') failed();
   };
   $('call-local').srcObject = call.media;
   return pc;
 }
+async function restartIce(pc) {
+  try {
+    const offer = await pc.createOffer({ iceRestart: true });
+    await pc.setLocalDescription(offer);
+    await signal({ type: 'reoffer', sdp: offer.sdp });
+  } catch { callFailed(); }
+}
 // Answered, but the two networks never found a way to each other (common on mobile data without a relay).
 function connectTimeout() {
   if (call.state === 'live' || call.state === 'idle') return;
+  if (call.pc && call.diag && !call.diag.restarted && call.mine) { call.diag.restarted = true; call.ring = setTimeout(connectTimeout, 20000); restartIce(call.pc); return; }
   signal({ type: 'end' }).catch(() => {});
-  endCall(tx('নেটওয়ার্কের কারণে সংযোগ হলো না। দুজনেই Wi-Fi-তে থেকে আবার চেষ্টা করুন।', 'The networks would not connect. Try again with both on Wi-Fi.'), true);
+  callFailed();
+}
+// Why it did not connect, as far as can be told, said plainly.
+function callFailed() {
+  const d = call.diag || { mine: new Set(), theirs: new Set() };
+  const mine = [...d.mine].join(','), theirs = [...d.theirs].join(',');
+  fetch(`api/chat/calldiag?d=${encodeURIComponent(`relay=${call.relay ? 1 : 0} mine=${mine} theirs=${theirs} ua=${navigator.userAgent.slice(0, 90)}`)}`).catch(() => {});
+  const why = !call.relay ? tx('সার্ভারে রিলে (TURN) চালু নেই, তাই আলাদা নেটওয়ার্কে (মোবাইল ডেটা) কল যায় না। দুজনেই একই Wi-Fi-তে চেষ্টা করুন।', 'No relay (TURN) is set up on the server, so calls across different networks cannot connect. Try both on the same Wi-Fi.')
+    : !d.mine.has('relay') ? tx('রিলে সার্ভারে পৌঁছানো গেল না (আপনার নেটওয়ার্ক আটকাচ্ছে বা রিলের পাসওয়ার্ড ঠিক নেই)। Wi-Fi বদলে আবার চেষ্টা করুন।', 'Could not reach the relay server (your network blocks it, or its password is wrong). Try another network.')
+    : tx('দুই নেটওয়ার্কের মধ্যে সংযোগ হলো না। একটু পরে আবার চেষ্টা করুন।', 'The two networks would not connect. Try again in a moment.');
+  endCall(why, true);
 }
 function goLive() {
   call.state = 'live';
@@ -1198,6 +1258,16 @@ async function onSignal(from, data) {
     return;
   }
   if (!call.peer || call.peer.id !== from) return;
+  if (data.type === 'reoffer' && call.pc) {               // the other side is trying fresh routes
+    try {
+      await call.pc.setRemoteDescription({ type: 'offer', sdp: data.sdp });
+      const answer = await call.pc.createAnswer();
+      await call.pc.setLocalDescription(answer);
+      await signal({ type: 'answer', sdp: answer.sdp });
+      if (call.diag) call.diag.restarted = true;
+    } catch { /* the timer ends it */ }
+    return;
+  }
   if (data.type === 'answer' && call.pc) {
     await call.pc.setRemoteDescription({ type: 'answer', sdp: data.sdp }).catch(() => {});
     for (const c of call.ice.splice(0)) await call.pc.addIceCandidate(c).catch(() => {});
@@ -1205,6 +1275,7 @@ async function onSignal(from, data) {
     call.ring = setTimeout(connectTimeout, 25000);
     $('call-status').textContent = 'সংযোগ হচ্ছে…';
   } else if (data.type === 'ice') {
+    if (call.diag) call.diag.theirs.add(candType(data.candidate));
     if (call.pc && call.pc.remoteDescription) call.pc.addIceCandidate(data.candidate).catch(() => {});
     else call.ice.push(data.candidate);
   } else if (data.type === 'decline') { logCall('declined'); endCall('কলটি ধরা হয়নি।', true); }
@@ -1323,6 +1394,9 @@ function hangUp() {
   document.addEventListener('visibilitychange', () => { if (!document.hidden && CHAT.open != null) markRead(CHAT.open); });
   document.addEventListener('click', e => { if (popOpen && !popOpen.contains(e.target)) closePop(); });
   $('chat-msgs').addEventListener('scroll', closePop, { passive: true });
+  $('chat-msgs').addEventListener('scroll', paintBubbles, { passive: true });
+  $('chat-msgs').addEventListener('load', measureBubbles, true);       // a picture that loads moves what is under it
+  addEventListener('resize', measureBubbles);
   addEventListener('beforeunload', () => { if (call.state !== 'idle') hangUp(); });
 
   enter.chat = () => { if (ME) { loadChat(); if (CHAT.open != null) markRead(CHAT.open); } };

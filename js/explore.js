@@ -712,9 +712,11 @@ function videoPoster(file, at) {
     setTimeout(() => done(''), 8000);
   });
 }
-function uploadMedia(blob, type, onProgress) {
+function uploadMedia(blob, type, onProgress, hold) {
   return new Promise((resolve, reject) => {
     const x = new XMLHttpRequest();
+    if (hold) hold.xhr = x;                              // lets the caller stop it
+    x.onabort = () => reject(new Error('stopped'));
     x.open('POST', 'api/explore/media');
     x.setRequestHeader('Content-Type', type);
     x.upload.onprogress = e => { if (e.lengthComputable) onProgress(e.loaded / e.total, e.loaded, e.total); };

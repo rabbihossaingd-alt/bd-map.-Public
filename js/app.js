@@ -1547,3 +1547,16 @@ loadIndex().then(n => {
   setTimeout(() => { stat.textContent = num(+stat.dataset.count); }, 1300);
 });
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+
+// Phones: the tab bar steps away while you scroll down, and comes back as soon as you scroll up (as on Facebook).
+(() => {
+  let lastY = scrollY;
+  addEventListener('scroll', () => {
+    const y = scrollY, d = y - lastY;
+    if (Math.abs(d) < 8) return;
+    lastY = y;
+    if (innerWidth > 760) return;
+    document.body.classList.toggle('nav-away', d > 0 && y > 90);
+  }, { passive: true });
+  addEventListener('hashchange', () => { document.body.classList.remove('nav-away'); lastY = scrollY; });
+})();

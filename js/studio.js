@@ -38,6 +38,7 @@ function closeStudio() {
   if (!studio) return;
   stopCamera();
   if (studio.preview) studio.preview.stop();
+  if (studio.pre && studio.pre.xhr && !studio.pre.done) studio.pre.xhr.abort();
   if (studio.url) URL.revokeObjectURL(studio.url);
   studio.box.remove();
   studio = null;
@@ -104,7 +105,16 @@ function takeFile(file, baked) {
   const words = st.textStory != null && baked && !video;
   Object.assign(st, { file, kind: video ? 'video' : 'photo', url: URL.createObjectURL(file), baked, w: 0, h: 0, layers: words ? st.layers : [] });
   if (!words) st.textStory = null;
+  if (video) preUpload(st);
   drawEdit();
+}
+// A video starts going up the moment it is chosen (as on Instagram), while it is edited and captioned; Share then
+// only waits for what is left.
+function preUpload(st) {
+  if (st.pre && st.pre.xhr) st.pre.xhr.abort();
+  const pre = st.pre = { file: st.file, f: 0, sent: 0, total: st.file.size, on: null };
+  pre.promise = uploadMedia(st.file, st.file.type || 'video/mp4', (f, sent, total) => { Object.assign(pre, { f, sent, total }); if (pre.on) pre.on(f, sent, total); }, pre);
+  pre.promise.catch(() => {});
 }
 const MAX_VIDEO = 3e9;
 // The background of a words-only story: one of Instagram's gradients, as a picture.
@@ -825,11 +835,18 @@ async function share(btn, progress, note) {
       if (canvasFilters) fx = '';
       type = 'image/jpeg';
     } else { poster = (st.cover && st.cover.url) || await videoPoster(st.file); layers = st.layers; }
-    const media = await uploadMedia(blob, type, onProgress);
-    if (st.mode === 'story') await exploreApi('story', { media, poster, w, h, layers });
-    else await exploreApi('post', { media, poster, w, h, layers, caption: st.caption || '', place: st.place || null, fx, music: st.music ? st.music.id : '', mstart: st.music ? st.music.start : 0,
+    let media;
+    if (st.kind === 'video' && st.pre && st.pre.file === st.file) {
+      onProgress(st.pre.f, st.pre.sent, st.pre.total);
+      st.pre.on = onProgress;
+      try { media = await st.pre.promise; st.pre.done = true; } catch { media = null; }
+    }
+    if (!media) media = await uploadMedia(blob, type, onProgress);
+    const send = m => st.mode === 'story' ? exploreApi('story', { media: m, poster, w, h, layers }) : exploreApi('post', { poster, w, h, layers, caption: st.caption || '', place: st.place || null, fx, music: st.music ? st.music.id : '', mstart: st.music ? st.music.start : 0,
       orig: st.kind === 'video' ? st.orig : true, audience: st.audience || 'all', at: st.at || 0, tags: (st.tags || []).map(t => t.id), nocomm: !!st.nocomm, hidelikes: !!st.hidelikes,
-      aname: st.aname || '', story: !!st.alsoStory });
+      media: m, aname: st.aname || '', story: !!st.alsoStory });
+    // an upload made long before Share (over an hour) is cleared by the server: then it goes up again
+    try { await send(media); } catch (e) { if (e.message !== 'media') throw e; await send(await uploadMedia(blob, type, onProgress)); }
     if (st.draftId) draftsTx('readwrite', s => s.delete(st.draftId)).catch(() => {});
     const mode = st.mode, later = st.at;
     closeStudio();

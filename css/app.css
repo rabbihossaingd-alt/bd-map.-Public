@@ -2761,3 +2761,58 @@ body.studio-open .chat-toast { z-index: 3600; }
 .aud-head .t b { font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .aud-head .t small { color: var(--muted); }
 .fc-tune { cursor: pointer; }
+
+/* my bubbles: one gradient down the screen, without background-attachment: fixed (iPhones paint that wrong) */
+.chat-thread { --mb: linear-gradient(180deg, #a033ff 0%, #6c4bf6 45%, #3478f6 100%); }
+.chat-thread[data-theme=green]  { --mb: linear-gradient(180deg, #34c759 0%, #10b3a3 55%, #0a8f62 100%); }
+.chat-thread[data-theme=ocean]  { --mb: linear-gradient(180deg, #33b6ff 0%, #0a84ff 100%); }
+.chat-thread[data-theme=sunset] { --mb: linear-gradient(180deg, #ff9500 0%, #ff3b6b 100%); }
+.chat-thread[data-theme=berry]  { --mb: linear-gradient(180deg, #d6249f 0%, #7a3cff 100%); }
+.chat-thread[data-theme=forest] { --mb: linear-gradient(180deg, #34c759 0%, #0f9d58 100%); }
+.chat-thread[data-theme=grape]  { --mb: linear-gradient(180deg, #af52de 0%, #5856d6 100%); }
+.chat-thread .me .bubble:not(.emoji):not(.media):not(.gone) { background: var(--mb); background-size: 100% var(--ch, 640px); background-repeat: no-repeat; background-color: var(--mt); }
+.chat-msgs { -webkit-overflow-scrolling: auto; }
+.quote { margin-bottom: -6px; padding-bottom: 12px; }
+.mcol > .bubble { position: relative; z-index: 1; }
+
+/* ================= Stream: lives one per screen, swiped like reels ================= */
+.live-hub { background: #000; }
+.live-hub .lh-top { position: absolute; z-index: 6; left: 0; right: 0; top: 0; padding: calc(12px + env(safe-area-inset-top)) 12px 18px; background: linear-gradient(rgba(0, 0, 0, .6), transparent); }
+.lh-title { display: flex; align-items: center; justify-content: center; gap: 9px; }
+.lh-title b { font-size: 22px; font-weight: 800; letter-spacing: -.02em; }
+.lv-start svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.lh-pager { position: absolute; inset: 0; overflow-y: auto; scroll-snap-type: y mandatory; scrollbar-width: none; overscroll-behavior: contain; }
+.lh-pager::-webkit-scrollbar { display: none; }
+.sp-page { position: relative; height: 100dvh; scroll-snap-align: start; scroll-snap-stop: always; overflow: hidden; }
+.sp-stage { position: relative; width: 100%; height: 100%; overflow: hidden; background: #0b0b0d; }
+@media (min-width: 761px) {
+  .sp-page { display: grid; place-items: center; padding: 14px 0; }
+  .sp-stage { width: calc((100dvh - 28px) * .5625); height: calc(100dvh - 28px); border-radius: 18px; box-shadow: 0 30px 80px rgba(0, 0, 0, .6); }
+}
+.sp-cover { position: absolute; inset: -12%; background: linear-gradient(160deg, #3a1c71, #d76d77 60%, #ffaf7b) center / cover; filter: blur(34px) brightness(.55) saturate(1.3); }
+.sp-face { position: absolute; left: 50%; top: 44%; transform: translate(-50%, -50%); padding: 5px; border-radius: 50%; background: conic-gradient(#ff3040, #e1306c, #833ab4, #ff3040); animation: livepulse 1.8s infinite; }
+.sp-face .avatar { width: 108px; height: 108px; font-size: 40px; border: 4px solid #0b0b0d; }
+.live-room.embedded { position: absolute; inset: 0; z-index: 2; background: transparent; animation: none; }
+.live-room.embedded .lv-video { background: transparent; }
+.live-room.embedded .lv-top { padding-top: calc(66px + env(safe-area-inset-top)); }
+.live-room.embedded .lv-caption { top: calc(118px + env(safe-area-inset-top)); }
+@media (min-width: 761px) { .live-room.embedded .lv-video { object-fit: cover; } }
+/* nobody streaming */
+.sp-empty { display: grid; place-items: center; background: radial-gradient(120% 80% at 50% 0%, #1a1030, #000 70%); }
+.sp-empty .orb { position: absolute; border-radius: 50%; filter: blur(60px); opacity: .55; animation: orb 14s ease-in-out infinite alternate; }
+.sp-empty .o1 { width: 320px; height: 320px; background: #e1306c; left: -80px; top: 12%; }
+.sp-empty .o2 { width: 280px; height: 280px; background: #833ab4; right: -90px; top: 40%; animation-delay: -5s; }
+.sp-empty .o3 { width: 240px; height: 240px; background: #f58529; left: 20%; bottom: -60px; animation-delay: -9s; }
+@keyframes orb { to { transform: translate(40px, -50px) scale(1.15); } }
+.sp-empty-in { position: relative; display: grid; justify-items: center; gap: 14px; padding: 24px; text-align: center; max-width: 380px; }
+.sp-mark { width: 92px; height: 92px; border-radius: 28px; display: grid; place-items: center; background: rgba(255, 255, 255, .08); border: 1px solid rgba(255, 255, 255, .14); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); }
+.sp-empty-in b { font-size: 22px; letter-spacing: -.01em; }
+.sp-empty-in > span { color: rgba(255, 255, 255, .72); line-height: 1.5; }
+@media (max-width: 760px) {
+  .nav { transition: transform .32s cubic-bezier(.2, .8, .2, 1), opacity .25s; }
+  body.nav-away .nav { transform: translateY(calc(100% + 34px)); opacity: .0; pointer-events: none; }
+}
+/* phones: a tapped message keeps :hover, which showed stray times beside bubbles */
+@media (hover: none) { .msg:hover .meta { opacity: 0; } .msg:last-of-type .meta { opacity: 1; } }
+html { overscroll-behavior-x: none; }
+.live-room.embedded .lv-status { top: 64%; }

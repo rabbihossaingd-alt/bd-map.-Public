@@ -749,7 +749,17 @@ function allowSend(id) {
 // needed: set TURN_URL, TURN_USER and TURN_PASS to use one.
 const ICE = [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302', 'stun:stun.cloudflare.com:3478'] }];
 // TURN_URL may list several relays separated by commas (turn: and turns:, UDP and TCP), sharing TURN_USER / TURN_PASS.
-if (process.env.TURN_URL) ICE.push({ urls: process.env.TURN_URL.split(',').map(s => s.trim()).filter(Boolean), username: process.env.TURN_USER || '', credential: process.env.TURN_PASS || '' });
+// A metered.ca relay given as one address also gets its other ways in (TCP on 80, 443, and TLS on 443), because
+// mobile networks often block one of them — a call that cannot reach the relay one way still can another.
+function turnUrls(list) {
+  const out = new Set(list);
+  for (const u of list) {
+    const m = /^turns?:([^:?]+\.metered\.ca)(?::\d+)?/.exec(u);
+    if (m) for (const v of [`turn:${m[1]}:80`, `turn:${m[1]}:80?transport=tcp`, `turn:${m[1]}:443`, `turns:${m[1]}:443?transport=tcp`]) out.add(v);
+  }
+  return [...out];
+}
+if (process.env.TURN_URL) ICE.push({ urls: turnUrls(process.env.TURN_URL.split(',').map(s => s.trim()).filter(Boolean)), username: (process.env.TURN_USER || '').trim(), credential: (process.env.TURN_PASS || '').trim() });
 // Or a metered.ca account: METERED_APP (the part before .metered.live) and METERED_KEY; its relays are fetched and kept for an hour.
 let meteredIce = { at: 0, list: [] };
 async function iceServers() {
@@ -873,6 +883,10 @@ async function chatApi(req, res, action, query) {
       return json(res, 200, { messages: cq.history.all(...pair(me.id, other), before).reverse().map(shown), ok: chatOpen(me.id, other) });
     }
     if (action === 'ice') return json(res, 200, { iceServers: await iceServers(), relay: hasTurn() });
+    if (action === 'calldiag') {                    // a call that failed tells what each side could find (shows in the server log)
+      console.log('call diag', me.id, String(query.get('d') || '').slice(0, 300));
+      return json(res, 200, { ok: true });
+    }
     return json(res, 404, { error: 'not found' });
   }
 
@@ -2319,6 +2333,9 @@ const server = http.createServer((req, res) => {
   if (pathname === '/api/ratings') return api(req, res).catch(() => json(res, 500, { error: 'server error' }));
   if (pathname === '/api/fares') return faresApi(req, res).catch(() => json(res, 500, { error: 'server error' }));
   if (pathname.startsWith('/api/chat/')) return chatApi(req, res, pathname.slice(10), searchParams).catch(e => { console.error(e); if (!res.headersSent) json(res, 500, { error: 'server error' }); });
+  if (pathname === '/api/turn-check') return iceServers().then(list => json(res, 200, {
+    relay: hasTurn(), metered: !!(process.env.METERED_APP && process.env.METERED_KEY), turnUser: !!(process.env.TURN_USER || '').trim(), turnPass: !!(process.env.TURN_PASS || '').trim(),
+    urls: list.flatMap(x => [].concat(x.urls || x.url || [])), withCredentials: list.filter(x => x.username && x.credential).length }));
   if (pathname.startsWith('/api/live/')) return liveApi(req, res, pathname.slice(10)).catch(e => { console.error(e); if (!res.headersSent) json(res, 500, { error: 'server error' }); });
   if (pathname.startsWith('/api/notify/')) return notifyApi(req, res, pathname.slice(12)).catch(e => { console.error(e); if (!res.headersSent) json(res, 500, { error: 'server error' }); });
   if (pathname.startsWith('/api/creator/')) return creatorApi(req, res, pathname.slice(13)).catch(e => { console.error(e); if (!res.headersSent) json(res, 500, { error: 'server error' }); });
