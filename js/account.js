@@ -139,39 +139,62 @@ const AUTH_ERRORS = { noaccount: 'এই ই-মেইলে কোনো অ্
 const authError = e => AUTH_ERRORS[e.message] || acctError(e);
 let authBox = null;
 function closeAuth() { if (authBox) { authBox.remove(); authBox = null; document.body.classList.remove('auth-open'); } }
-function authShell(content, footer) {
-  closeAuth();
-  if (!$('modal').hidden) closeModal();
-  authBox = el('div', 'auth');
-  const x = el('button', 'icon-btn auth-x');
-  x.innerHTML = svg('close');
-  x.setAttribute('aria-label', 'বন্ধ করুন');
-  x.addEventListener('click', closeAuth);
+function authShell(content, footer, step) {
+  const reuse = authBox && document.body.contains(authBox);
+  if (!reuse) {
+    if (!$('modal').hidden) closeModal();
+    authBox = el('div', 'auth');
+    const x = el('button', 'icon-btn auth-x');
+    x.innerHTML = svg('close');
+    x.setAttribute('aria-label', 'বন্ধ করুন');
+    x.addEventListener('click', closeAuth);
+    const art = el('div', 'auth-art');
+    art.innerHTML = '<span class="a1"></span><span class="a2"></span><span class="a3"></span><span class="a4"></span>';
+    // What BD Map is, shown beside the form on a wide screen: a few cards from the app, floating.
+    const show = el('aside', 'auth-show');
+    show.innerHTML = `
+      <div class="as-copy"><b>${LANG === 'en' ? 'Bangladesh, in one app' : 'বাংলাদেশ, এক অ্যাপে'}</b>
+        <span>${LANG === 'en' ? 'Routes and fares, reels and stories, messages and calls — with the people who travel it.' : 'রুট ও ভাড়া, রিল ও স্টোরি, মেসেজ ও কল — যাঁরা ঘোরেন তাঁদের সাথে।'}</span></div>
+      <div class="as-stage">
+        <div class="as-card as-map"><i class="pin"></i><i class="route"></i><em>${LANG === 'en' ? 'Dhaka → Sajek · ৳850' : 'ঢাকা → সাজেক · ৳৮৫০'}</em></div>
+        <div class="as-card as-reel"><span class="play"></span><em>♪ ${LANG === 'en' ? 'Dhaka Nights' : 'ঢাকার রাত'}</em></div>
+        <div class="as-card as-chat"><p>${LANG === 'en' ? 'Bus at 10 tonight?' : 'আজ রাত ১০টার বাস?'}</p><p class="me">${LANG === 'en' ? 'Booked 🎟️' : 'টিকিট কাটা শেষ 🎟️'}</p></div>
+        <div class="as-card as-badge"><i></i><em>${LANG === 'en' ? 'Verified' : 'ভেরিফায়েড'}</em></div>
+      </div>`;
+    const main = el('div', 'auth-main');
+    authBox.append(art, x, show, main);
+    document.body.appendChild(authBox);
+    document.body.classList.add('auth-open');
+  }
+  const main = authBox.querySelector('.auth-main');
   const card = el('div', 'auth-card');
   const brand = el('div', 'auth-brand');
   brand.append(Object.assign(el('span', 'auth-logo'), { innerHTML: '<i></i>' }), el('b', 'no-tr', 'BD Map'));
-  card.append(brand, ...content);
+  card.appendChild(brand);
+  if (step) {
+    const dots = el('div', 'auth-steps');
+    for (let i = 1; i <= step[1]; i++) dots.appendChild(el('i', i < step[0] ? 'done' : i === step[0] ? 'on' : ''));
+    card.appendChild(dots);
+  }
+  card.append(...content);
   const foot = el('div', 'auth-foot');
   foot.append(...footer);
-  const art = el('div', 'auth-art');
-  art.innerHTML = '<span class="a1"></span><span class="a2"></span><span class="a3"></span>';
-  authBox.append(art, x, card, foot);
-  document.body.appendChild(authBox);
-  document.body.classList.add('auth-open');
+  main.replaceChildren(card, foot);
   return authBox;
 }
-function authInput(label, attrs) {
-  const wrap = el('label', 'auth-field');
+function authInput(label, attrs, icon) {
+  const wrap = el('label', 'auth-field' + (icon ? ' has-ic' : ''));
   const input = el('input');
   Object.assign(input, attrs, { placeholder: ' ' });
-  wrap.append(input, el('span', null, label));
+  wrap.append(input, el('span', 'lbl', label));
+  if (icon) wrap.appendChild(Object.assign(el('i', 'fic'), { innerHTML: svg(icon) }));
   return [wrap, input];
 }
 const linkBtn = (text, fn) => { const b = el('button', 'auth-link', text); b.type = 'button'; b.addEventListener('click', fn); return b; };
 
 function openLogin(mode = 'login', presetEmail = '') {
   if (mode === 'signup') return openSignup(presetEmail);
-  const [emailBox, email] = authInput('ই-মেইল ঠিকানা', { type: 'email', autocomplete: 'email', inputMode: 'email', maxLength: 120, value: presetEmail });
+  const [emailBox, email] = authInput('ই-মেইল ঠিকানা', { type: 'email', autocomplete: 'email', inputMode: 'email', maxLength: 120, value: presetEmail }, 'send');
   const note = el('div', 'auth-note');
   const go = el('button', 'auth-btn', 'কোড পাঠান');
   const submit = async () => {
@@ -201,11 +224,13 @@ function openLogin(mode = 'login', presetEmail = '') {
 
 // Creating an account: who you are first, then the code to prove the e-mail address is yours.
 function openSignup(presetEmail = '') {
-  const [emailBox, email] = authInput('ই-মেইল ঠিকানা', { type: 'email', autocomplete: 'email', inputMode: 'email', maxLength: 120, value: presetEmail });
-  const [nameBox, name] = authInput('পুরো নাম', { type: 'text', autocomplete: 'name', maxLength: 40 });
-  const [userBox, user] = authInput('ইউজারনেম', { type: 'text', autocomplete: 'username', maxLength: 30, autocapitalize: 'off', spellcheck: false });
-  const status = el('span', 'auth-check');
+  const [emailBox, email] = authInput('ই-মেইল ঠিকানা', { type: 'email', autocomplete: 'email', inputMode: 'email', maxLength: 120, value: presetEmail }, 'send');
+  const [nameBox, name] = authInput('পুরো নাম', { type: 'text', autocomplete: 'name', maxLength: 40 }, 'user');
+  const [userBox, user] = authInput('ইউজারনেম', { type: 'text', autocomplete: 'username', maxLength: 30, autocapitalize: 'off', spellcheck: false }, 'at');
+  const status = el('i', 'auth-check');
   userBox.appendChild(status);
+  // Under the username: free or taken, and a few free ones to pick from when it is taken.
+  const hint = el('div', 'auth-hint');
   let userOk = false, seq = 0, timer = null;
   const check = () => {
     const u = user.value.trim().toLowerCase();
@@ -213,6 +238,9 @@ function openSignup(presetEmail = '') {
     clearTimeout(timer);
     userOk = false;
     status.className = 'auth-check';
+    userBox.classList.remove('good', 'bad');
+    hint.className = 'auth-hint';
+    hint.replaceChildren();
     if (user.value.length < 3) return;
     const mine = ++seq;
     timer = setTimeout(async () => {
@@ -221,7 +249,23 @@ function openSignup(presetEmail = '') {
         if (mine !== seq) return;
         userOk = r.ok;
         status.className = 'auth-check ' + (r.ok ? 'ok' : 'bad');
-        status.title = r.ok ? 'খালি আছে' : r.problem === 'taken' ? 'আগেই নেওয়া' : 'ঠিক নয়';
+        userBox.classList.toggle('good', r.ok);
+        userBox.classList.toggle('bad', !r.ok);
+        hint.className = 'auth-hint ' + (r.ok ? 'ok' : 'bad');
+        hint.replaceChildren(document.createTextNode(r.ok ? (LANG === 'en' ? `@${user.value} is available` : `@${user.value} — খালি আছে`)
+          : r.problem === 'taken' ? (LANG === 'en' ? 'Taken. Try:' : 'আগেই নেওয়া। এগুলো চেষ্টা করুন:') : AUTH_ERRORS.uformat));
+        if (r.problem === 'taken') {
+          const base = user.value.replace(/\d+$/, '').slice(0, 24);
+          const tries = [`${base}${new Date().getFullYear() % 100}`, `${base}.bd`, `${base}_${Math.floor(Math.random() * 90 + 10)}`];
+          for (const t of tries) {
+            const ok = (await (await fetch('api/auth/username?u=' + encodeURIComponent(t))).json()).ok;
+            if (!ok || mine !== seq) continue;
+            const chip = el('button', 'auth-sugg', '@' + t);
+            chip.type = 'button';
+            chip.addEventListener('click', () => { user.value = t; check(); });
+            hint.appendChild(chip);
+          }
+        }
       } catch { /* checked again on submit */ }
     }, 280);
   };
@@ -256,8 +300,8 @@ function openSignup(presetEmail = '') {
   go.addEventListener('click', submit);
   for (const i of [email, name, user]) i.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
   const form = el('div', 'auth-form');
-  form.append(el('h2', null, 'নতুন অ্যাকাউন্ট'), el('p', 'auth-sub', 'বন্ধুদের ছবি-ভিডিও দেখুন, মেসেজ করুন, ভাড়া জানিয়ে পয়েন্ট নিন।'), emailBox, nameBox, userBox, go, note);
-  authShell([form], [el('span', null, 'আগে থেকেই অ্যাকাউন্ট আছে?'), linkBtn('লগইন করুন', () => openLogin('login', email.value))]);
+  form.append(el('h2', null, 'নতুন অ্যাকাউন্ট'), el('p', 'auth-sub', 'বন্ধুদের ছবি-ভিডিও দেখুন, মেসেজ করুন, ভাড়া জানিয়ে পয়েন্ট নিন।'), emailBox, nameBox, userBox, hint, go, note);
+  authShell([form], [el('span', null, 'আগে থেকেই অ্যাকাউন্ট আছে?'), linkBtn('লগইন করুন', () => openLogin('login', email.value))], [1, 2]);
   (presetEmail ? name : email).focus();
 }
 
@@ -318,7 +362,7 @@ function openCode(who, devCode) {
   const mail = el('div', 'auth-mail');
   mail.innerHTML = svg('send');
   form.append(mail, el('h2', null, 'কোডটি দিন'), sub, boxes, note, again);
-  authShell([form], [linkBtn(who.name ? 'তথ্য বদলান' : 'অন্য ই-মেইল দিন', () => (who.name ? openSignup(who.email) : openLogin('login', who.email)))]);
+  authShell([form], [linkBtn(who.name ? 'তথ্য বদলান' : 'অন্য ই-মেইল দিন', () => (who.name ? openSignup(who.email) : openLogin('login', who.email)))], who.name ? [2, 2] : null);
   boxes.focus();
 }
 

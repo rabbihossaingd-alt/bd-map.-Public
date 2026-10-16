@@ -244,11 +244,11 @@ function openEffectSheet(pick) {
   };
   for (const [k, bn, en] of FX_TABS) { const b = el('button', null, LANG === 'en' ? en : bn); b.dataset.t = k; b.addEventListener('click', () => { tab = k; draw(); }); tabs.appendChild(b); }
   const close = () => { sheet.classList.add('out'); setTimeout(() => sheet.remove(), 250); };
-  grab.addEventListener('click', close);
   const done = el('button', 'fx-done', LANG === 'en' ? 'Done' : 'ঠিক আছে');
   done.addEventListener('click', close);
   sheet.append(grab, tabs, grid, done);
   st.box.appendChild(sheet);
+  dragSheet(sheet, grab, { snaps: [.5, .92], onClose: close, onTap: close, box: () => st.box.clientHeight }).snap(0, false);
   draw();
 }
 
@@ -427,7 +427,6 @@ async function openMusicSheet(done) {
   upload.addEventListener('click', () => uploadSound(s => { data.sounds.unshift({ ...s, uses: 0, created: Date.now() }); choose(soundItem(s)); }));
   const stopPreview = () => { if (previewing) previewing.stop(); previewing = null; previewId = ''; for (const b of list.querySelectorAll('.mp-row')) b.classList.remove('playing'); };
   const close = () => { stopPreview(); sheet.classList.add('out'); setTimeout(() => sheet.remove(), 250); };
-  grab.addEventListener('click', close);
 
   // Every source becomes one shape: { id, title, by, art (url or gradient class), secs, uses, src? }
   const genItem = (t, i) => ({ id: 'gen:' + t.id, title: MUSIC.name(t.id), by: `BD Map Music · ${MUSIC.mood(t.id)}`, art: 'g' + (i % 8), secs: 0, uses: (data.tracks.find(x => x.id === t.id) || {}).uses || 0 });
@@ -525,6 +524,8 @@ async function openMusicSheet(done) {
   remove.addEventListener('click', () => { stopPreview(); st.music = null; st.orig = true; close(); done(); });
   sheet.append(grab, search, head, upload, list, remove);
   st.box.appendChild(sheet);
+  // Pull up to see more songs, down to see the video, further down to close.
+  dragSheet(sheet, grab, { snaps: [.58, .94], onClose: close, onTap: close, box: () => st.box.clientHeight }).snap(0, false);
   draw();
   try {
     data = await exploreApi('audios');

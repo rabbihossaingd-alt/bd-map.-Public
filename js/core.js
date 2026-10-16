@@ -101,6 +101,7 @@ const ICONS = {
   info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5h.01"/>',
   pause: '<path d="M8 5v14M16 5v14"/>',
   note: '<path d="M9 18V5.5l11-2.5v12.5"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="15.5" r="2.5"/>',
+  at: '<circle cx="12" cy="12" r="3.8"/><path d="M15.8 12v1.6a2.6 2.6 0 005.2 0V12a9 9 0 10-3.6 7.2"/>',
   magic: '<path d="M5 19L15 9"/><path d="M14 4l.8 2.2L17 7l-2.2.8L14 10l-.8-2.2L11 7l2.2-.8z"/><path d="M19 12l.5 1.5L21 14l-1.5.5L19 16l-.5-1.5L17 14l1.5-.5z"/>',
   cut: '<circle cx="6" cy="7" r="2.6"/><circle cx="6" cy="17" r="2.6"/><path d="M8.2 8.4L20 18M8.2 15.6L20 6"/>',
   flip: '<path d="M4 9a8 8 0 0114-3l2 2M20 15a8 8 0 01-14 3l-2-2"/><path d="M20 4v4h-4M4 20v-4h4"/>',
@@ -692,4 +693,49 @@ function localTrips(from, to) {
     t.min = Math.round((total(t, 'minFast') + total(t, 'minSlow')) / 10) * 5;
   }
   return trips.sort((a, b) => a.km - b.km);
+}
+
+// ---- Sheets you can drag, as on a phone app ----
+// Pull the grip up or down: the sheet follows the finger and settles on the nearest height in `snaps` (parts of
+// `box()`'s height), helped along by how fast it was flung. Pulled well below the lowest, it closes (onClose).
+// A tap on the grip calls onTap. Returns { snap(i) }.
+function dragSheet(sheet, grip, { snaps, onClose, onTap, box = () => innerHeight, onMove } = {}) {
+  let startY = 0, startH = 0, active = false, moved = false, lastY = 0, lastT = 0, speed = 0;
+  const setH = (h, animate) => {
+    sheet.style.transition = animate ? 'height .32s cubic-bezier(.2,.8,.2,1)' : 'none';
+    sheet.style.height = Math.round(h) + 'px';
+    sheet.style.maxHeight = 'none';
+    if (onMove) onMove();
+    if (animate) setTimeout(() => { sheet.style.transition = ''; if (onMove) onMove(); }, 340);
+  };
+  grip.style.touchAction = 'none';
+  grip.addEventListener('pointerdown', e => {
+    active = true; moved = false;
+    startY = lastY = e.clientY; lastT = performance.now(); speed = 0;
+    startH = sheet.getBoundingClientRect().height;
+    sheet.classList.add('dragging');
+    try { grip.setPointerCapture(e.pointerId); } catch { /* old browser */ }
+  });
+  grip.addEventListener('pointermove', e => {
+    if (!active) return;
+    const now = performance.now();
+    speed = (e.clientY - lastY) / Math.max(1, now - lastT);   // px per ms, down is positive
+    lastY = e.clientY; lastT = now;
+    if (Math.abs(e.clientY - startY) > 4) moved = true;
+    if (moved) setH(Math.max(48, Math.min(box() * snaps[snaps.length - 1], startH - (e.clientY - startY))));
+  });
+  const end = () => {
+    if (!active) return;
+    active = false;
+    sheet.classList.remove('dragging');
+    if (!moved) { if (onTap) onTap(); return; }
+    const H = box(), now = sheet.getBoundingClientRect().height / H;
+    const aim = now - speed * 220 / H;                        // where a fling would carry it
+    if (onClose && aim < snaps[0] * .62) { onClose(); return; }
+    const best = snaps.reduce((a, s) => (Math.abs(s - aim) < Math.abs(a - aim) ? s : a), snaps[0]);
+    setH(best * H, true);
+  };
+  grip.addEventListener('pointerup', end);
+  grip.addEventListener('pointercancel', end);
+  return { snap(i, animate = true) { setH(snaps[i] * box(), animate); } };
 }

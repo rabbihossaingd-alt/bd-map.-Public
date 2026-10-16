@@ -1032,6 +1032,7 @@ async function calculate() {
   $('trip-km').textContent = `${num(km, 1)} কিমি`;
   $('trip-time').textContent = `গাড়িতে প্রায় ${fmtMin(min)} · জ্যাম ছাড়া`;
   $('sheet').hidden = false;
+  if (phoneSheet) phoneSheet.snap(1, false);
   $('trip-photo').replaceChildren(photoStrip(trip.to));
   clearBus();
   renderBusPane(km);
@@ -1043,6 +1044,13 @@ async function calculate() {
   fit(r.geometry.coordinates);
   drawLines('route', [{ coords: r.geometry.coordinates }]);
 }
+
+// On a phone the results sheet can be pulled up to read everything, or down to see the map.
+const phoneSheet = matchMedia('(max-width: 760px)').matches ? (() => {
+  let at = 1;
+  const s = dragSheet($('sheet'), $('sheet-grip'), { snaps: [.2, .46, .88], onTap: () => { at = at === 1 ? 2 : 1; s.snap(at); } });
+  return s;
+})() : null;
 
 function clearTrip() {
   cancelRide();
