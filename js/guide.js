@@ -20,6 +20,15 @@ const wikiLink = page => page ? `https://bn.wikipedia.org/wiki/${encodeURICompon
 // A Wikimedia thumbnail at another of its standard widths (a card needs 500 px, not 1280); an original stays as it is.
 const sized = (url, w) => url ? url.replace(/\/(\d+)px-([^/?]+)(\?|$)/, (m, old, name, q) => `/${Math.min(+old, w)}px-${name}${q}`) : '';
 // A picture over its colour: the colour shows at once, the picture fades in only once it has all arrived.
+// A place without a free photo: a button to its pictures on Google Images, opened there (not copied here).
+function googlePhotos(q) {
+  const a = el('a', 'ph-google');
+  a.href = 'https://www.google.com/search?tbm=isch&q=' + encodeURIComponent(q);
+  a.target = '_blank'; a.rel = 'noopener';
+  a.append(Object.assign(el('span'), { innerHTML: svg('camera') }), el('span', null, tl2('Google-এ ছবি দেখুন', 'Photos on Google')));
+  a.addEventListener('click', e => e.stopPropagation());
+  return a;
+}
 // Line drawings for a place without a photo, chosen by what its name says it is.
 const KIND_ART = [
   [/জমিদার|রাজবাড়|প্রাসাদ|বাড়ি|কুঠি|ভিটা/, '<path d="M3 21h18M5 21V10l7-5 7 5v11"/><path d="M9 21v-5h6v5M8 12h1M15 12h1M12 5V2.5"/><path d="M3 10.5l9-6.5 9 6.5"/>'],
@@ -152,6 +161,7 @@ const coverStyle = (img, division) => {
     if (sub) head.appendChild(el('small', null, sub));
     head.appendChild(el('h2', 'no-tr', title || page));
     hero.append(x, head);
+    if (!img) hero.appendChild(googlePhotos(sub ? `${title || page} ${sub}` : (title || page)));
     if (img && file) { const cr = el('a', 'dg-credit', tl2('ছবি', 'Photo')); cr.href = commonsLink(file); cr.target = '_blank'; cr.rel = 'noopener'; hero.appendChild(cr); }
     const body = el('article', 'dg-body ar-body');
     const wait = el('div', 'ar-wait');
@@ -224,6 +234,7 @@ const coverStyle = (img, division) => {
     go.append(ic('pin'), el('span', null, tl2(`${d.bn} জেলা · ${p.kind === 'f' ? 'খাবার' : 'পণ্য'}`, `${d.bn} · ${p.kind === 'f' ? 'food' : 'goods'}`)), ic('chev'));
     title.appendChild(go);
     hero.append(x, title);
+    if (!(story && story.img)) hero.appendChild(googlePhotos(p.bn));
     if (story && (story.src || story.file)) { const cr = el('a', 'dg-credit', tl2('ছবি', 'Photo')); cr.href = story.src || commonsLink(story.file); cr.title = story.credit || ''; cr.target = '_blank'; cr.rel = 'noopener'; hero.appendChild(cr); }
     const body = el('div', 'dg-body gi-body');
     if (story && story.imgCaption) body.appendChild(el('p', 'dg-note', story.imgCaption));
@@ -311,6 +322,7 @@ const coverStyle = (img, division) => {
         const c = el('article', 'dg-sight' + (s.page === focusPage ? ' focus' : ''));
         const ph = el('div', 'ph');
         photo(ph, s.img, d.division, 960, kindArt(s.name) || 'pin');
+        if (!s.img) ph.appendChild(googlePhotos(`${s.name} ${d.bn}`));
         if (s.file) { const cr = el('a', 'dg-credit', '©'); cr.href = commonsLink(s.file); cr.target = '_blank'; cr.rel = 'noopener'; cr.title = tl2('ছবির উৎস ও লাইসেন্স', 'Photo source and licence'); ph.appendChild(cr); }
         const t = el('div', 't');
         t.append(el('b', 'no-tr', s.name));

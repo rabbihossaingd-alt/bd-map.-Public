@@ -3526,3 +3526,14 @@ button.dg-wiki { background: none; border: 0; padding: 0; cursor: pointer; font:
 #page-districts .dx-link { margin: 28px 0 22px; }
 .tour-card canvas { width: min(560px, 100%); border-radius: 32px; }
 .tp-float.away { opacity: 0; pointer-events: none; transform: translate(-50%, 20px) scale(.96); }
+
+/* a place with no free photo: its pictures on Google Images, one tap away */
+.ph-google { position: absolute; z-index: 3; left: 50%; bottom: 14px; transform: translateX(-50%); display: inline-flex; align-items: center; gap: 7px; white-space: nowrap;
+  padding: 8px 14px; border-radius: 999px; font-size: 13px; font-weight: 700; color: #fff; text-decoration: none;
+  background: rgba(10, 16, 28, .5); border: 1px solid rgba(255, 255, 255, .25); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+  transition: background .2s, transform .25s cubic-bezier(.32, .72, 0, 1); }
+.ph-google:hover { background: rgba(10, 16, 28, .7); }
+.ph-google:active { transform: translateX(-50%) scale(.96); }
+.ph-google svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; }
+.dg-hero > .ph-google { bottom: auto; top: calc(22px + env(safe-area-inset-top)); }
+.ph:has(> .ph-google) > .ph-art svg { transform: translateY(-18%); }
