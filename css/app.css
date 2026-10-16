@@ -2864,3 +2864,4 @@ html { overscroll-behavior-x: none; }
 .st-item.add svg { width: 1em; height: 1em; fill: none; stroke: currentColor; stroke-width: 2.2; }
 .sd-count { position: absolute; z-index: 3; top: 10px; right: 10px; padding: 3px 9px; border-radius: 999px; background: rgba(18, 18, 18, .75); color: #fff; font-size: 12px; font-weight: 700; }
 .sd-card .sd-chip.top { left: 10px; transform: none; }
+.studio .st-edit > .st-fxrow, .studio .st-edit > .st-items { flex: none; }

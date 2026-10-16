@@ -372,7 +372,7 @@ async function drawEdit() {
   const shape = st.shape = frameShape(st.items ? { mode: st.mode, w: st.items[0].w, h: st.items[0].h } : st);
   const frame = el('div', 'st-frame ' + (shape.fit === 'contain' ? 'fit' : 'fill'));
   frame.style.aspectRatio = String(shape.ratio);
-  frame.style.width = `min(100% - 20px, 560px, (100dvh - 236px) * ${shape.ratio.toFixed(4)})`;
+  frame.style.width = `min(100% - 20px, 560px, (100dvh - 236px) * ${shape.ratio.toFixed(4)})`;     // until fitFrame measures
   const media = st.kind === 'video' ? Object.assign(el('video', 'st-media'), { src: st.url, autoplay: true, loop: true, playsInline: true, muted: !st.orig }) : Object.assign(el('img', 'st-media'), { src: st.url, alt: '' });
   media.style.filter = fxCss(st.fx);
   media.style.objectFit = shape.fit;
@@ -458,7 +458,7 @@ async function drawEdit() {
   if (st.kind === 'video') tool('mic', 'ভয়েস', 'Voice', () => openVoiceSheet(st, media, () => { audio.classList.toggle('on', !!st.music); restartMusic(); }));
   tool('', 'ক্যাপশন', 'Captions', () => editText(null, { t: 'text', s: '', x: .5, y: .84, sc: .72, r: 0, c: '#ffffff', bg: 2, f: 'classic', a: 'c' }), '<b class="cc">CC</b>');
   tool('smile', 'স্টিকার', 'Overlay', () => openStickerSheet(st.box, { place: st.place, text: () => editText(null) }, l => { l.y = Math.min(.85, .5 + (st.layers.length % 4) * .09); st.layers.push(l); editor.redraw(); }));
-  const fxBtn = tool('magic', 'ফিল্টার', 'Filter', () => { strip.hidden = !strip.hidden; fxBtn.classList.toggle('on', !strip.hidden); });
+  const fxBtn = tool('magic', 'ফিল্টার', 'Filter', () => { strip.hidden = !strip.hidden; fxBtn.classList.toggle('on', !strip.hidden); fitFrame(); });
 
   const foot = el('div', 'st-editfoot');
   const shapeNote = el('span', 'st-shape', st.mode === 'post' ? (Math.abs(shape.ratio - 16 / 9) < .03 ? '16:9' : shape.ratio >= 1.9 ? '1.91:1' : Math.abs(shape.ratio - 1) < .02 ? '1:1' : shape.ratio <= .801 ? '4:5' : shape.ratio.toFixed(2) + ':1') : '9:16');
@@ -472,6 +472,20 @@ async function drawEdit() {
   if (st.items) body.appendChild(itemsRow(st));
   body.appendChild(tools);
   st.box.replaceChildren(bar, body, foot);
+  // The picture gets the room that is really left: the screen less the bar, the photos' row, the filters, the
+  // tools and Next (a phone browser's own bars make 100dvh unreliable, and the photos' row was not counted).
+  function fitFrame() {
+    if (!body.isConnected) { removeEventListener('resize', fitFrame); return; }
+    const cs = getComputedStyle(body), gap = parseFloat(cs.rowGap) || 0;
+    let used = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+    for (const c of body.children) if (c !== frame && !c.hidden && c.offsetParent !== null) used += c.offsetHeight + gap;
+    const room = Math.max(140, body.clientHeight - used - 4);
+    frame.style.width = Math.round(Math.max(110, Math.min(body.clientWidth - 20, 560, room * shape.ratio))) + 'px';
+  }
+  st.fitFrame = fitFrame;
+  requestAnimationFrame(fitFrame);
+  addEventListener('resize', fitFrame);
+  if (window.visualViewport) visualViewport.addEventListener('resize', fitFrame, { once: true });
   if (st.textStory != null && !st.layers.length) editText(null);
 }
 
@@ -588,14 +602,15 @@ function drawDetails() {
   // the preview, in its shape, with its cover
   const card = el('div', 'sd-card');
   card.style.aspectRatio = String(shape.ratio);
-  const pv = st.kind === 'video' ? Object.assign(el('video'), { src: st.url, muted: true, playsInline: true, autoplay: true, loop: true }) : Object.assign(el('img'), { src: st.url, alt: '' });
+  const first = st.items ? st.items[0] : st;          // a carousel is shown by its first photo
+  const pv = st.kind === 'video' ? Object.assign(el('video'), { src: st.url, muted: true, playsInline: true, autoplay: true, loop: true }) : Object.assign(el('img'), { src: first.url, alt: '' });
   pv.style.filter = fxCss(st.fx);
   pv.style.objectFit = shape.fit;
   card.appendChild(pv);
   if (st.kind === 'video') {
     if (st.cover && st.cover.url) card.appendChild(Object.assign(el('img', 'sd-cover'), { src: st.cover.url, alt: '' }));
     if (st.layers.length) layerBox(pv, st.layers);
-  } else if (st.layers.length) { const b = el('div', 'lyr full'); paintLayers(b, st.layers); card.appendChild(b); }
+  } else if (first.layers.length) { const b = el('div', 'lyr full'); paintLayers(b, first.layers); card.appendChild(b); }
   if (st.items) card.appendChild(el('span', 'sd-count', `1/${num(st.items.length)}`));
   const pvBtn = el('button', 'sd-chip top', LANG === 'en' ? 'Preview' : 'প্রিভিউ');
   pvBtn.addEventListener('click', () => openPreview(st));
