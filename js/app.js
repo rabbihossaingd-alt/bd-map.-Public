@@ -231,6 +231,7 @@ function revealOnScroll(root) {
 function route() {
   let name = location.hash.replace(/^#\/?/, '') || 'home';
   if (name === 'intercity') name = 'districts';   // old link
+  if (name === 'tour') { try { localStorage.setItem('bdmap.rb', 'tour'); } catch { /* storage off */ } history.replaceState(null, '', '#/districts'); name = 'districts'; }   // now a tab of রূপসী বাংলা
   if (name === 'community') { try { localStorage.setItem('bdmap.cx', 'fare'); } catch { /* storage off */ } history.replaceState(null, '', '#/buses'); name = 'buses'; }   // now a tab of নগরপথ
   current = PAGES.includes(name) ? name : 'home';
   for (const p of PAGES) $('page-' + p).classList.toggle('on', p === current);

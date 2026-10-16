@@ -23,9 +23,8 @@
     <a href="#/buses" data-nav="buses" class="desk-only"><i data-ic="busFront"></i><span>নগরপথ</span></a>
     <a href="#/train" data-nav="train" class="desk-only"><i data-ic="trainFront"></i><span>যাতায়াত</span></a>
     <a href="#/chat" data-nav="chat" class="phone-only"><i data-ic="chat"></i><span>মেসেজ</span><em class="nbadge" data-chat-badge hidden></em></a>
-    <a href="#/districts" data-nav="districts" class="desk-only"><i data-ic="city"></i><span>জেলা</span></a>
+    <a href="#/districts" data-nav="districts" class="desk-only"><i data-ic="compass"></i><span>রূপসী বাংলা</span></a>
     <a href="#/nearby" data-nav="nearby" class="desk-only"><i data-ic="compass"></i><span>কাছাকাছি</span></a>
-    <a href="#/tour" data-nav="tour" class="desk-only"><i data-ic="star"></i><span>ট্যুর</span></a>
     <a href="#/fares" data-nav="fares" class="desk-only"><i data-ic="tag"></i><span>ভাড়া</span></a>
     <a href="#/more" data-nav="more" class="phone-only"><i data-ic="more"></i><span>আরও</span></a>
   </div>
@@ -55,7 +54,7 @@
         <a href="#/buses"><i class="mi c-teal" data-ic="bus"></i><span>ঢাকার বাস</span></a>
         <a href="#/train"><i class="mi c-blue" data-ic="trainFront"></i><span>বাস · ট্রেন · লঞ্চ</span></a>
         <a href="#/nearby"><i class="mi c-violet" data-ic="compass"></i><span>কাছাকাছি</span></a>
-        <a href="#/districts"><i class="mi c-ink" data-ic="city"></i><span>৬৪ জেলা</span></a>
+        <a href="#/districts"><i class="mi c-ink" data-ic="compass"></i><span>রূপসী বাংলা</span></a>
         <a href="#/community"><i class="mi c-amber" data-ic="star"></i><span>ভাড়া জানান</span></a>
         <a href="#/tour"><i class="mi c-pink" data-ic="send"></i><span>ট্যুর প্ল্যান</span></a>
         <a href="#/fares"><i class="mi c-gray" data-ic="tag"></i><span>ভাড়ার হিসাব</span></a>
@@ -447,7 +446,7 @@
 
       <div class="label">ঘোরাঘুরি</div>
       <div class="card menu">
-        <a href="#/districts"><i class="mi c-indigo" data-ic="city"></i><span><b>৬৪ জেলা</b><em>ঢাকা থেকে ভাড়া, বাস ও দর্শনীয় স্থান</em></span><i class="chev" data-ic="chev"></i></a>
+        <a href="#/districts"><i class="mi c-indigo" data-ic="compass"></i><span><b>রূপসী বাংলা</b><em>৬৪ জেলার জায়গা, বিখ্যাত খাবার, যেসব জেলায় গিয়েছেন</em></span><i class="chev" data-ic="chev"></i></a>
         <a href="#/tour"><i class="mi c-pink" data-ic="star"></i><span><b>ট্যুর প্ল্যান</b><em>খরচের হিসাব আর শেয়ার করার কার্ড</em></span><i class="chev" data-ic="chev"></i></a>
         <a href="#/nearby"><i class="mi c-violet" data-ic="compass"></i><span><b>কাছাকাছি</b><em>হাসপাতাল, থানা, এটিএম, পার্ক…</em></span><i class="chev" data-ic="chev"></i></a>
       </div>
@@ -465,11 +464,23 @@
   <!-- Districts and intercity -->
   <section class="page" id="page-districts">
     <div class="wrap tx dg">
-      <div class="tx-hero">
-        <span class="tx-eyebrow"><i data-ic="pin"></i><span id="dg-count">৬৪ জেলা</span></span>
-        <h2>কোথায় ঘুরবেন?</h2>
-        <p>৬৪ জেলার সবচেয়ে বেশি দেখা জায়গা, কোন জেলার কী বিখ্যাত, আর ঢাকা থেকে যাওয়ার ভাড়া — এক জায়গায়।</p>
+      <div class="tx-hero rb-hero">
+        <div class="rb-copy">
+          <span class="tx-eyebrow"><i data-ic="pin"></i><span>রূপসী বাংলা</span></span>
+          <h2>কোথায় ঘুরবেন?</h2>
+          <p id="dg-count">৬৪ জেলার সবচেয়ে বেশি দেখা জায়গা, কোন জেলার কী বিখ্যাত, আর ঢাকা থেকে যাওয়ার ভাড়া — এক জায়গায়।</p>
+        </div>
+        <button class="rb-ring" id="rb-ring" aria-label="যেসব জেলায় গিয়েছি">
+          <svg viewBox="0 0 120 120" aria-hidden="true"><circle class="trk" cx="60" cy="60" r="52"/><circle class="val" cx="60" cy="60" r="52" pathLength="64"/></svg>
+          <span class="n"><b id="rb-n">০</b><small>/৬৪ জেলা</small></span>
+          <em>যেসব জেলায় গিয়েছি</em>
+        </button>
       </div>
+      <div class="tmode two" id="rb-seg" role="tablist" aria-label="রূপসী বাংলা">
+        <button role="tab" data-m="guide" class="m-guide" aria-selected="true"><span class="mi2"><i data-ic="compass"></i></span><span class="mt"><b>জেলা ঘুরি</b><small>জায়গা, বিখ্যাত খাবার, ভাড়া</small></span></button>
+        <button role="tab" data-m="tour" class="m-tour" aria-selected="false"><span class="mi2"><i data-ic="star"></i></span><span class="mt"><b>ট্যুর প্ল্যান</b><small>খরচের হিসাব আর শেয়ারের কার্ড</small></span></button>
+      </div>
+      <div class="tx-pane" id="rb-guide" role="tabpanel">
       <label class="filter tx-find dg-find"><i data-ic="search"></i><input id="district-filter" autocomplete="off" placeholder="জেলার নাম — যেমন: সিলেট, coxbazar" aria-label="জেলা খুঁজুন"></label>
 
       <section class="dg-sec" id="dg-top-sec" hidden>
@@ -491,34 +502,10 @@
       </section>
       <a class="dx-link" href="#/train"><i class="mi c-teal" data-ic="busFront"></i><span><b>জেলা থেকে জেলার বাস ভাড়া</b><em>যেকোনো দুটি জেলা — ভাড়া আর কোন বাস চলে, যাতায়াত পাতায়</em></span><i data-ic="chev"></i></a>
       <p class="tx-source">দর্শনীয় স্থান ও ছবি: বাংলা উইকিপিডিয়া ও উইকিমিডিয়া কমন্স · বিখ্যাত খাবার ও পণ্য: পেটেন্ট, শিল্প-নকশা ও ট্রেডমার্কস অধিদপ্তরের জিআই জার্নাল · ভাড়া: বিআরটিএ।</p>
-    </div>
-  </section>
-
-  <!-- Nearby -->
-  <section class="page" id="page-nearby">
-    <div class="wrap">
-      <div class="page-head"><h2>কাছাকাছি</h2><p>একটি জায়গা দিন, তারপর কী খুঁজছেন বেছে নিন।</p></div>
-      <div class="filter" style="position: relative">
-        <i data-ic="pin"></i>
-        <input id="near-input" autocomplete="off" placeholder="কোন জায়গার কাছে — যেমন: রংপুর, mirpur 10" aria-label="কোন জায়গার কাছে">
-        <button class="icon-btn" id="near-locate" title="আমার লোকেশন" aria-label="আমার লোকেশন"><i data-ic="locate"></i></button>
-        <div class="suggest" id="near-suggest" style="left: 0; right: 0" hidden></div>
       </div>
-      <div class="cats" id="cats"></div>
-      <div class="label note" id="near-note"></div>
-      <div class="chips" id="near-sort" style="margin-top: 16px" hidden>
-        <button class="chip on" data-sort="distance">কাছের আগে</button>
-        <button class="chip" data-sort="rating">রেটিং আগে</button>
-      </div>
-      <div id="near-list"></div>
-    </div>
-  </section>
-
-  <!-- Tour plan -->
-  <section class="page" id="page-tour">
-    <div class="wrap">
-      <div class="page-head"><h2>ট্যুর প্ল্যান</h2><p>কোথায় যাবেন, কতজন, কত দিন — খরচের হিসাব আর শেয়ার করার মতো একটি কার্ড।</p></div>
-      <div class="tour-grid">
+      <div class="tx-pane" id="rb-tour" role="tabpanel" hidden>
+        <div class="tx-sub"><h3>ট্যুর প্ল্যান</h3><p>কোথায় যাবেন, কতজন, কত দিন — খরচের হিসাব, আর বন্ধুদের সাথে শেয়ার করার কার্ড।</p></div>
+        <div class="tour-grid">
         <div class="card tour-form">
           <div class="label">কোথা থেকে কোথায়</div>
           <div class="picker" style="padding: 0">
@@ -589,8 +576,32 @@
         </div>
         <div class="empty" id="tour-video-note" style="text-align: center"></div>
       </div>
+      </div>
     </div>
   </section>
+
+  <!-- Nearby -->
+  <section class="page" id="page-nearby">
+    <div class="wrap">
+      <div class="page-head"><h2>কাছাকাছি</h2><p>একটি জায়গা দিন, তারপর কী খুঁজছেন বেছে নিন।</p></div>
+      <div class="filter" style="position: relative">
+        <i data-ic="pin"></i>
+        <input id="near-input" autocomplete="off" placeholder="কোন জায়গার কাছে — যেমন: রংপুর, mirpur 10" aria-label="কোন জায়গার কাছে">
+        <button class="icon-btn" id="near-locate" title="আমার লোকেশন" aria-label="আমার লোকেশন"><i data-ic="locate"></i></button>
+        <div class="suggest" id="near-suggest" style="left: 0; right: 0" hidden></div>
+      </div>
+      <div class="cats" id="cats"></div>
+      <div class="label note" id="near-note"></div>
+      <div class="chips" id="near-sort" style="margin-top: 16px" hidden>
+        <button class="chip on" data-sort="distance">কাছের আগে</button>
+        <button class="chip" data-sort="rating">রেটিং আগে</button>
+      </div>
+      <div id="near-list"></div>
+    </div>
+  </section>
+
+  <!-- Tour plan -->
+  <section class="page" id="page-tour" hidden></section>
 
   <!-- Fares -->
   <section class="page" id="page-fares">

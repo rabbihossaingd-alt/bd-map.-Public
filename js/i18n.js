@@ -38,7 +38,9 @@ const EXACT = {
 
   // trains, launches, fare reports, More page
   'সায়েদাবাদ': 'Sayedabad', 'গাবতলী': 'Gabtoli', 'মহাখালী': 'Mohakhali',
-  'ট্রেন': 'Train', 'আরও': 'More', 'ভাষা': 'Language', 'লঞ্চ': 'Launch', 'কোথায় ঘুরবেন?': 'Where to go?', '৬৪ জেলার সবচেয়ে বেশি দেখা জায়গা, কোন জেলার কী বিখ্যাত, আর ঢাকা থেকে যাওয়ার ভাড়া — এক জায়গায়।': 'The most-visited places of 64 districts, what each is famous for, and the fare from Dhaka — in one place.',
+  'ট্রেন': 'Train', 'আরও': 'More', 'ভাষা': 'Language', 'লঞ্চ': 'Launch', 'রূপসী বাংলা': 'Rupashi Bangla', 'জেলা ঘুরি': 'Explore districts', 'জায়গা, বিখ্যাত খাবার, ভাড়া': 'Places, famous food, fares', 'খরচের হিসাব আর শেয়ারের কার্ড': 'Costs and a card to share',
+  'যেসব জেলায় গিয়েছি': 'Districts I have been to', '/৬৪ জেলা': '/64 districts', '৬৪ জেলার জায়গা, বিখ্যাত খাবার, যেসব জেলায় গিয়েছেন': 'Places of 64 districts, famous food, where you have been',
+  'কোথায় যাবেন, কতজন, কত দিন — খরচের হিসাব, আর বন্ধুদের সাথে শেয়ার করার কার্ড।': 'Where, how many, how long — the costs, and a card to share with friends.', 'কোথায় ঘুরবেন?': 'Where to go?', '৬৪ জেলার সবচেয়ে বেশি দেখা জায়গা, কোন জেলার কী বিখ্যাত, আর ঢাকা থেকে যাওয়ার ভাড়া — এক জায়গায়।': 'The most-visited places of 64 districts, what each is famous for, and the fare from Dhaka — in one place.',
   'সবচেয়ে বেশি দেখা জায়গা': 'Most-viewed places', 'উইকিপিডিয়ায় গত ৬০ দিনে সবচেয়ে বেশি পড়া জায়গাগুলো': 'The places read most on Wikipedia in the last 60 days',
   'কোন জেলার কী বিখ্যাত': 'What each district is famous for', 'সরকারের জিআই (ভৌগোলিক নির্দেশক) স্বীকৃত খাবার ও পণ্য — চাপ দিলে সেই জেলা': 'Food and goods with a government GI (geographical indication) — tap for the district',
   'জেলায় চাপ দিন — দর্শনীয় স্থান, বিখ্যাত খাবার, ঢাকা থেকে ভাড়া ও বাস।': 'Tap a district — its sights, famous food, and fares and buses from Dhaka.',
