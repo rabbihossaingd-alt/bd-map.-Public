@@ -532,7 +532,7 @@ async function openSessions() {
   $('set-sessions').addEventListener('click', openSessions);
   $('set-logout').addEventListener('click', logOut);
   $('set-delete').addEventListener('click', confirmDelete);
-  $('people-open').addEventListener('click', openPeopleSearch);
+  if ($('people-open')) $('people-open').addEventListener('click', openPeopleSearch);   // people are found in Explore now
   enter.profile = drawProfile;
   enter.insights = drawInsights;
   enter.settings = () => {

@@ -1712,7 +1712,7 @@ function peopleApi(req, res, action, query) {
 // fare earns points; the leaderboard ranks people by points. Reports for the same trip (both ends within
 // 700 m) are combined by their middle value and shown to whoever searches that trip. Points have no cash
 // value: they are kept so that discounts can be offered if rides or tickets are ever sold through the app.
-const POINTS_PER_FARE = 10, FARE_MODES = ['bus', 'cng', 'rickshaw', 'leguna', 'bike', 'car', 'train', 'launch', 'other'];
+const POINTS_PER_FARE = 10, FARE_MODES = ['bus', 'cng', 'launch'];   // what can be reported now (older reports of other kinds still show)
 db.exec(`CREATE TABLE IF NOT EXISTS contributions (
   id      INTEGER PRIMARY KEY,
   user    INTEGER NOT NULL,

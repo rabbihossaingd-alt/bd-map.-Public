@@ -99,8 +99,10 @@ async function loadRecentFares() {
     wireSuggest(input, $('give-' + which + '-suggest'), place => { picked[which] = place; input.value = place.label; input.blur(); }, () => { picked[which] = null; });
   }
   const modes = $('give-modes');
-  for (const [id, name] of Object.entries(FARE_MODE_NAMES)) {
+  // What can be reported: a local bus, a CNG, a launch (the fares people most often get wrong).
+  for (const [id, name] of [['bus', 'লোকাল বাস'], ['cng', 'সিএনজি'], ['launch', 'লঞ্চ']]) {
     const chip = el('button', 'chip' + (id === mode ? ' on' : ''), name);
+    chip.prepend(ic(FARE_MODE_ICONS[id]));
     chip.type = 'button';
     chip.addEventListener('click', () => { mode = id; for (const c of modes.children) c.classList.toggle('on', c === chip); });
     modes.appendChild(chip);
