@@ -84,7 +84,13 @@ addEventListener('hashchange', () => { for (const f of feedSounds) f.sound.stop(
 
 // ---- one post in the feed ----
 let feedWatcher = null;      // plays a feed video while it is on screen, pauses it when it leaves
-let feedSound = false;       // browsers only allow sound after a tap, so videos start silent until the speaker is pressed
+let feedSound = true;        // sound is on, as on Instagram; a browser that refuses sound before a tap gets it at the first tap
+let feedNeedsTap = false;
+addEventListener('pointerdown', () => {
+  if (!feedNeedsTap) return;
+  feedNeedsTap = false;
+  if (feedSound) setFeedSound(true);
+}, { capture: true });
 function feedCard(p, onGone) {
   const card = el('article', 'fc');
   const head = el('header', 'fc-head');
@@ -109,7 +115,8 @@ function feedCard(p, onGone) {
 
   const media = el('div', 'fc-media' + (p.fx ? ' fx-' + p.fx : ''));
   // Instagram's shapes: as the picture is, between 1.91:1 and 4:5 (a 16:9 YouTube-size video stays 16:9).
-  const shapeIt = (w, h) => { if (w && h) media.style.aspectRatio = String(Math.min(1.91, Math.max(0.8, w / h))); };
+  // A video may be as tall as a reel (9:16), as in Instagram's feed.
+  const shapeIt = (w, h) => { if (w && h) media.style.aspectRatio = String(Math.min(1.91, Math.max(p.kind === 'video' ? 9 / 16 : 0.8, w / h))); };
   if (p.kind !== 'text') shapeIt(p.w, p.h);
   const burst = svgEl('heart', 'burst');
   const sound = postSound(p);
@@ -118,6 +125,7 @@ function feedCard(p, onGone) {
     like.classList.toggle('on', p.liked);
     count.textContent = `${num(p.likes)} লাইক`;
     count.hidden = !p.likes;
+    if (p.likes === null) { count.textContent = LANG === 'en' ? 'Liked by others' : 'অন্যরা লাইক দিয়েছেন'; count.hidden = !p.liked; }
     if (pop) { like.classList.remove('pop'); void like.offsetWidth; like.classList.add('pop'); }
   };
   like.innerHTML = svg('heart');
@@ -143,10 +151,39 @@ function feedCard(p, onGone) {
       v.addEventListener('timeupdate', () => { if (v.currentTime + .4 < last && !v.paused) sound.start(v.currentTime); last = v.currentTime; });   // the video looped
     }
     if (!p.w) v.addEventListener('loadedmetadata', () => shapeIt(v.videoWidth, v.videoHeight));
-    media.append(v, svgEl('play', 'reel-mark'), speaker);
+    // a tap in the middle stops it and starts it again; a double tap likes; the line at the bottom can be dragged
+    const big = svgEl('play', 'fc-play');
+    const seek = el('div', 'fc-seek'), fill = el('i');
+    seek.appendChild(fill);
+    const paintSeek = () => { if (v.duration) fill.style.width = (v.currentTime / v.duration * 100) + '%'; };
+    v.addEventListener('timeupdate', paintSeek);
+    v.addEventListener('pause', () => { if (!v.dataset.auto) media.classList.add('paused'); });
+    v.addEventListener('play', () => media.classList.remove('paused'));
+    const seekTo = e => { const r = seek.getBoundingClientRect(); if (v.duration) { v.currentTime = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * v.duration; paintSeek(); } };
+    seek.addEventListener('pointerdown', e => { e.stopPropagation(); seek.classList.add('drag'); try { seek.setPointerCapture(e.pointerId); } catch { /* old browser */ } seekTo(e); });
+    seek.addEventListener('pointermove', e => { if (seek.classList.contains('drag')) seekTo(e); });
+    const endSeek = () => seek.classList.remove('drag');
+    seek.addEventListener('pointerup', endSeek);
+    seek.addEventListener('pointercancel', endSeek);
+    seek.addEventListener('click', e => e.stopPropagation());
+    media.append(v, big, speaker, seek);
     if (p.layers && p.layers.length) layerBox(v, p.layers);
     media.classList.add('video');
-    media.addEventListener('click', () => { v.pause(); openReels(p.id); });
+    card.classList.add('fc-video');
+    let lastTap = 0;
+    media.addEventListener('click', () => {
+      const t0 = Date.now();
+      if (t0 - lastTap < 300) {                        // the second tap of a double tap: like, and undo the first tap's pause
+        lastTap = 0;
+        if (!p.liked) toggleLike(p, paint);
+        burst.classList.remove('go'); void burst.offsetWidth; burst.classList.add('go');
+        if (v.paused) { delete v.dataset.auto; v.play().catch(() => {}); }
+        return;
+      }
+      lastTap = t0;
+      delete v.dataset.auto;
+      if (v.paused) v.play().catch(() => {}); else v.pause();
+    });
     if (feedWatcher) feedWatcher.observe(v);
   } else {
     if (sound) {                                       // a photo with music: it plays while the photo is on screen, if sound is on
@@ -210,7 +247,8 @@ function feedCard(p, onGone) {
   all.addEventListener('click', () => openPost(p.id, onGone));
   body.appendChild(all);
   paint(false);
-  card.append(head, media, bar, body);
+  if (p.kind === 'video') { media.prepend(head); card.append(media, bar, body); }
+  else card.append(head, media, bar, body);
   card.dataset.post = p.id;
   seenWatcher().observe(card);
   return card;
@@ -335,7 +373,11 @@ async function openPost(id, onGone) {
     try { addComment((await exploreApi('comment', { id, body: text })).comment); $('m-body').scrollTop = $('m-body').scrollHeight; } catch { input.value = text; }
   });
   const caption = Object.assign(el('p', 'post-caption no-tr'), { textContent: p.caption });
-  openModal('', '', [media, who, bar, ...(p.caption && p.kind !== 'text' ? [caption] : []), list], [form]);
+  // tagged people, and comments the owner turned off
+  const tagged = p.tags && p.tags.length ? Object.assign(el('p', 'post-tags no-tr'), { textContent: (LANG === 'en' ? 'With ' : 'সাথে: ') + p.tags.map(t => t.username ? '@' + t.username : t.name).join(', ') }) : null;
+  const closed = p.nocomm && (!ME || ME.id !== p.user.id);
+  const foot = closed ? el('div', 'cmt-off', LANG === 'en' ? 'Comments are turned off.' : 'এই পোস্টে মন্তব্য বন্ধ।') : form;
+  openModal('', '', [media, who, bar, ...(p.caption && p.kind !== 'text' ? [caption] : []), ...(tagged ? [tagged] : []), list], [foot]);
   $('modal').classList.add('post-modal');
 }
 
@@ -616,12 +658,12 @@ function shrinkPhoto(file) {
   });
 }
 // The frame one second into a video, as the picture shown before it plays.
-function videoPoster(file) {
+function videoPoster(file, at) {
   return new Promise(resolve => {
     const v = el('video'), url = URL.createObjectURL(file);
     const done = value => { URL.revokeObjectURL(url); resolve(value); };
     Object.assign(v, { muted: true, playsInline: true, preload: 'auto', src: url });
-    v.onloadeddata = () => { v.currentTime = Math.min(1, (v.duration || 2) / 2); };
+    v.onloadeddata = () => { v.currentTime = at != null ? Math.min(at, Math.max(0, (v.duration || 1) - .05)) : Math.min(1, (v.duration || 2) / 2); };
     v.onseeked = () => {
       const scale = Math.min(1, 900 / Math.max(v.videoWidth, v.videoHeight)), c = el('canvas');
       c.width = Math.round(v.videoWidth * scale); c.height = Math.round(v.videoHeight * scale);
@@ -709,7 +751,11 @@ function openQuickPost() {
   feedWatcher = new IntersectionObserver(entries => {
     for (const e of entries) {
       const v = e.target;
-      if (e.isIntersecting && e.intersectionRatio > 0.6) { v.muted = !feedSound; v.play().catch(() => { v.muted = true; v.play().catch(() => {}); }); } else v.pause();
+      if (e.isIntersecting && e.intersectionRatio > 0.6) {
+        if (v.dataset.auto === 'held') continue;      // stopped by a tap: it stays stopped
+        v.muted = !feedSound || v.dataset.orig === '0';
+        v.play().catch(() => { v.muted = true; feedNeedsTap = true; v.play().catch(() => {}); });
+      } else if (!v.paused) { v.dataset.auto = '1'; v.pause(); }
     }
   }, { threshold: [0, 0.6] });
 
@@ -776,6 +822,25 @@ function openQuickPost() {
     if (wanted && !enter.explore.opened) { enter.explore.opened = true; openPost(wanted); }
   };
   $('explore-new').addEventListener('click', () => openNewPost());
+  // The name at the top opens a small menu: the feed, reels, what you saved.
+  $('explore-brand').addEventListener('click', e => {
+    e.stopPropagation();
+    const old = document.querySelector('.ex-menu');
+    if (old) { old.remove(); return; }
+    const menu = el('div', 'ex-menu');
+    const item = (icon, bn, en, fn) => { const b = el('button'); b.append(ic(icon), el('span', null, LANG === 'en' ? en : bn)); b.addEventListener('click', () => { menu.remove(); fn(); }); menu.appendChild(b); };
+    item('home', 'ফিড', 'Feed', () => { scrollTo({ top: 0, behavior: 'smooth' }); });
+    item('play', 'রিলস', 'Reels', () => $('ex-tabs').children[1].click());
+    item('bookmark', 'সেভ করা', 'Saved', () => { if (ME) { go('profile'); setTimeout(() => { const t = document.querySelector('#page-profile [data-tab=saved]'); if (t) t.click(); }, 400); } else openLogin(); });
+    $('explore-brand').after(menu);
+    setTimeout(() => addEventListener('click', () => menu.remove(), { once: true }), 0);
+  });
+  // Search opens under the top bar.
+  $('explore-find').addEventListener('click', () => {
+    const box = document.querySelector('.ex-search');
+    const open = box.classList.toggle('open');
+    if (open) q.focus(); else { q.value = ''; q.dispatchEvent(new Event('input')); }
+  });
   // Reels: every video, one screen at a time, scrolled up and down.
   for (const b of $('ex-tabs').children) b.addEventListener('click', () => {
     if (b.dataset.t !== 'reels') return;
@@ -837,7 +902,8 @@ const NOTIFY_TEXT = {
   like: ['আপনার পোস্টে লাইক দিয়েছেন।', 'liked your post.'],
   comment: ['মন্তব্য করেছেন:', 'commented:'],
   follow: ['আপনাকে ফলো করা শুরু করেছেন।', 'started following you.'],
-  followback: ['আপনাকে ফলো ব্যাক করেছেন।', 'followed you back.']
+  followback: ['আপনাকে ফলো ব্যাক করেছেন।', 'followed you back.'],
+  tag: ['আপনাকে একটি পোস্টে ট্যাগ করেছেন।', 'tagged you in a post.']
 };
 async function openNotifications() {
   if (!ME) { openLogin(); return; }

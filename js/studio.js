@@ -90,6 +90,9 @@ function drawSource() {
     words.addEventListener('click', () => { closeStudio(); openQuickPost(); });
     stage.appendChild(words);
   }
+  const drafts = el('button', 'st-link st-drafts', LANG === 'en' ? 'Drafts' : 'ড্রাফট');
+  drafts.addEventListener('click', openDrafts);
+  stage.appendChild(drafts);
   st.box.replaceChildren(studioBar(modeTitle()), stage, modeSwitch(drawSource));
 }
 function takeFile(file, baked) {
@@ -183,7 +186,7 @@ async function openCamera() {
   const mic = sbtn('mic', 'মাইক্রোফোন', () => { st.orig = !st.orig; mic.classList.toggle('off', !st.orig); }, 'round');
   mic.classList.toggle('off', !st.orig);
   const allFx = sbtn('magic', 'সব ইফেক্ট', () => openEffectSheet(pick), 'round');
-  const tools = el('div', 'st-tools');
+  const tools = el('div', 'st-toolrow');
   tools.append(flip, mic, allFx);
   stage.appendChild(tools);
   // the effects around the shutter, as on Instagram: swipe through, the middle one is on
@@ -319,7 +322,7 @@ function filterStrip(onPick, src) {
   return strip;
 }
 
-// ---- 3. editing: words, stickers, filter, music, sound ----
+// ---- 3. editing, as on Instagram: the picture large, the tools along the bottom, Next ----
 async function drawEdit() {
   const st = studio;
   await mediaSize(st);
@@ -327,12 +330,13 @@ async function drawEdit() {
   const shape = st.shape = frameShape(st);
   const frame = el('div', 'st-frame ' + (shape.fit === 'contain' ? 'fit' : 'fill'));
   frame.style.aspectRatio = String(shape.ratio);
-  frame.style.width = `min(100% - 24px, 520px, ${st.mode === 'post' ? 60 : 64}dvh * ${shape.ratio.toFixed(4)})`;
+  frame.style.width = `min(100% - 20px, 560px, (100dvh - 236px) * ${shape.ratio.toFixed(4)})`;
   const media = st.kind === 'video' ? Object.assign(el('video', 'st-media'), { src: st.url, autoplay: true, loop: true, playsInline: true, muted: !st.orig }) : Object.assign(el('img', 'st-media'), { src: st.url, alt: '' });
   media.style.filter = fxCss(st.fx);
   media.style.objectFit = shape.fit;
   if (shape.fit === 'contain' && st.kind === 'photo') frame.appendChild(Object.assign(el('img', 'st-blur'), { src: st.url, alt: '' }));
   frame.appendChild(media);
+  st.media = media;
   // Words and stickers: on a photo over the whole frame (they are drawn into it); on a video over the video itself.
   let lyr;
   if (st.kind === 'video') lyr = layerBox(media, null, shape.fit);
@@ -341,32 +345,32 @@ async function drawEdit() {
   bin.innerHTML = svg('trash');
   frame.appendChild(bin);
   const editor = layerEditor(lyr, st.layers, { bin, frame, onEditText: l => editText(l) });
-  function editText(l) {
+  function editText(l, preset) {
     const i = l ? st.layers.indexOf(l) : -1;
     if (i >= 0) { st.layers.splice(i, 1); editor.redraw(); }
     if (st.kind === 'video') media.pause();
-    openTextTool(st.box, l, (out) => {
+    openTextTool(st.box, l || preset, out => {
       if (out) {
-        if (!l) { const n = st.layers.length; out.y = Math.min(.8, .42 + (n % 4) * .08); }
+        if (!l && !preset) { const n = st.layers.length; out.y = Math.min(.8, .42 + (n % 4) * .08); }
         st.layers.push(out);
       }
       editor.redraw();
       if (st.kind === 'video') media.play().catch(() => {});
     }, lyr.getBoundingClientRect().width / 100 || undefined);
   }
-  // the tools down the right side, as on Instagram
-  const side = el('div', 'st-side');
-  const tool = (html, label, fn) => { const b = el('button', 'st-tool'); b.innerHTML = html; b.setAttribute('aria-label', label); b.title = label; b.addEventListener('click', fn); side.appendChild(b); return b; };
-  tool('<b>Aa</b>', LANG === 'en' ? 'Text' : 'লেখা', () => editText(null));
-  tool(svg('smile'), LANG === 'en' ? 'Stickers' : 'স্টিকার ও ইমোজি', () => openStickerSheet(st.box, { place: st.place, text: () => editText(null) }, l => { l.y = Math.min(.85, .5 + (st.layers.length % 4) * .09); st.layers.push(l); editor.redraw(); }));
-  if (st.textStory != null) tool('<i class="st-swatch"></i>', LANG === 'en' ? 'Background' : 'পেছনের রং', async () => {
-    st.textStory++;
-    const f = await wordsBackground(st.textStory);
-    URL.revokeObjectURL(st.url);
-    Object.assign(st, { file: f, url: URL.createObjectURL(f) });
-    media.src = st.url;
-  });
-  frame.appendChild(side);
+  if (st.textStory != null) {                           // a words-only story: its colour, on the picture
+    const sw = el('button', 'st-tool st-swatch-btn');
+    sw.innerHTML = '<i class="st-swatch"></i>';
+    sw.setAttribute('aria-label', LANG === 'en' ? 'Background' : 'পেছনের রং');
+    sw.addEventListener('click', async () => {
+      st.textStory++;
+      const f = await wordsBackground(st.textStory);
+      URL.revokeObjectURL(st.url);
+      Object.assign(st, { file: f, url: URL.createObjectURL(f) });
+      media.src = st.url;
+    });
+    frame.appendChild(sw);
+  }
   // A preview of the chosen music, in step with the video.
   const restartMusic = () => {
     if (st.preview) { st.preview.stop(); st.preview = null; }
@@ -377,72 +381,421 @@ async function drawEdit() {
     media.addEventListener('timeupdate', () => { if (media.currentTime + .4 < last) restartMusic(); last = media.currentTime; });
     media.addEventListener('play', restartMusic);
   } else restartMusic();
+
+  // the video's own sound, at the top
+  const bar = el('header', 'st-bar');
+  const back = sbtn('back', 'ফিরে যান', () => { if (st.preview) st.preview.stop(); st.textStory = null; drawSource(); });
+  let right = el('span');
+  if (st.kind === 'video') {
+    right = sbtn('sound', LANG === 'en' ? 'Video sound' : 'ভিডিওর শব্দ', () => { st.orig = !st.orig; media.muted = !st.orig; right.classList.toggle('off', !st.orig); });
+    right.classList.toggle('off', !st.orig);
+  }
+  bar.append(back, el('b', null, modeTitle()), right);
+
+  // the filter row opens from its tool
   let thumb = st.url;
   if (st.kind === 'video') thumb = await videoPoster(st.file) || '';
   if (studio !== st) return;
   const strip = filterStrip(id => { st.fx = id; media.style.filter = fxCss(id); }, thumb);
-  const tools = el('div', 'st-edit-tools');
-  const tune = el('button', 'st-chip');
-  const paintTune = () => { tune.replaceChildren(Object.assign(el('i'), { innerHTML: svg('note') }), document.createTextNode(st.music ? musicTitle(st.music) : (LANG === 'en' ? 'Music' : 'গান'))); tune.classList.toggle('on', !!st.music); };
-  paintTune();
-  tune.addEventListener('click', () => openMusicSheet(() => { paintTune(); restartMusic(); }));
-  if (st.mode !== 'story') tools.appendChild(tune);
-  if (st.kind === 'video') {
-    const vol = el('button', 'st-chip');
-    const paintVol = () => { vol.replaceChildren(Object.assign(el('i'), { innerHTML: svg('sound') }), document.createTextNode(st.orig ? (LANG === 'en' ? 'Video sound on' : 'ভিডিওর শব্দ চালু') : (LANG === 'en' ? 'Video sound off' : 'ভিডিওর শব্দ বন্ধ'))); vol.classList.toggle('on', st.orig); };
-    paintVol();
-    vol.addEventListener('click', () => { st.orig = !st.orig; media.muted = !st.orig; paintVol(); });
-    tools.appendChild(vol);
-  }
+  strip.classList.add('st-fxrow');
+  strip.hidden = true;
+
+  const tools = el('div', 'st-toolrow');
+  const tool = (icon, bn, en, fn, html) => {
+    const b = el('button', 'st-t');
+    const i = el('span', 'ic2');
+    i.innerHTML = html || svg(icon);
+    b.append(i, el('small', null, LANG === 'en' ? en : bn));
+    b.addEventListener('click', fn);
+    tools.appendChild(b);
+    return b;
+  };
+  const audio = tool('note', 'অডিও', 'Audio', () => openMusicSheet(() => { audio.classList.toggle('on', !!st.music); restartMusic(); }));
+  audio.classList.toggle('on', !!st.music);
+  tool('', 'লেখা', 'Text', () => editText(null), '<b class="aa">Aa</b>');
+  if (st.kind === 'video') tool('mic', 'ভয়েস', 'Voice', () => openVoiceSheet(st, media, () => { audio.classList.toggle('on', !!st.music); restartMusic(); }));
+  tool('', 'ক্যাপশন', 'Captions', () => editText(null, { t: 'text', s: '', x: .5, y: .84, sc: .72, r: 0, c: '#ffffff', bg: 2, f: 'classic', a: 'c' }), '<b class="cc">CC</b>');
+  tool('smile', 'স্টিকার', 'Overlay', () => openStickerSheet(st.box, { place: st.place, text: () => editText(null) }, l => { l.y = Math.min(.85, .5 + (st.layers.length % 4) * .09); st.layers.push(l); editor.redraw(); }));
+  const fxBtn = tool('magic', 'ফিল্টার', 'Filter', () => { strip.hidden = !strip.hidden; fxBtn.classList.toggle('on', !strip.hidden); });
+
+  const foot = el('div', 'st-editfoot');
   const shapeNote = el('span', 'st-shape', st.mode === 'post' ? (Math.abs(shape.ratio - 16 / 9) < .03 ? '16:9' : shape.ratio >= 1.9 ? '1.91:1' : Math.abs(shape.ratio - 1) < .02 ? '1:1' : shape.ratio <= .801 ? '4:5' : shape.ratio.toFixed(2) + ':1') : '9:16');
   shapeNote.title = LANG === 'en' ? 'The shape it will show in' : 'যে মাপে দেখাবে';
-  tools.prepend(shapeNote);
-  const next = el('button', 'st-next', st.mode === 'story' ? 'শেয়ার করুন' : 'পরের ধাপ');
+  const next = el('button', 'st-nextbtn');
+  next.append(el('span', null, st.mode === 'story' ? (LANG === 'en' ? 'Share' : 'শেয়ার') : (LANG === 'en' ? 'Next' : 'পরের ধাপ')), Object.assign(el('i'), { innerHTML: svg('arrow') }));
   next.addEventListener('click', () => (st.mode === 'story' ? share() : drawDetails()));
-  const back = sbtn('back', 'ফিরে যান', () => { if (st.preview) st.preview.stop(); st.textStory = null; drawSource(); });
-  const bar = el('header', 'st-bar');
-  bar.append(back, el('b', null, 'এডিট'), next);
+  foot.append(shapeNote, next);
   const body = el('div', 'st-edit');
-  body.append(frame, tools, el('div', 'st-label', 'ফিল্টার'), strip);
-  st.box.replaceChildren(bar, body);
+  body.append(frame, strip, tools);
+  st.box.replaceChildren(bar, body, foot);
   if (st.textStory != null && !st.layers.length) editText(null);
 }
 
-// ---- 4. the caption, the place, share ----
+// Voice: speak over the video while it plays; the recording becomes the post's sound (the video's own sound stays).
+function openVoiceSheet(st, media, done) {
+  const sheet = el('div', 'st-sheet vo-sheet');
+  const grab = el('div', 'grab');
+  const status = el('div', 'vo-status', LANG === 'en' ? 'Tap the button and speak — the video plays from the start.' : 'বোতাম চাপুন আর বলুন — ভিডিও শুরু থেকে চলবে।');
+  const timer = el('b', 'vo-time', '0:00');
+  const rec = el('button', 'vo-rec');
+  rec.setAttribute('aria-label', LANG === 'en' ? 'Record' : 'রেকর্ড');
+  const use = el('button', 'fx-done', LANG === 'en' ? 'Use this voice' : 'এই ভয়েস ব্যবহার করুন');
+  use.hidden = true;
+  let recorder = null, stream = null, parts = [], t0 = 0, tick = 0, blob = null, player = null;
+  const close = () => { stop(); if (stream) stream.getTracks().forEach(t => t.stop()); if (player) player.pause(); sheet.classList.add('out'); setTimeout(() => sheet.remove(), 250); };
+  function stop() {
+    if (!recorder || recorder.state !== 'recording') return;
+    recorder.stop();
+    clearInterval(tick);
+    media.pause();
+    rec.classList.remove('on');
+  }
+  rec.addEventListener('click', async () => {
+    if (recorder && recorder.state === 'recording') { stop(); return; }
+    try { stream = stream || await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }); }
+    catch { status.textContent = LANG === 'en' ? 'The microphone is not allowed.' : 'মাইক্রোফোনের অনুমতি পাওয়া যায়নি।'; return; }
+    parts = []; blob = null; use.hidden = true;
+    recorder = new MediaRecorder(stream);
+    recorder.ondataavailable = e => { if (e.data.size) parts.push(e.data); };
+    recorder.onstop = () => {
+      blob = new Blob(parts, { type: recorder.mimeType || 'audio/webm' });
+      status.textContent = LANG === 'en' ? 'Done. Play it with the video, or record again.' : 'হয়েছে। ভিডিওর সাথে শুনে দেখুন, বা আবার রেকর্ড করুন।';
+      use.hidden = false;
+      player = new Audio(URL.createObjectURL(blob));
+      media.currentTime = 0; media.play().catch(() => {}); player.play().catch(() => {});
+    };
+    media.loop = false;
+    media.currentTime = 0;
+    media.muted = true;
+    media.play().catch(() => {});
+    media.onended = () => stop();
+    recorder.start();
+    t0 = Date.now();
+    rec.classList.add('on');
+    status.textContent = LANG === 'en' ? 'Recording… tap to stop.' : 'রেকর্ড হচ্ছে… থামাতে চাপুন।';
+    tick = setInterval(() => { const s = Math.floor((Date.now() - t0) / 1000); timer.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; if (s >= 600) stop(); }, 250);
+  });
+  use.addEventListener('click', async () => {
+    if (!blob) return;
+    use.disabled = true;
+    use.textContent = LANG === 'en' ? 'Saving…' : 'সেভ হচ্ছে…';
+    try {
+      const type = (blob.type || 'audio/webm').split(';')[0];
+      const up = await fetch('api/chat/upload', { method: 'POST', headers: { 'Content-Type': type, 'X-Name': 'voice' }, body: blob }).then(r => r.json());
+      if (up.kind !== 'audio') throw new Error('type');
+      const secs = (Date.now() - t0) / 1000;
+      const { sound } = await exploreApi('sound', { media: up.media, title: LANG === 'en' ? 'Voiceover' : 'ভয়েসওভার', secs, rights: true });
+      st.music = { id: sound.id, start: 0, title: sound.title, by: ME.name, src: sound.src };
+      media.loop = true; media.muted = !st.orig;
+      close();
+      done();
+    } catch { use.disabled = false; use.textContent = LANG === 'en' ? 'Could not save. Try again' : 'সেভ হয়নি। আবার চেষ্টা করুন'; }
+  });
+  sheet.append(grab, el('b', 'vo-title', LANG === 'en' ? 'Voiceover' : 'ভয়েসওভার'), status, timer, rec, use);
+  st.box.appendChild(sheet);
+  dragSheet(sheet, grab, { snaps: [.46, .7], onClose: close, onTap: close, box: () => st.box.clientHeight }).snap(0, false);
+}
+
+// ---- 4. the last step, as on Instagram: a preview with its cover, the caption, who sees it, share ----
 function drawDetails() {
   const st = studio;
-  const thumb = el('div', 'st-thumb');
-  thumb.appendChild(st.kind === 'video' ? Object.assign(el('video'), { src: st.url, muted: true, playsInline: true, preload: 'metadata' }) : Object.assign(el('img'), { src: st.url, alt: '' }));
-  thumb.firstChild.style.filter = fxCss(st.fx);
-  if (st.shape) thumb.style.aspectRatio = String(st.shape.ratio);
-  const caption = Object.assign(el('textarea', 'st-caption'), { rows: 4, maxLength: 500, placeholder: LANG === 'en' ? 'Write a caption…' : 'ক্যাপশন লিখুন… কোথায়, কেমন লাগল' });
+  if (st.preview) { st.preview.stop(); st.preview = null; }
+  st.audience = st.audience || 'all';
+  st.tags = st.tags || [];
+  const shape = st.shape || frameShape(st);
+  // the preview, in its shape, with its cover
+  const card = el('div', 'sd-card');
+  card.style.aspectRatio = String(shape.ratio);
+  const pv = st.kind === 'video' ? Object.assign(el('video'), { src: st.url, muted: true, playsInline: true, autoplay: true, loop: true }) : Object.assign(el('img'), { src: st.url, alt: '' });
+  pv.style.filter = fxCss(st.fx);
+  pv.style.objectFit = shape.fit;
+  card.appendChild(pv);
+  if (st.kind === 'video') {
+    if (st.cover && st.cover.url) card.appendChild(Object.assign(el('img', 'sd-cover'), { src: st.cover.url, alt: '' }));
+    if (st.layers.length) layerBox(pv, st.layers);
+  } else if (st.layers.length) { const b = el('div', 'lyr full'); paintLayers(b, st.layers); card.appendChild(b); }
+  const pvBtn = el('button', 'sd-chip top', LANG === 'en' ? 'Preview' : 'প্রিভিউ');
+  pvBtn.addEventListener('click', () => openPreview(st));
+  card.appendChild(pvBtn);
+  if (st.kind === 'video') {
+    const cov = el('button', 'sd-chip bottom', LANG === 'en' ? 'Edit cover' : 'কভার বদলান');
+    cov.addEventListener('click', () => openCoverSheet(st, drawDetails));
+    card.appendChild(cov);
+  }
+  const caption = Object.assign(el('textarea', 'sd-caption'), { rows: 3, maxLength: 500, placeholder: LANG === 'en' ? 'Add a caption…' : 'ক্যাপশন লিখুন…' });
   caption.value = st.caption || '';
   caption.addEventListener('input', () => { st.caption = caption.value; });
-  const top = el('div', 'st-compose');
-  top.append(thumb, caption);
+  const chips = el('div', 'sd-chips');
+  const chip = (icon, label, add) => { const b = el('button'); b.append(el('span', 'k', icon), el('span', null, label)); b.addEventListener('click', () => { caption.value = (caption.value.replace(/\s*$/, '') + (caption.value.trim() ? ' ' : '') + add); st.caption = caption.value; caption.focus(); }); chips.appendChild(b); };
+  chip('#', LANG === 'en' ? 'Hashtags' : 'হ্যাশট্যাগ', '#');
+  chip('@', LANG === 'en' ? 'Mention' : 'মেনশন', '@');
+  if (st.place) chip('📍', st.place.label.split(',')[0], '#' + st.place.label.split(',')[0].replace(/\s+/g, ''));
+
+  const rows = el('div', 'sd-rows');
+  const row = (icon, label, value, fn) => {
+    const r = el('button', 'sd-row');
+    const v = el('span', 'v no-tr', value || '');
+    r.append(ic(icon), el('span', 'l', label), v, ic('chev'));
+    r.addEventListener('click', fn);
+    rows.appendChild(r);
+    return v;
+  };
+  const tagText = () => st.tags.length ? (st.tags.length === 1 ? st.tags[0].name : `${num(st.tags.length)} ${LANG === 'en' ? 'people' : 'জন'}`) : '';
+  const tagV = row('userplus', LANG === 'en' ? 'Tag people' : 'মানুষ ট্যাগ করুন', tagText(), () => openTagSheet(st, () => { tagV.textContent = tagText(); }));
+  // the place: typed here, with suggestions
+  const placeRow = el('label', 'sd-row sd-place');
   const placeInput = Object.assign(el('input'), { autocomplete: 'off', placeholder: LANG === 'en' ? 'Add location' : 'জায়গা যোগ করুন' });
   if (st.place) placeInput.value = st.place.label;
   const sug = el('div', 'suggest');
   sug.hidden = true;
-  const place = el('label', 'st-row');
-  place.append(ic('pin'), placeInput, sug);
+  placeRow.append(ic('pin'), placeInput, sug);
   wireSuggest(placeInput, sug, p => { st.place = p; placeInput.value = p.label; placeInput.blur(); }, () => { st.place = null; });
-  const rows = [place];
-  if (st.music) { const r = el('div', 'st-row'); r.append(ic('note'), el('span', 'no-tr', musicTitle(st.music))); rows.push(r); }
+  rows.appendChild(placeRow);
+  if (st.kind === 'video' && !st.music) {
+    const aV = row('note', LANG === 'en' ? 'Rename audio' : 'অডিওর নাম', st.aname || (LANG === 'en' ? 'Original audio' : 'মূল অডিও'), () => {
+      const name = prompt(LANG === 'en' ? 'Name of your original audio' : 'আপনার মূল অডিওর নাম', st.aname || '');
+      if (name != null) { st.aname = name.trim().slice(0, 60); aV.textContent = st.aname || (LANG === 'en' ? 'Original audio' : 'মূল অডিও'); }
+    });
+  } else if (st.music) row('note', LANG === 'en' ? 'Audio' : 'অডিও', musicTitle(st.music), () => openMusicSheet(drawDetails));
+  rows.appendChild(el('div', 'sd-gap'));
+  const AUD = { all: ['সবাই', 'Everyone'], friends: ['বন্ধুরা', 'Friends'], me: ['শুধু আমি', 'Only me'] };
+  const audV = row('eye', LANG === 'en' ? 'Audience' : 'কে দেখবে', AUD[st.audience][LANG === 'en' ? 1 : 0], () => openAudienceSheet(st, AUD, () => { audV.textContent = AUD[st.audience][LANG === 'en' ? 1 : 0]; paintAlso(); }));
+  const also = el('label', 'sd-row sd-switch');
+  const alsoBox = Object.assign(el('input'), { type: 'checkbox', checked: !!st.alsoStory });
+  alsoBox.addEventListener('change', () => { st.alsoStory = alsoBox.checked; });
+  also.append(ic('share'), el('span', 'l', LANG === 'en' ? 'Also share to your story' : 'স্টোরিতেও শেয়ার করুন'), alsoBox, el('i', 'sw'));
+  const paintAlso = () => { also.hidden = st.audience !== 'all' || !!st.at; };
+  paintAlso();
+  rows.appendChild(also);
+  const moreText = () => [st.at ? new Date(st.at).toLocaleString(LANG === 'en' ? 'en-GB' : 'bn-BD', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : '', st.nocomm ? '🚫💬' : '', st.hidelikes ? '🙈' : ''].filter(Boolean).join(' · ');
+  const moreV = row('more', LANG === 'en' ? 'More options' : 'আরও অপশন', moreText(), () => openMoreSheet(st, () => { moreV.textContent = moreText(); paintAlso(); shareBtn.firstChild.textContent = st.at ? (LANG === 'en' ? 'Schedule' : 'সময় ঠিক করুন') : (LANG === 'en' ? 'Share' : 'শেয়ার করুন'); }));
+
   const progress = el('div', 'st-progress');
   progress.innerHTML = '<i></i>';
   progress.hidden = true;
   const note = el('div', 'form-note');
-  const shareBtn = el('button', 'st-share', 'শেয়ার করুন');
-  shareBtn.addEventListener('click', () => share(shareBtn, progress, note));
   const bar = el('header', 'st-bar');
-  bar.append(sbtn('back', 'ফিরে যান', drawEdit), el('b', null, st.mode === 'reel' ? 'নতুন রিল' : 'নতুন পোস্ট'), el('span'));
-  const body = el('div', 'st-details');
-  body.append(top, ...rows, progress, note);
-  const foot = el('div', 'st-foot');
-  foot.appendChild(shareBtn);
+  bar.append(sbtn('back', 'ফিরে যান', drawEdit), el('b', null, st.mode === 'reel' ? (LANG === 'en' ? 'New reel' : 'নতুন রিল') : (LANG === 'en' ? 'New post' : 'নতুন পোস্ট')), el('span'));
+  const body = el('div', 'st-details sd');
+  body.append(card, caption, chips, rows, progress, note);
+  const foot = el('div', 'st-foot sd-foot');
+  const draft = el('button', 'sd-draft', LANG === 'en' ? 'Save draft' : 'ড্রাফট সেভ');
+  draft.addEventListener('click', () => saveDraft(st, draft));
+  const shareBtn = el('button', 'st-share');
+  shareBtn.appendChild(document.createTextNode(st.at ? (LANG === 'en' ? 'Schedule' : 'সময় ঠিক করুন') : (LANG === 'en' ? 'Share' : 'শেয়ার করুন')));
+  shareBtn.addEventListener('click', () => share(shareBtn, progress, note));
+  foot.append(draft, shareBtn);
   st.box.replaceChildren(bar, body, foot);
-  if (st.preview) { st.preview.stop(); st.preview = null; }
+}
+
+// A bottom sheet in the studio, light like Instagram's settings.
+function studioSheet(title, build, snaps = [.6, .92]) {
+  const st = studio;
+  const sheet = el('div', 'st-sheet light sd-sheet');
+  const grab = el('div', 'grab');
+  const close = () => { sheet.classList.add('out'); setTimeout(() => sheet.remove(), 250); };
+  const content = el('div', 'sd-sheet-body');
+  sheet.append(grab, el('b', 'sd-sheet-title', title), content);
+  st.box.appendChild(sheet);
+  build(content, close);
+  dragSheet(sheet, grab, { snaps, onClose: close, onTap: close, box: () => st.box.clientHeight }).snap(0, false);
+  return close;
+}
+function openAudienceSheet(st, AUD, done) {
+  const notes = { all: ['BD Map-এর যে কেউ', 'Anyone on BD Map'], friends: ['যাঁরা আপনাকে ফলো করেন এবং আপনি যাঁদের ফলো করেন', 'People who follow you back'], me: ['শুধু আপনার প্রোফাইলে, আপনার কাছে', 'Only on your profile, for you'] };
+  studioSheet(LANG === 'en' ? 'Audience' : 'কে দেখবে', (box, close) => {
+    for (const k of ['all', 'friends', 'me']) {
+      const r = el('label', 'sd-radio');
+      const input = Object.assign(el('input'), { type: 'radio', name: 'aud', checked: st.audience === k });
+      input.addEventListener('change', () => { st.audience = k; if (k !== 'all') st.alsoStory = false; done(); setTimeout(close, 180); });
+      const t = el('span', 't');
+      t.append(el('b', null, AUD[k][LANG === 'en' ? 1 : 0]), el('small', null, notes[k][LANG === 'en' ? 1 : 0]));
+      r.append(ic(k === 'all' ? 'globe' : k === 'friends' ? 'users' : 'shield'), t, input, el('i', 'dot'));
+      box.appendChild(r);
+    }
+  }, [.46, .7]);
+}
+function openMoreSheet(st, done) {
+  studioSheet(LANG === 'en' ? 'More options' : 'আরও অপশন', box => {
+    // a time later on: the post shows itself then
+    const when = el('label', 'sd-opt');
+    const at = Object.assign(el('input'), { type: 'datetime-local' });
+    const pad = n => String(n).padStart(2, '0');
+    const local = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    at.min = local(new Date(Date.now() + 5 * 6e4));
+    at.max = local(new Date(Date.now() + 75 * 864e5));
+    if (st.at) at.value = local(new Date(st.at));
+    at.addEventListener('change', () => { const t = at.value ? new Date(at.value).getTime() : 0; st.at = t > Date.now() ? t : 0; if (st.at) st.alsoStory = false; done(); });
+    const clear = el('button', 'sd-clear', LANG === 'en' ? 'Now' : 'এখনই');
+    clear.addEventListener('click', e => { e.preventDefault(); at.value = ''; st.at = 0; done(); });
+    const t = el('span', 't');
+    t.append(el('b', null, LANG === 'en' ? 'Schedule' : 'সময় ঠিক করে পোস্ট'), el('small', null, LANG === 'en' ? 'It shows at the time you pick (up to 75 days).' : 'আপনার বেছে নেওয়া সময়ে দেখাবে (৭৫ দিন পর্যন্ত)।'));
+    when.append(ic('clock'), t, at, clear);
+    box.appendChild(when);
+    const sw = (icon, bn, en, sub, key) => {
+      const r = el('label', 'sd-row sd-switch');
+      const c = Object.assign(el('input'), { type: 'checkbox', checked: !!st[key] });
+      c.addEventListener('change', () => { st[key] = c.checked; done(); });
+      const t2 = el('span', 'l');
+      t2.append(el('b', null, LANG === 'en' ? en : bn), el('small', null, sub));
+      r.append(ic(icon), t2, c, el('i', 'sw'));
+      box.appendChild(r);
+    };
+    sw('heart', 'লাইকের সংখ্যা লুকান', 'Hide like count', LANG === 'en' ? 'Only you see how many liked it.' : 'কতজন লাইক দিয়েছেন, শুধু আপনি দেখবেন।', 'hidelikes');
+    sw('chat', 'মন্তব্য বন্ধ', 'Turn off commenting', LANG === 'en' ? 'No one can comment on it.' : 'কেউ মন্তব্য করতে পারবেন না।', 'nocomm');
+  }, [.5, .8]);
+}
+async function openTagSheet(st, done) {
+  let people = [];
+  try { const d = await chatApi('list'); people = [...(d.friends || []), ...(d.incoming || []), ...(d.outgoing || [])]; } catch { /* search still works */ }
+  const seen = new Set();
+  people = people.filter(p => !seen.has(p.id) && seen.add(p.id));
+  studioSheet(LANG === 'en' ? 'Tag people' : 'মানুষ ট্যাগ করুন', box => {
+    const search = el('label', 'mp-search');
+    const q = Object.assign(el('input'), { type: 'search', placeholder: LANG === 'en' ? 'Search people' : 'মানুষ খুঁজুন', autocomplete: 'off' });
+    search.append(ic('search'), q);
+    const list = el('div', 'sd-people');
+    const draw = rows => list.replaceChildren(...(rows.length ? rows.map(p => {
+      const on = st.tags.some(t => t.id === p.id);
+      const r = el('button', 'sd-person' + (on ? ' on' : ''));
+      const t = el('span', 't no-tr');
+      t.append(nameEl(p), el('small', null, p.username ? '@' + p.username : ''));
+      r.append(avatar(p, 'sm'), t, el('i', 'tick'));
+      r.addEventListener('click', () => {
+        const i = st.tags.findIndex(x => x.id === p.id);
+        if (i >= 0) st.tags.splice(i, 1); else if (st.tags.length < 20) st.tags.push({ id: p.id, name: p.name });
+        r.classList.toggle('on', i < 0);
+        done();
+      });
+      return r;
+    }) : [el('div', 'mp-none', LANG === 'en' ? 'No one found.' : 'কাউকে পাওয়া যায়নি।')]));
+    let timer = 0;
+    q.addEventListener('input', () => {
+      clearTimeout(timer);
+      const text = q.value.trim();
+      if (text.length < 2) { draw(people); return; }
+      timer = setTimeout(async () => { try { draw((await peopleApi('search?q=' + encodeURIComponent(text))).people.filter(p => p.id !== ME.id)); } catch { /* the list stays */ } }, 250);
+    });
+    box.append(search, list);
+    draw(people);
+  }, [.6, .92]);
+}
+// The cover: any moment of the video, or a picture from the gallery.
+function openCoverSheet(st, done) {
+  studioSheet(LANG === 'en' ? 'Cover' : 'কভার', (box, close) => {
+    const v = Object.assign(el('video', 'sd-covervid'), { src: st.url, muted: true, playsInline: true, preload: 'auto' });
+    const range = Object.assign(el('input'), { type: 'range', min: 0, max: 100, step: .1, value: st.cover && st.cover.at != null ? st.cover.at : 1 });
+    v.addEventListener('loadedmetadata', () => { range.max = Math.max(.1, v.duration - .05); v.currentTime = Number(range.value) || Math.min(1, v.duration / 2); });
+    range.addEventListener('input', () => { v.currentTime = Number(range.value); });
+    const pick = Object.assign(el('input'), { type: 'file', accept: 'image/*', hidden: true });
+    const gallery = el('button', 'sd-gallery');
+    gallery.append(ic('image'), el('span', null, LANG === 'en' ? 'Add from gallery' : 'গ্যালারি থেকে'));
+    gallery.addEventListener('click', () => pick.click());
+    pick.addEventListener('change', async () => {
+      const f = pick.files[0];
+      if (!f) return;
+      const url = await new Promise(r => { const img = new Image(); img.onload = () => { const k = Math.min(1, 900 / Math.max(img.naturalWidth, img.naturalHeight)), c = el('canvas'); c.width = img.naturalWidth * k; c.height = img.naturalHeight * k; c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); r(c.toDataURL('image/jpeg', .82)); }; img.onerror = () => r(''); img.src = URL.createObjectURL(f); });
+      if (url) { st.cover = { url }; close(); done(); }
+    });
+    const ok = el('button', 'fx-done', LANG === 'en' ? 'Done' : 'ঠিক আছে');
+    ok.addEventListener('click', async () => { ok.disabled = true; st.cover = { at: Number(range.value), url: await videoPoster(st.file, Number(range.value)) }; close(); done(); });
+    box.append(v, range, gallery, pick, ok);
+  }, [.72, .92]);
+}
+// How it will look: the post or reel full screen, with its words, the name and the caption.
+function openPreview(st) {
+  const shape = st.shape || frameShape(st);
+  const box = el('div', 'sd-preview' + (st.mode === 'reel' ? ' reel' : ''));
+  const stage = el('div', 'sd-pstage');
+  stage.style.aspectRatio = String(st.mode === 'reel' ? 9 / 16 : shape.ratio);
+  const m = st.kind === 'video' ? Object.assign(el('video'), { src: st.url, autoplay: true, loop: true, playsInline: true, muted: !st.orig }) : Object.assign(el('img'), { src: st.url, alt: '' });
+  m.style.filter = fxCss(st.fx);
+  m.style.objectFit = st.mode === 'reel' ? (st.w / st.h < .66 ? 'cover' : 'contain') : shape.fit;
+  stage.appendChild(m);
+  if (st.layers.length) { if (st.kind === 'video') layerBox(m, st.layers); else { const b = el('div', 'lyr full'); paintLayers(b, st.layers); stage.appendChild(b); } }
+  const info = el('div', 'sd-pinfo no-tr');
+  const who = el('div', 'who');
+  who.append(avatar(ME, 'sm'), nameEl(ME));
+  info.appendChild(who);
+  if (st.caption) info.appendChild(el('p', null, st.caption));
+  if (st.music) info.appendChild(el('small', null, '♪ ' + musicTitle(st.music)));
+  stage.appendChild(info);
+  const x = el('button', 'sd-px');
+  x.innerHTML = svg('close');
+  x.setAttribute('aria-label', 'বন্ধ করুন');
+  const close = () => { if (m.pause) m.pause(); if (pv) pv.stop(); box.remove(); };
+  x.addEventListener('click', close);
+  const pv = st.music ? playMusicChoice(st.music, 0) : null;
+  box.append(stage, x);
+  st.box.appendChild(box);
+}
+
+// Drafts stay on this phone (IndexedDB), with the file itself.
+function draftsDb() {
+  return new Promise((resolve, reject) => {
+    const r = indexedDB.open('bdmap-drafts', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('drafts', { keyPath: 'id' });
+    r.onsuccess = () => resolve(r.result);
+    r.onerror = () => reject(r.error);
+  });
+}
+async function draftsTx(mode, fn) {
+  const db = await draftsDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('drafts', mode), store = tx.objectStore('drafts');
+    const req = fn(store);
+    tx.oncomplete = () => resolve(req && req.result);
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
+  });
+}
+async function saveDraft(st, btn) {
+  btn.disabled = true;
+  try {
+    const thumb = st.kind === 'video' ? (st.cover && st.cover.url) || await videoPoster(st.file) : '';
+    const d = { id: st.draftId || Date.now(), made: Date.now(), file: st.file, kind: st.kind, mode: st.mode, fx: st.fx, music: st.music, orig: st.orig, layers: st.layers, caption: st.caption || '',
+      place: st.place || null, tags: st.tags || [], audience: st.audience || 'all', at: st.at || 0, nocomm: !!st.nocomm, hidelikes: !!st.hidelikes, aname: st.aname || '', cover: st.cover || null, thumb, textStory: st.textStory };
+    await draftsTx('readwrite', s => s.put(d));
+    closeStudio();
+    chatToast(ME, LANG === 'en' ? 'Saved to drafts on this device.' : 'ড্রাফট সেভ হয়েছে — এই ডিভাইসে থাকবে।');
+  } catch {
+    btn.disabled = false;
+    chatToast(ME, LANG === 'en' ? 'Could not save the draft (the file may be too big for this browser).' : 'ড্রাফট সেভ হয়নি — ফাইলটি এই ব্রাউজারের জন্য বেশি বড় হতে পারে।');
+  }
+}
+async function openDrafts() {
+  let list = [];
+  try { list = (await draftsTx('readonly', s => s.getAll())) || []; } catch { /* none */ }
+  list.sort((a, b) => b.made - a.made);
+  studioSheet(LANG === 'en' ? 'Drafts' : 'ড্রাফট', (box, close) => {
+    if (!list.length) { box.appendChild(el('div', 'mp-none', LANG === 'en' ? 'No drafts yet.' : 'এখনো কোনো ড্রাফট নেই।')); return; }
+    const grid = el('div', 'sd-drafts');
+    for (const d of list) {
+      const cell = el('div', 'sd-draft-cell');
+      const open = el('button', 'pic');
+      if (d.thumb) open.style.backgroundImage = `url("${d.thumb}")`;
+      else if (d.kind === 'photo') open.style.backgroundImage = `url("${URL.createObjectURL(d.file)}")`;
+      open.appendChild(el('small', null, ({ post: 'পোস্ট', reel: 'রিল', story: 'স্টোরি' })[d.mode] || ''));
+      open.addEventListener('click', () => {
+        close();
+        const st = studio;
+        Object.assign(st, { mode: d.mode, fx: d.fx, music: d.music, orig: d.orig, caption: d.caption, place: d.place, tags: d.tags, audience: d.audience, at: d.at > Date.now() ? d.at : 0,
+          nocomm: d.nocomm, hidelikes: d.hidelikes, aname: d.aname, cover: d.cover, draftId: d.id, textStory: d.textStory != null ? d.textStory : null });
+        const layers = d.layers || [];
+        st.textStory = st.textStory != null ? st.textStory : null;
+        if (st.url) URL.revokeObjectURL(st.url);
+        Object.assign(st, { file: d.file, kind: d.kind, url: URL.createObjectURL(d.file), baked: false, w: 0, h: 0, layers });
+        drawEdit();
+      });
+      const del = el('button', 'del');
+      del.innerHTML = svg('trash');
+      del.setAttribute('aria-label', LANG === 'en' ? 'Delete draft' : 'ড্রাফট মুছুন');
+      del.addEventListener('click', async () => { await draftsTx('readwrite', s => s.delete(d.id)).catch(() => {}); cell.remove(); });
+      cell.append(open, del);
+      grid.appendChild(cell);
+    }
+    box.appendChild(grid);
+  }, [.6, .92]);
 }
 
 async function share(btn, progress, note) {
@@ -471,13 +824,17 @@ async function share(btn, progress, note) {
       blob = baked.blob; w = baked.w; h = baked.h;
       if (canvasFilters) fx = '';
       type = 'image/jpeg';
-    } else { poster = await videoPoster(st.file); layers = st.layers; }
+    } else { poster = (st.cover && st.cover.url) || await videoPoster(st.file); layers = st.layers; }
     const media = await uploadMedia(blob, type, onProgress);
     if (st.mode === 'story') await exploreApi('story', { media, poster, w, h, layers });
-    else await exploreApi('post', { media, poster, w, h, layers, caption: st.caption || '', place: st.place || null, fx, music: st.music ? st.music.id : '', mstart: st.music ? st.music.start : 0, orig: st.kind === 'video' ? st.orig : true });
-    const mode = st.mode;
+    else await exploreApi('post', { media, poster, w, h, layers, caption: st.caption || '', place: st.place || null, fx, music: st.music ? st.music.id : '', mstart: st.music ? st.music.start : 0,
+      orig: st.kind === 'video' ? st.orig : true, audience: st.audience || 'all', at: st.at || 0, tags: (st.tags || []).map(t => t.id), nocomm: !!st.nocomm, hidelikes: !!st.hidelikes,
+      aname: st.aname || '', story: !!st.alsoStory });
+    if (st.draftId) draftsTx('readwrite', s => s.delete(st.draftId)).catch(() => {});
+    const mode = st.mode, later = st.at;
     closeStudio();
-    chatToast(ME, mode === 'story' ? 'স্টোরি দেওয়া হয়েছে — ২৪ ঘণ্টা থাকবে।' : mode === 'reel' ? 'রিল পোস্ট হয়েছে।' : 'পোস্ট হয়েছে।');
+    chatToast(ME, later ? (LANG === 'en' ? 'Scheduled. It will show at the time you picked.' : 'সময় ঠিক হয়েছে — সেই সময়ে পোস্টটি দেখাবে।')
+      : mode === 'story' ? 'স্টোরি দেওয়া হয়েছে — ২৪ ঘণ্টা থাকবে।' : mode === 'reel' ? 'রিল পোস্ট হয়েছে।' : 'পোস্ট হয়েছে।');
     if (typeof refreshStoryRings === 'function') refreshStoryRings();
     if (current === 'explore') enter.explore(); else if (current === 'profile') drawProfile(); else go('explore');
   } catch (e) {

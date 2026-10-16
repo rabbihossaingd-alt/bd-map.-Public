@@ -1255,6 +1255,12 @@ for (const [col, def] of [['fx', "TEXT NOT NULL DEFAULT ''"], ['music', "TEXT NO
   if (!db.prepare("SELECT COUNT(*) AS n FROM pragma_table_info('posts') WHERE name = ?").get(col).n) db.exec(`ALTER TABLE posts ADD COLUMN ${col} ${def}`);
 // w and h: the picture's or video's own size, so the feed can give it its shape before it loads. layers: the words,
 // emoji and stickers put on a video (a photo has them drawn in), as JSON — see cleanLayers.
+// audience: 'all', 'friends' (people who follow each other) or 'me'; at: when it shows (later than created
+// when scheduled); tags: the people in it (JSON ids); nocomm: comments off; hidelikes: only the owner sees the
+// count; aname: what its original sound is called.
+for (const [col, def] of [['audience', "TEXT NOT NULL DEFAULT 'all'"], ['at', 'INTEGER NOT NULL DEFAULT 0'], ['tags', "TEXT NOT NULL DEFAULT ''"],
+                          ['nocomm', 'INTEGER NOT NULL DEFAULT 0'], ['hidelikes', 'INTEGER NOT NULL DEFAULT 0'], ['aname', "TEXT NOT NULL DEFAULT ''"]])
+  if (!db.prepare("SELECT COUNT(*) AS n FROM pragma_table_info('posts') WHERE name = ?").get(col).n) db.exec(`ALTER TABLE posts ADD COLUMN ${col} ${def}`);
 const LAYER_FONTS = ['classic', 'modern', 'neon', 'type', 'strong'];
 function cleanLayers(v) {
   if (!Array.isArray(v)) return '';
@@ -1277,6 +1283,10 @@ function cleanLayers(v) {
 }
 const sizeOf = v => Math.max(0, Math.min(20000, Math.round(Number(v) || 0)));
 const layersOf = s => { try { return s ? JSON.parse(s) : []; } catch { return []; } };
+const tagsOf = s => {
+  const ids = layersOf(s);
+  return ids.length ? db.prepare(`SELECT id, name, username FROM users WHERE id IN (${ids.map(() => '?').join(',')})`).all(...ids).map(u => ({ id: u.id, name: u.name, username: u.username || '' })) : [];
+};
 const FX = ['', 'bright', 'warm', 'cool', 'mono', 'vintage', 'drama', 'soft', 'sunset', 'green', 'fade'];
 const GEN_TRACKS = ['dhaka-nights', 'sunrise', 'river-lofi', 'baul-road', 'monsoon', 'festival', 'tea-garden', 'city-run'];
 // Sounds people upload for their reels (they confirm the rights), and tracks from Jamendo's Creative Commons
@@ -1331,10 +1341,14 @@ setInterval(() => {
 const POST_SELECT = `SELECT p.*, u.name, u.pic_v, u.verified, (SELECT COUNT(*) FROM post_likes l WHERE l.post = p.id) AS likes,
   (SELECT COUNT(*) FROM post_comments c WHERE c.post = p.id) AS comments, EXISTS (SELECT 1 FROM post_likes l WHERE l.post = p.id AND l.user = ?1) AS liked,
   EXISTS (SELECT 1 FROM post_saves s WHERE s.post = p.id AND s.user = ?1) AS saved
-  FROM posts p JOIN users u ON u.id = p.user WHERE u.banned = 0`;
+  FROM posts p JOIN users u ON u.id = p.user WHERE u.banned = 0
+  AND (p.user = ?1 OR ?1 = -1 OR (p.at <= CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) + 1000 AND (p.audience = 'all'
+    OR (p.audience = 'friends' AND EXISTS (SELECT 1 FROM friends f WHERE f.state = 'friends' AND f.a = min(p.user, ?1) AND f.b = max(p.user, ?1))))))`;
+const forViewer = (p, meId) => (p.hidelikes && p.user.id !== meId ? { ...p, likes: null } : p);
 const shownPost = p => ({ id: p.id, kind: p.kind, src: p.file ? 'media/' + p.file : '', poster: p.poster ? 'media/' + p.poster : '', caption: p.caption, saved: !!p.saved,
   place: p.place ? { label: p.place, lat: p.lat, lon: p.lon } : null, created: p.created, likes: p.likes, comments: p.comments, liked: !!p.liked,
-  w: p.w || 0, h: p.h || 0, layers: layersOf(p.layers), views: p.views || 0, fx: p.fx || '', music: p.music ? { id: p.music, start: p.mstart || 0, label: musicLabel(p.music) } : null, orig: p.orig !== 0,
+  w: p.w || 0, h: p.h || 0, layers: layersOf(p.layers), views: p.views || 0, audience: p.audience || 'all', at: p.at || p.created,
+  tags: tagsOf(p.tags), nocomm: !!p.nocomm, hidelikes: !!p.hidelikes, aname: p.aname || '', fx: p.fx || '', music: p.music ? { id: p.music, start: p.mstart || 0, label: musicLabel(p.music) } : null, orig: p.orig !== 0,
   user: { id: p.user, name: p.name, pic: p.pic_v, verified: !!p.verified } });
 // "dhaka-nights" for the app's own tracks; "<name> · original audio" (with where to find it) for another reel's sound.
 function musicLabel(m) {
@@ -1347,8 +1361,8 @@ function musicLabel(m) {
     const t = db.prepare('SELECT * FROM ext_tracks WHERE id = ?').get(m);
     return t ? { kind: 'file', src: t.audio, title: t.title, by: t.artist, licence: t.licence } : { kind: 'gone' };
   }
-  const src = db.prepare('SELECT p.id, p.file, u.name FROM posts p JOIN users u ON u.id = p.user WHERE p.id = ?').get(Number(m.slice(5)));
-  return src ? { kind: 'post', post: src.id, src: 'media/' + src.file, by: src.name } : { kind: 'gone' };
+  const src = db.prepare('SELECT p.id, p.file, p.aname, u.name FROM posts p JOIN users u ON u.id = p.user WHERE p.id = ?').get(Number(m.slice(5)));
+  return src ? { kind: 'post', post: src.id, src: 'media/' + src.file, by: src.name, title: src.aname || '' } : { kind: 'gone' };
 }
 
 //   POST /api/explore/media   (the file itself as the body, Content-Type image/* or video/*) -> { media }
@@ -1368,16 +1382,17 @@ async function exploreApi(req, res, action, query) {
                                AND (?5 = '' OR lower(p.caption) LIKE ?5 OR lower(p.place) LIKE ?5)
                                AND (?6 = 0 OR EXISTS (SELECT 1 FROM post_saves s WHERE s.post = p.id AND s.user = ?1)) ORDER BY p.id DESC LIMIT 30`)
         .all(meId, before, user, kind, q ? '%' + q + '%' : '', query.get('saved') && meId ? 1 : 0);
-      return json(res, 200, { posts: rows.map(shownPost) });
+      return json(res, 200, { posts: rows.map(p => forViewer(shownPost(p), meId)) });
     }
     if (action === 'audios') {
-      const rows = db.prepare(`SELECT p.id, p.file, p.poster, p.caption, p.created, u.name, u.pic_v, u.id AS uid, (SELECT COUNT(*) FROM posts x WHERE x.music = 'post:' || p.id) AS uses
-        FROM posts p JOIN users u ON u.id = p.user WHERE p.kind = 'video' AND p.orig = 1 AND p.music = '' AND u.banned = 0 ORDER BY uses DESC, p.id DESC LIMIT 30`).all();
+      const rows = db.prepare(`SELECT p.id, p.file, p.poster, p.caption, p.created, p.aname, u.name, u.pic_v, u.id AS uid, (SELECT COUNT(*) FROM posts x WHERE x.music = 'post:' || p.id) AS uses
+        FROM posts p JOIN users u ON u.id = p.user WHERE p.kind = 'video' AND p.orig = 1 AND p.music = '' AND u.banned = 0 AND p.audience = 'all' AND p.at <= ?
+        ORDER BY uses DESC, p.id DESC LIMIT 30`).all(now);
       const sounds = db.prepare(`SELECT s.*, u.name, u.pic_v, (SELECT COUNT(*) FROM posts x WHERE x.music = 'snd:' || s.id) AS uses FROM sounds s JOIN users u ON u.id = s.user
         WHERE u.banned = 0 ORDER BY uses DESC, s.id DESC LIMIT 40`).all();
       const used = db.prepare("SELECT t.*, (SELECT COUNT(*) FROM posts x WHERE x.music = t.id) AS uses FROM ext_tracks t WHERE uses > 0 ORDER BY uses DESC LIMIT 20").all();
       return json(res, 200, { tracks: GEN_TRACKS.map(id => ({ id, uses: usesOf('gen:' + id) })), catalogue: !!process.env.JAMENDO_ID,
-        audios: rows.map(r => ({ id: 'post:' + r.id, post: r.id, src: 'media/' + r.file, poster: r.poster ? 'media/' + r.poster : '', uses: r.uses, created: r.created, user: { id: r.uid, name: r.name, pic: r.pic_v } })),
+        audios: rows.map(r => ({ id: 'post:' + r.id, post: r.id, title: r.aname || '', src: 'media/' + r.file, poster: r.poster ? 'media/' + r.poster : '', uses: r.uses, created: r.created, user: { id: r.uid, name: r.name, pic: r.pic_v } })),
         sounds: sounds.map(s => ({ id: 'snd:' + s.id, src: 'media/' + s.file, title: s.title, secs: s.secs, uses: s.uses, created: s.created, user: { id: s.user, name: s.name, pic: s.pic_v } })),
         tracksUsed: used.map(t => ({ id: t.id, title: t.title, artist: t.artist, image: t.image, audio: t.audio, secs: t.secs, uses: t.uses })) });
     }
@@ -1404,7 +1419,7 @@ async function exploreApi(req, res, action, query) {
       const p = db.prepare(`${POST_SELECT} AND p.id = ?2`).get(meId, Number(query.get('id')));
       if (!p) return json(res, 404, { error: 'not found' });
       const comments = db.prepare('SELECT c.id, c.body, c.created, u.id AS uid, u.name, u.pic_v FROM post_comments c JOIN users u ON u.id = c.user WHERE c.post = ? ORDER BY c.id DESC LIMIT 60').all(p.id);
-      return json(res, 200, { post: shownPost(p), comments: comments.reverse().map(c => ({ id: c.id, body: c.body, created: c.created, user: { id: c.uid, name: c.name, pic: c.pic_v } })) });
+      return json(res, 200, { post: forViewer(shownPost(p), meId), comments: comments.reverse().map(c => ({ id: c.id, body: c.body, created: c.created, user: { id: c.uid, name: c.name, pic: c.pic_v } })) });
     }
     return json(res, 404, { error: 'not found' });
   }
@@ -1482,11 +1497,31 @@ async function exploreApi(req, res, action, query) {
     const place = body.place && inBangladesh(body.place) ? body.place : null;
     const fx = FX.includes(body.fx) ? body.fx : '', music = cleanMusic(body.music);
     const mstart = Math.max(0, Math.min(600, Number(body.mstart) || 0)), orig = body.orig === false ? 0 : 1;
-    const { lastInsertRowid } = db.prepare('INSERT INTO posts (user, kind, file, poster, caption, place, lat, lon, created, fx, music, mstart, orig, w, h, layers) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    const audience = ['all', 'friends', 'me'].includes(body.audience) ? body.audience : 'all';
+    const at = Math.max(now, Math.min(now + 75 * 864e5, Number(body.at) || now));          // scheduled up to 75 days ahead
+    const tagged = [...new Set((Array.isArray(body.tags) ? body.tags : []).map(Number).filter(n => Number.isInteger(n) && n > 0 && n !== me.id))].slice(0, 20)
+      .filter(id => db.prepare('SELECT 1 FROM users WHERE id = ? AND banned = 0').get(id));
+    const { lastInsertRowid } = db.prepare(`INSERT INTO posts (user, kind, file, poster, caption, place, lat, lon, created, fx, music, mstart, orig, w, h, layers, audience, at, tags, nocomm, hidelikes, aname)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run(me.id, up.kind, up.name, poster, cleanText(body.caption, 500), place ? cleanText(place.label, 80) : '', place ? place.lat : null, place ? place.lon : null, now, fx, music, mstart, orig,
-        sizeOf(body.w), sizeOf(body.h), up.kind === 'video' ? cleanLayers(body.layers) : '');
+        sizeOf(body.w), sizeOf(body.h), up.kind === 'video' ? cleanLayers(body.layers) : '', audience, at, tagged.length ? JSON.stringify(tagged) : '',
+        body.nocomm ? 1 : 0, body.hidelikes ? 1 : 0, cleanText(body.aname, 60));
     db.prepare('UPDATE uploads SET used = 1 WHERE name = ?').run(up.name);
-    return json(res, 200, { post: shownPost(db.prepare(`${POST_SELECT} AND p.id = ?2`).get(me.id, Number(lastInsertRowid))) });
+    const postId = Number(lastInsertRowid);
+    if (audience !== 'me') for (const id of tagged) notify(id, me.id, 'tag', postId);
+    // Also as a story: the same file under a second name (a hard link where the disk allows, so 3 GB is not copied).
+    if (body.story && audience === 'all' && at <= now) {
+      const twin = name => {
+        if (!name) return '';
+        const n2 = crypto.randomBytes(12).toString('hex') + path.extname(name);
+        try { fs.linkSync(path.join(MEDIA_DIR, name), path.join(MEDIA_DIR, n2)); } catch { try { fs.copyFileSync(path.join(MEDIA_DIR, name), path.join(MEDIA_DIR, n2)); } catch { return ''; } }
+        return n2;
+      };
+      const f2 = twin(up.name);
+      if (f2) db.prepare('INSERT INTO stories (user, kind, file, poster, created, w, h, layers) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+        .run(me.id, up.kind, f2, twin(poster), now, sizeOf(body.w), sizeOf(body.h), up.kind === 'video' ? cleanLayers(body.layers) : '');
+    }
+    return json(res, 200, { post: shownPost(db.prepare(`${POST_SELECT} AND p.id = ?2`).get(me.id, postId)) });
   }
   if (action === 'sound') {                          // a sound of one's own for reels (the uploader confirms the rights)
     const up = db.prepare("SELECT * FROM uploads WHERE name = ? AND user = ? AND used = 0 AND kind = 'audio'").get(String(body.media), me.id);
@@ -1515,6 +1550,7 @@ async function exploreApi(req, res, action, query) {
     return json(res, 200, { liked, likes: count('SELECT COUNT(*) AS n FROM post_likes WHERE post = ?', p.id) });
   }
   if (action === 'comment') {
+    if (p.nocomm && p.user !== me.id) return json(res, 403, { error: 'closed' });
     const text = cleanText(body.body, 500);
     if (!text) return json(res, 400, { error: 'bad request' });
     if (!allowSend(me.id)) return json(res, 429, { error: 'slow' });
@@ -1875,7 +1911,7 @@ async function adminApi(req, res, action, query) {
     if (action === 'fares') return json(res, 200, { fares: db.prepare('SELECT a, b, device, fare, updated FROM fare_reports ORDER BY updated DESC LIMIT 200').all(),
       contributions: db.prepare('SELECT c.id, c.flabel, c.tlabel, c.mode, c.fare, c.created, u.name, u.email FROM contributions c JOIN users u ON u.id = c.user ORDER BY c.id DESC LIMIT 200').all() });
     if (action === 'posts') {
-      const rows = db.prepare(`${POST_SELECT} AND p.id < ?2 ORDER BY p.id DESC LIMIT 60`).all(0, Number(query.get('before')) || Number.MAX_SAFE_INTEGER);
+      const rows = db.prepare(`${POST_SELECT} AND p.id < ?2 ORDER BY p.id DESC LIMIT 60`).all(-1, Number(query.get('before')) || Number.MAX_SAFE_INTEGER);
       return json(res, 200, { posts: rows.map(p => ({ ...shownPost(p), email: aq.byId.get(p.user).email })) });
     }
     if (action === 'flags') return json(res, 200, { flags: { signups: flagOn('signups'), posts: flagOn('posts'), chat: flagOn('chat') } });
@@ -1883,7 +1919,7 @@ async function adminApi(req, res, action, query) {
       const q = '%' + (query.get('q') || '').trim().toLowerCase().replace(/[%_]/g, '') + '%';
       return json(res, 200, {
         users: db.prepare(`SELECT ${USER_COLS} FROM users WHERE lower(name) LIKE ?1 OR email LIKE ?1 OR username LIKE ?1 ORDER BY id DESC LIMIT 12`).all(q).map(briefUser),
-        posts: db.prepare(`${POST_SELECT} AND lower(p.caption) LIKE ?2 ORDER BY p.id DESC LIMIT 12`).all(0, q).map(shownPost),
+        posts: db.prepare(`${POST_SELECT} AND lower(p.caption) LIKE ?2 ORDER BY p.id DESC LIMIT 12`).all(-1, q).map(shownPost),
         groups: db.prepare('SELECT id, name, created FROM chat_groups WHERE lower(name) LIKE ? ORDER BY id DESC LIMIT 12').all(q) });
     }
     if (action === 'groups') {                          // group chats: names and numbers only, never their messages
