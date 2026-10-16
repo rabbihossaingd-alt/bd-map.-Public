@@ -1303,6 +1303,8 @@ function cleanLayers(v) {
 }
 const sizeOf = v => Math.max(0, Math.min(20000, Math.round(Number(v) || 0)));
 const layersOf = s => { try { return s ? JSON.parse(s) : []; } catch { return []; } };
+const moreOf = s => layersOf(s).map(x => (typeof x === 'string' ? { f: x, k: 'photo' } : x));
+const shownMore = s => moreOf(s).map(x => ({ src: 'media/' + x.f, kind: x.k, poster: x.p ? 'media/' + x.p : '', layers: x.l ? layersOf(x.l) : [], w: x.w || 0, h: x.h || 0 }));
 const tagsOf = s => {
   const ids = layersOf(s);
   return ids.length ? db.prepare(`SELECT id, name, username FROM users WHERE id IN (${ids.map(() => '?').join(',')})`).all(...ids).map(u => ({ id: u.id, name: u.name, username: u.username || '' })) : [];
@@ -1351,7 +1353,7 @@ db.exec(`CREATE TABLE IF NOT EXISTS post_comments (id INTEGER PRIMARY KEY, post 
 const unlinkMedia = name => { if (name) fs.unlink(path.join(MEDIA_DIR, path.basename(name)), () => {}); };
 function deletePost(p) {
   unlinkMedia(p.file); unlinkMedia(p.poster);
-  for (const f of layersOf(p.more)) unlinkMedia(f);
+  for (const x of moreOf(p.more)) { unlinkMedia(x.f); unlinkMedia(x.p); }
   for (const sql of ['DELETE FROM post_likes WHERE post = ?', 'DELETE FROM post_saves WHERE post = ?', 'DELETE FROM post_comments WHERE post = ?', 'DELETE FROM notifications WHERE post = ?', 'DELETE FROM posts WHERE id = ?']) db.prepare(sql).run(p.id);
 }
 setInterval(() => {
@@ -1369,7 +1371,7 @@ const forViewer = (p, meId) => (p.hidelikes && p.user.id !== meId ? { ...p, like
 const shownPost = p => ({ id: p.id, kind: p.kind, src: p.file ? 'media/' + p.file : '', poster: p.poster ? 'media/' + p.poster : '', caption: p.caption, saved: !!p.saved,
   place: p.place ? { label: p.place, lat: p.lat, lon: p.lon } : null, created: p.created, likes: p.likes, comments: p.comments, liked: !!p.liked,
   w: p.w || 0, h: p.h || 0, layers: layersOf(p.layers), views: p.views || 0, audience: p.audience || 'all', at: p.at || p.created,
-  tags: tagsOf(p.tags), nocomm: !!p.nocomm, hidelikes: !!p.hidelikes, aname: p.aname || '', more: layersOf(p.more).map(f => 'media/' + f), fx: p.fx || '', music: p.music ? { id: p.music, start: p.mstart || 0, label: musicLabel(p.music) } : null, orig: p.orig !== 0,
+  tags: tagsOf(p.tags), nocomm: !!p.nocomm, hidelikes: !!p.hidelikes, aname: p.aname || '', more: shownMore(p.more), fx: p.fx || '', music: p.music ? { id: p.music, start: p.mstart || 0, label: musicLabel(p.music) } : null, orig: p.orig !== 0,
   user: { id: p.user, name: p.name, pic: p.pic_v, verified: !!p.verified } });
 // "dhaka-nights" for the app's own tracks; "<name> · original audio" (with where to find it) for another reel's sound.
 function musicLabel(m) {
@@ -1399,7 +1401,7 @@ async function exploreApi(req, res, action, query) {
     if (action === 'feed' && query.get('seed') && !query.get('user') && !query.get('q') && !query.get('saved')) {
       const seed = Math.max(1, Math.min(1e6, Number(query.get('seed')) | 0)), off = Math.max(0, Math.min(5000, Number(query.get('o')) | 0));
       const kind = query.get('kind') === 'video' ? 'video' : '', first = Number(query.get('first')) || 0;
-      const rows = db.prepare(`${POST_SELECT} AND (?4 = '' OR p.kind = ?4)
+      const rows = db.prepare(`${POST_SELECT} AND (?4 = '' OR (p.kind = ?4 AND p.more = ''))
         ORDER BY (CASE WHEN p.id = ?5 THEN -9 ELSE 0 END) + ((p.id * ?2 + 7919) % 1009) / 1009.0
           - MAX(0, 1 - (?6 - p.created) / 259200000.0) * 0.7
           - (CASE WHEN EXISTS (SELECT 1 FROM friends f WHERE f.a = min(p.user, ?1) AND f.b = max(p.user, ?1) AND (f.state = 'friends' OR (f.state = 'pending' AND f.actor = ?1))) THEN 0.25 ELSE 0 END)
@@ -1409,7 +1411,7 @@ async function exploreApi(req, res, action, query) {
     if (action === 'feed') {
       const before = Number(query.get('before')) || Number.MAX_SAFE_INTEGER, user = Number(query.get('user')) || 0;
       const kind = query.get('kind') === 'video' ? 'video' : '', q = (query.get('q') || '').trim().toLowerCase().replace(/[%_]/g, '');
-      const rows = db.prepare(`${POST_SELECT} AND p.id < ?2 AND (?3 = 0 OR p.user = ?3) AND (?4 = '' OR p.kind = ?4)
+      const rows = db.prepare(`${POST_SELECT} AND p.id < ?2 AND (?3 = 0 OR p.user = ?3) AND (?4 = '' OR (p.kind = ?4 AND p.more = ''))
                                AND (?5 = '' OR lower(p.caption) LIKE ?5 OR lower(p.place) LIKE ?5)
                                AND (?6 = 0 OR EXISTS (SELECT 1 FROM post_saves s WHERE s.post = p.id AND s.user = ?1)) ORDER BY p.id DESC LIMIT 30`)
         .all(meId, before, user, kind, q ? '%' + q + '%' : '', query.get('saved') && meId ? 1 : 0);
@@ -1530,8 +1532,22 @@ async function exploreApi(req, res, action, query) {
     const mstart = Math.max(0, Math.min(600, Number(body.mstart) || 0)), orig = body.orig === false ? 0 : 1;
     const audience = ['all', 'friends', 'me'].includes(body.audience) ? body.audience : 'all';
     // the other photos of a carousel (up to 10 in all): my own unused photo uploads
-    const more = up.kind !== 'photo' ? [] : [...new Set((Array.isArray(body.more) ? body.more : []).map(String))].filter(n => n !== up.name).slice(0, 9)
-      .filter(n => db.prepare("SELECT 1 FROM uploads WHERE name = ? AND user = ? AND used = 0 AND kind = 'photo'").get(n, me.id));
+    // the rest of a carousel (up to 10 in all): my own unused photo and video uploads, each video with its picture and layers
+    const seenMore = new Set([up.name]), more = [];
+    for (const x of (Array.isArray(body.more) ? body.more : []).slice(0, 9)) {
+      const name = String(typeof x === 'string' ? x : x && x.media);
+      if (seenMore.has(name)) continue;
+      const u = db.prepare("SELECT * FROM uploads WHERE name = ? AND user = ? AND used = 0 AND kind IN ('photo', 'video')").get(name, me.id);
+      if (!u) continue;
+      seenMore.add(name);
+      const item = { f: u.name, k: u.kind, w: sizeOf(x && x.w), h: sizeOf(x && x.h) };
+      if (u.kind === 'video' && x && typeof x.poster === 'string') {
+        const m = /^data:image\/jpeg;base64,([A-Za-z0-9+/=]+)$/.exec(x.poster), buf = m && Buffer.from(m[1], 'base64');
+        if (buf && buf.length > 200 && buf.length < 400_000) { item.p = crypto.randomBytes(12).toString('hex') + '.jpg'; fs.writeFileSync(path.join(MEDIA_DIR, item.p), buf); }
+      }
+      if (u.kind === 'video' && x) { const l = cleanLayers(x.layers); if (l) item.l = l; }
+      more.push(item);
+    }
     const at = Math.max(now, Math.min(now + 75 * 864e5, Number(body.at) || now));          // scheduled up to 75 days ahead
     const tagged = [...new Set((Array.isArray(body.tags) ? body.tags : []).map(Number).filter(n => Number.isInteger(n) && n > 0 && n !== me.id))].slice(0, 20)
       .filter(id => db.prepare('SELECT 1 FROM users WHERE id = ? AND banned = 0').get(id));
@@ -1540,7 +1556,7 @@ async function exploreApi(req, res, action, query) {
       .run(me.id, up.kind, up.name, poster, cleanText(body.caption, 500), place ? cleanText(place.label, 80) : '', place ? place.lat : null, place ? place.lon : null, now, fx, music, mstart, orig,
         sizeOf(body.w), sizeOf(body.h), up.kind === 'video' ? cleanLayers(body.layers) : '', audience, at, tagged.length ? JSON.stringify(tagged) : '',
         body.nocomm ? 1 : 0, body.hidelikes ? 1 : 0, cleanText(body.aname, 60), more.length ? JSON.stringify(more) : '');
-    for (const n of [up.name, ...more]) db.prepare('UPDATE uploads SET used = 1 WHERE name = ?').run(n);
+    for (const n of [up.name, ...more.map(x => x.f)]) db.prepare('UPDATE uploads SET used = 1 WHERE name = ?').run(n);
     const postId = Number(lastInsertRowid);
     if (audience !== 'me') for (const id of tagged) notify(id, me.id, 'tag', postId);
     // Also as a story: the same file under a second name (a hard link where the disk allows, so 3 GB is not copied).

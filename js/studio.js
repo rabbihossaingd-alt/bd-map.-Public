@@ -40,6 +40,7 @@ function closeStudio() {
   if (studio.preview) studio.preview.stop();
   if (studio.pre && studio.pre.xhr && !studio.pre.done) studio.pre.xhr.abort();
   if (studio.url) URL.revokeObjectURL(studio.url);
+  studio.closing = true;
   dropItems(studio);
   studio.box.remove();
   studio = null;
@@ -72,10 +73,10 @@ function drawSource() {
   chooser.addEventListener('change', () => {
     const files = [...chooser.files];
     if (files.length > 1 && st.mode === 'post') {
-      const photos = files.filter(f => f.type.startsWith('image')).slice(0, 10);
-      if (photos.length < files.length) chatToast(ME, files.length > 10 && photos.length === 10 ? tx('একটি পোস্টে ১০টি পর্যন্ত ছবি।', 'Up to 10 photos in one post.') : tx('একসাথে কয়েকটি বাছলে শুধু ছবি নেওয়া হয়; ভিডিও আলাদা পোস্ট করুন।', 'Several at once are photos only; post videos on their own.'));
-      if (photos.length > 1) { takeMany(photos); return; }
-      if (photos.length) { takeFile(photos[0], false); return; }
+      const media = files.filter(f => (isPhoto(f) || isVideo(f)) && !(isVideo(f) && f.size > MAX_VIDEO));
+      if (files.length > 10) chatToast(ME, tx('একটি পোস্টে ১০টি পর্যন্ত ছবি বা ভিডিও — প্রথম ১০টি নেওয়া হলো।', 'Up to 10 in one post — the first 10 are in.'));
+      if (media.length > 1) { takeMany(media.slice(0, 10)); return; }
+      if (media.length) { takeFile(media[0], false); return; }
     }
     if (files[0]) takeFile(files[0], false);
   });
@@ -106,9 +107,13 @@ function drawSource() {
   stage.appendChild(drafts);
   st.box.replaceChildren(studioBar(modeTitle()), stage, modeSwitch(drawSource));
 }
+const VIDEO_EXT = /\.(mp4|m4v|mov|webm|3gp|mkv|avi)$/i;
+const isVideo = f => f.type.startsWith('video') || (!f.type && VIDEO_EXT.test(f.name || ''));
+const isPhoto = f => f.type.startsWith('image') || (!f.type && /\.(jpe?g|png|webp|heic|heif|gif)$/i.test(f.name || ''));
+const videoType = f => f.type || ({ mov: 'video/quicktime', webm: 'video/webm' })[(f.name || '').split('.').pop().toLowerCase()] || 'video/mp4';
 function takeFile(file, baked) {
   const st = studio;
-  const video = file.type.startsWith('video');
+  const video = isVideo(file);
   if (video && file.size > MAX_VIDEO) { chatToast(ME, LANG === 'en' ? 'The video is over 3 GB.' : 'ভিডিওটি ৩ জিবির বেশি। ছোট একটি দিন।'); return; }
   if (st.mode === 'reel' && !video) { chatToast(ME, 'রিলের জন্য একটি ভিডিও দিন।'); return; }
   if (st.url) URL.revokeObjectURL(st.url);
@@ -116,37 +121,46 @@ function takeFile(file, baked) {
   const words = st.textStory != null && baked && !video;
   Object.assign(st, { file, kind: video ? 'video' : 'photo', url: URL.createObjectURL(file), baked, w: 0, h: 0, layers: words ? st.layers : [] });
   if (!words) st.textStory = null;
+  st.thumb = '';
   if (video) preUpload(st);
   drawEdit();
 }
 // A video starts going up the moment it is chosen (as on Instagram), while it is edited and captioned; Share then
 // only waits for what is left.
+function startUpload(file) {
+  const pre = { file, f: 0, sent: 0, total: file.size, on: null };
+  pre.promise = uploadMedia(file, videoType(file), (f, sent, total) => { Object.assign(pre, { f, sent, total }); if (pre.on) pre.on(f, sent, total); }, pre);
+  pre.promise.then(() => { pre.done = true; }, () => {});
+  return pre;
+}
 function preUpload(st) {
-  if (st.pre && st.pre.xhr) st.pre.xhr.abort();
-  const pre = st.pre = { file: st.file, f: 0, sent: 0, total: st.file.size, on: null };
-  pre.promise = uploadMedia(st.file, st.file.type || 'video/mp4', (f, sent, total) => { Object.assign(pre, { f, sent, total }); if (pre.on) pre.on(f, sent, total); }, pre);
-  pre.promise.catch(() => {});
+  if (st.pre && st.pre.xhr && !st.pre.done) st.pre.xhr.abort();
+  st.pre = startUpload(st.file);
 }
 const MAX_VIDEO = 3e9;
 // A carousel: st.items holds every photo with its own words and stickers; st.file/url/layers are the one being edited.
 function dropItems(st) {
   if (!st.items) return;
-  for (const it of st.items) if (it.url !== st.url) URL.revokeObjectURL(it.url);
+  for (const it of st.items) {
+    if (it.url !== st.url) URL.revokeObjectURL(it.url);
+    if (it.pre && it.pre.xhr && !it.pre.done && st.closing) it.pre.xhr.abort();
+  }
   st.items = null;
 }
+const newItem = f => { const video = isVideo(f); const it = { file: f, kind: video ? 'video' : 'photo', url: URL.createObjectURL(f), layers: [], w: 0, h: 0 }; if (video) { it.pre = startUpload(f); videoPoster(f).then(p => { it.thumb = p; }); } return it; };
 async function takeMany(files) {
   const st = studio;
   if (st.url) URL.revokeObjectURL(st.url);
   dropItems(st);
   st.textStory = null;
-  st.items = files.map(f => ({ file: f, url: URL.createObjectURL(f), layers: [], w: 0, h: 0 }));
-  for (const it of st.items) await mediaSize(Object.assign(it, { kind: 'photo' }));      // the first one's shape is everyone's
+  st.items = files.map(newItem);
+  await mediaSize(st.items[0]);                       // the first one's shape is everyone's; the others are measured when shown
   showItem(0);
 }
 function showItem(i) {
   const st = studio, it = st.items[i];
   st.cur = i;
-  Object.assign(st, { file: it.file, url: it.url, kind: 'photo', baked: false, layers: it.layers, w: it.w, h: it.h });
+  Object.assign(st, { file: it.file, url: it.url, kind: it.kind, baked: false, layers: it.layers, w: it.w, h: it.h, pre: it.pre || null });
   drawEdit();
 }
 // The background of a words-only story: one of Instagram's gradients, as a picture.
@@ -165,14 +179,15 @@ function wordsBackground(i) {
 // The picture's or video's own size.
 function mediaSize(st) {
   if (st.w) return Promise.resolve();
-  return new Promise(resolve => {
+  if (st.sizing) return st.sizing;
+  return (st.sizing = new Promise(resolve => {
     let over = false;
-    const done = (w, h) => { if (over) return; over = true; st.w = w || 1080; st.h = h || 1350; resolve(); };
+    const done = (w, h) => { if (over) return; over = true; st.w = w || 1080; st.h = h || (st.kind === 'video' ? 1920 : 1350); st.sizing = null; resolve(); };
     if (st.kind === 'video') {
       const v = el('video');
       Object.assign(v, { preload: 'metadata', muted: true, playsInline: true });
       v.onloadedmetadata = () => done(v.videoWidth, v.videoHeight);
-      v.onerror = () => done();
+      v.onerror = () => { st.bad = true; done(); };          // this browser cannot play it
       v.src = st.url;
       setTimeout(() => done(v.videoWidth, v.videoHeight), 8000);
     } else {
@@ -181,7 +196,7 @@ function mediaSize(st) {
       i.onerror = () => done();
       i.src = st.url;
     }
-  });
+  }));
 }
 // The shape it is shown in, as Instagram does: a post between 1.91:1 (wide) and 4:5 (tall) — a YouTube-size 16:9 video
 // stays 16:9 — and a reel or story 9:16, with a picture of another shape whole in the middle (a tall one fills the screen).
@@ -367,9 +382,22 @@ function filterStrip(onPick, src) {
 // ---- 3. editing, as on Instagram: the picture large, the tools along the bottom, Next ----
 async function drawEdit() {
   const st = studio;
-  await mediaSize(st);
+  // Wait a moment for the picture's size; a video that takes longer opens in its usual shape and is redrawn.
+  const sized = mediaSize(st);
+  await Promise.race([sized, new Promise(r => setTimeout(r, 350))]);
   if (studio !== st) return;
-  const shape = st.shape = frameShape(st.items ? { mode: st.mode, w: st.items[0].w, h: st.items[0].h } : st);
+  if (!st.w) { const file = st.file; sized.then(() => { if (studio === st && st.file === file) drawEdit(); }); }
+  if (st.bad && st.kind === 'video') {
+    st.bad = false;
+    chatToast(ME, tx('এই ভিডিওটি এই ব্রাউজারে চলছে না (ফরম্যাট)। MP4 বা MOV ভিডিও দিন।', 'This browser cannot play that video. Use an MP4 or MOV.'));
+    if (st.pre && st.pre.xhr && !st.pre.done) st.pre.xhr.abort();
+    if (st.items) { const i = st.cur; st.items.splice(i, 1); if (st.items.length) { showItem(Math.min(i, st.items.length - 1)); return; } st.items = null; }
+    drawSource();
+    return;
+  }
+  if (st.items && st.w) Object.assign(st.items[st.cur], { w: st.w, h: st.h });
+  const base = st.items ? st.items[0] : st;
+  const shape = st.shape = frameShape({ mode: st.mode, w: base.w || (st.mode === 'post' ? 4 : 9), h: base.h || (st.mode === 'post' ? 5 : 16) });
   const frame = el('div', 'st-frame ' + (shape.fit === 'contain' ? 'fit' : 'fill'));
   frame.style.aspectRatio = String(shape.ratio);
   frame.style.width = `min(100% - 20px, 560px, (100dvh - 236px) * ${shape.ratio.toFixed(4)})`;     // until fitFrame measures
@@ -435,10 +463,11 @@ async function drawEdit() {
   bar.append(back, el('b', null, modeTitle()), right);
 
   // the filter row opens from its tool
-  let thumb = st.url;
-  if (st.kind === 'video') thumb = await videoPoster(st.file) || '';
-  if (studio !== st) return;
-  const strip = filterStrip(id => { st.fx = id; media.style.filter = fxCss(id); }, thumb);
+  const strip = filterStrip(id => { st.fx = id; media.style.filter = fxCss(id); }, st.kind === 'video' ? st.thumb || '' : st.url);
+  if (st.kind === 'video' && !st.thumb) {                // the filter previews get the video's picture when it is ready
+    const file = st.file;
+    videoPoster(file).then(p => { if (studio !== st || st.file !== file || !p) return; st.thumb = p; for (const f of strip.querySelectorAll('.face')) f.style.backgroundImage = `url("${p}")`; });
+  }
   strip.classList.add('st-fxrow');
   strip.hidden = true;
 
@@ -492,8 +521,10 @@ async function drawEdit() {
 function itemsRow(st) {
   const row = el('div', 'st-items');
   st.items.forEach((it, i) => {
-    const b = el('button', 'st-item' + (i === st.cur ? ' on' : ''));
-    b.style.backgroundImage = `url("${it.url}")`;
+    const b = el('button', 'st-item' + (i === st.cur ? ' on' : '') + (it.kind === 'video' ? ' vid' : ''));
+    if (it.kind === 'photo') b.style.backgroundImage = `url("${it.url}")`;
+    else if (it.thumb) b.style.backgroundImage = `url("${it.thumb}")`;
+    else videoPoster(it.file).then(p => { it.thumb = p; if (p) b.style.backgroundImage = `url("${p}")`; });
     b.appendChild(el('small', null, num(i + 1)));
     b.addEventListener('click', () => { if (i !== st.cur) showItem(i); });
     if (i === st.cur && st.items.length > 1) {
@@ -503,8 +534,9 @@ function itemsRow(st) {
       x.addEventListener('click', e => {
         e.stopPropagation();
         URL.revokeObjectURL(it.url);
+        if (it.pre && it.pre.xhr && !it.pre.done) it.pre.xhr.abort();
         st.items.splice(i, 1);
-        if (st.items.length === 1) { const last = st.items[0]; st.items = null; Object.assign(st, { file: last.file, url: last.url, layers: last.layers, w: last.w, h: last.h }); drawEdit(); return; }
+        if (st.items.length === 1) { const last = st.items[0]; st.items = null; Object.assign(st, { file: last.file, url: last.url, kind: last.kind, layers: last.layers, w: last.w, h: last.h, pre: last.pre || null }); drawEdit(); return; }
         showItem(Math.min(i, st.items.length - 1));
       });
       b.appendChild(x);
@@ -515,10 +547,10 @@ function itemsRow(st) {
     const add = el('button', 'st-item add');
     add.innerHTML = svg('plus');
     add.setAttribute('aria-label', tx('আরও ছবি', 'More photos'));
-    const pick = Object.assign(el('input'), { type: 'file', accept: 'image/*', multiple: true, hidden: true });
-    pick.addEventListener('change', async () => {
-      const more = [...pick.files].filter(f => f.type.startsWith('image')).slice(0, 10 - st.items.length);
-      for (const f of more) { const it = { file: f, url: URL.createObjectURL(f), layers: [], w: 0, h: 0, kind: 'photo' }; await mediaSize(it); st.items.push(it); }
+    const pick = Object.assign(el('input'), { type: 'file', accept: 'image/*,video/*', multiple: true, hidden: true });
+    pick.addEventListener('change', () => {
+      const more = [...pick.files].filter(f => isPhoto(f) || isVideo(f)).slice(0, 10 - st.items.length);
+      for (const f of more) st.items.push(newItem(f));
       showItem(st.cur);
     });
     add.addEventListener('click', () => pick.click());
@@ -603,19 +635,20 @@ function drawDetails() {
   const card = el('div', 'sd-card');
   card.style.aspectRatio = String(shape.ratio);
   const first = st.items ? st.items[0] : st;          // a carousel is shown by its first photo
-  const pv = st.kind === 'video' ? Object.assign(el('video'), { src: st.url, muted: true, playsInline: true, autoplay: true, loop: true }) : Object.assign(el('img'), { src: first.url, alt: '' });
+  const fk = first.kind || st.kind;
+  const pv = fk === 'video' ? Object.assign(el('video'), { src: first.url, muted: true, playsInline: true, autoplay: true, loop: true }) : Object.assign(el('img'), { src: first.url, alt: '' });
   pv.style.filter = fxCss(st.fx);
   pv.style.objectFit = shape.fit;
   card.appendChild(pv);
-  if (st.kind === 'video') {
-    if (st.cover && st.cover.url) card.appendChild(Object.assign(el('img', 'sd-cover'), { src: st.cover.url, alt: '' }));
-    if (st.layers.length) layerBox(pv, st.layers);
+  if (fk === 'video') {
+    if (!st.items && st.cover && st.cover.url) card.appendChild(Object.assign(el('img', 'sd-cover'), { src: st.cover.url, alt: '' }));
+    if (first.layers.length) layerBox(pv, first.layers);
   } else if (first.layers.length) { const b = el('div', 'lyr full'); paintLayers(b, first.layers); card.appendChild(b); }
   if (st.items) card.appendChild(el('span', 'sd-count', `1/${num(st.items.length)}`));
   const pvBtn = el('button', 'sd-chip top', LANG === 'en' ? 'Preview' : 'প্রিভিউ');
   pvBtn.addEventListener('click', () => openPreview(st));
   card.appendChild(pvBtn);
-  if (st.kind === 'video') {
+  if (st.kind === 'video' && !st.items) {
     const cov = el('button', 'sd-chip bottom', LANG === 'en' ? 'Edit cover' : 'কভার বদলান');
     cov.addEventListener('click', () => openCoverSheet(st, drawDetails));
     card.appendChild(cov);
@@ -853,7 +886,7 @@ async function saveDraft(st, btn) {
     const thumb = st.kind === 'video' ? (st.cover && st.cover.url) || await videoPoster(st.file) : '';
     const d = { id: st.draftId || Date.now(), made: Date.now(), file: st.file, kind: st.kind, mode: st.mode, fx: st.fx, music: st.music, orig: st.orig, layers: st.layers, caption: st.caption || '',
       place: st.place || null, tags: st.tags || [], audience: st.audience || 'all', at: st.at || 0, nocomm: !!st.nocomm, hidelikes: !!st.hidelikes, aname: st.aname || '', cover: st.cover || null, thumb, textStory: st.textStory,
-      items: st.items ? st.items.map(it => ({ file: it.file, layers: it.layers })) : null };
+      items: st.items ? st.items.map(it => ({ file: it.file, layers: it.layers, kind: it.kind })) : null };
     await draftsTx('readwrite', s => s.put(d));
     closeStudio();
     chatToast(ME, LANG === 'en' ? 'Saved to drafts on this device.' : 'ড্রাফট সেভ হয়েছে — এই ডিভাইসে থাকবে।');
@@ -885,8 +918,8 @@ async function openDrafts() {
         if (st.url) URL.revokeObjectURL(st.url);
         if (d.items && d.items.length > 1) {
           dropItems(st);
-          st.items = d.items.map(it => ({ file: it.file, url: URL.createObjectURL(it.file), layers: it.layers || [], w: 0, h: 0, kind: 'photo' }));
-          Promise.all(st.items.map(mediaSize)).then(() => showItem(0));
+          st.items = d.items.map(x => Object.assign(newItem(x.file), { layers: x.layers || [] }));
+          mediaSize(st.items[0]).then(() => showItem(0));
           return;
         }
         Object.assign(st, { file: d.file, kind: d.kind, url: URL.createObjectURL(d.file), baked: false, w: 0, h: 0, layers });
@@ -921,23 +954,32 @@ async function share(btn, progress, note) {
     if (total) size.textContent = `${mb(sent)} / ${mb(total)}`;
   };
   try {
-    let blob = st.file, type = st.file.type || 'video/mp4', fx = st.fx, poster = '', layers = [];
+    let blob = st.file, type = st.kind === 'video' ? videoType(st.file) : st.file.type, fx = st.fx, poster = '', layers = [];
     const shape = st.shape || frameShape(st);
     let w = st.w, h = st.h;
     let more = [];
     if (st.items) {
-      const parts = [];
-      for (const it of st.items) parts.push(await bakeFrame(it, shape, canvasFilters ? fx : ''));
-      const total = parts.reduce((a, p) => a + p.blob.size, 0);
-      let done = 0;
-      const names = [];
-      for (const p of parts) {
-        names.push(await uploadMedia(p.blob, 'image/jpeg', (f, sent) => onProgress((done + sent) / total, done + sent, total)));
-        done += p.blob.size;
+      const n = st.items.length, sent = [];
+      const step = (i, f) => onProgress((i + f) / n);
+      for (const [i, it] of st.items.entries()) {
+        if (it.kind === 'photo') {
+          const b = await bakeFrame(it, shape, canvasFilters ? fx : '');
+          sent.push({ media: await uploadMedia(b.blob, 'image/jpeg', f => step(i, f)), w: b.w, h: b.h });
+        } else {
+          let m = null;
+          if (it.pre) { it.pre.on = f => step(i, f); step(i, it.pre.f); try { m = await it.pre.promise; } catch { m = null; } }
+          if (!m) m = await uploadMedia(it.file, videoType(it.file), f => step(i, f));
+          if (!it.w) await mediaSize(it);
+          sent.push({ media: m, poster: it.thumb || await videoPoster(it.file), layers: it.layers, w: it.w, h: it.h, video: true });
+        }
       }
-      blob = null; w = parts[0].w; h = parts[0].h; type = 'image/jpeg';
+      blob = null; type = 'image/jpeg';
       if (canvasFilters) fx = '';
-      [st.preMedia, ...more] = names;
+      const first = sent[0];
+      w = first.w; h = first.h;
+      if (first.video) { poster = first.poster; layers = first.layers; }
+      st.preMedia = first.media;
+      more = sent.slice(1).map(x => ({ media: x.media, poster: x.poster || '', layers: x.layers || [], w: x.w, h: x.h }));
     } else if (st.kind === 'photo') {
       const baked = await bakeFrame(st, shape, canvasFilters ? fx : '');
       blob = baked.blob; w = baked.w; h = baked.h;
@@ -945,7 +987,7 @@ async function share(btn, progress, note) {
       type = 'image/jpeg';
     } else { poster = (st.cover && st.cover.url) || await videoPoster(st.file); layers = st.layers; }
     let media = st.items ? st.preMedia : null;
-    if (st.kind === 'video' && st.pre && st.pre.file === st.file) {
+    if (!st.items && st.kind === 'video' && st.pre && st.pre.file === st.file) {
       onProgress(st.pre.f, st.pre.sent, st.pre.total);
       st.pre.on = onProgress;
       try { media = await st.pre.promise; st.pre.done = true; } catch { media = null; }

@@ -138,7 +138,7 @@ function feedCard(p, onGone) {
   if (p.kind === 'text') {
     media.className = 'fc-text g' + (p.id % 5) + (p.caption.length > 140 ? ' long' : '');
     media.appendChild(Object.assign(el('p', 'no-tr'), { textContent: p.caption }));
-  } else if (p.kind === 'video') {
+  } else if (p.kind === 'video' && !(p.more && p.more.length)) {
     const v = el('video');
     Object.assign(v, { src: p.src, poster: p.poster, muted: true, loop: true, playsInline: true, preload: 'metadata' });
     const speaker = el('button', 'fc-sound' + (feedSound ? ' on' : ''));
@@ -201,7 +201,8 @@ function feedCard(p, onGone) {
       const [car, count, l, r] = carousel(p, bar0);
       media.classList.add('multi');
       media.append(car, count, l, r);
-      if (!p.w) car.firstChild.addEventListener('load', () => shapeIt(car.firstChild.naturalWidth, car.firstChild.naturalHeight));
+      const im = car.querySelector('img');
+      if (!p.w && im) im.addEventListener('load', () => shapeIt(im.naturalWidth, im.naturalHeight));
     } else {
       const img = Object.assign(el('img'), { src: p.src, alt: p.caption || '', loading: 'lazy' });
       if (!p.w) img.addEventListener('load', () => shapeIt(img.naturalWidth, img.naturalHeight));
@@ -291,12 +292,12 @@ function postTile(p, onGone, user) {
   const img = Object.assign(el('img'), { loading: 'lazy', alt: p.caption || '', src: p.kind === 'video' ? p.poster : p.src });
   if (p.kind === 'text') { tile.classList.add('texty', 'g' + (p.id % 5)); tile.appendChild(Object.assign(el('span', 'tt no-tr'), { textContent: p.caption })); }
   else if (p.kind === 'video' && !p.poster) tile.classList.add('blank'); else tile.appendChild(img);
-  if (p.kind === 'video') tile.appendChild(svgEl('play', 'play'));
+  if (p.kind === 'video' && !(p.more && p.more.length)) tile.appendChild(svgEl('play', 'play'));
   if (p.more && p.more.length) tile.appendChild(svgEl('copy', 'multi'));
   const meta = el('span', 'meta');
   meta.append(svgEl('heart'), document.createTextNode(num(p.likes)));
   tile.appendChild(meta);
-  tile.addEventListener('click', () => (p.kind === 'video' ? openReels(p.id, user) : openPost(p.id, onGone)));
+  tile.addEventListener('click', () => (p.kind === 'video' && !(p.more && p.more.length) ? openReels(p.id, user) : openPost(p.id, onGone)));
   return tile;
 }
 
@@ -333,7 +334,7 @@ async function openPost(id, onGone) {
   const p = data.post;
   const media = el('div', 'post-media');
   if (p.kind === 'text') { media.className = 'fc-text g' + (p.id % 5); media.appendChild(Object.assign(el('p', 'no-tr'), { textContent: p.caption })); }
-  else if (p.kind === 'video') media.appendChild(Object.assign(el('video'), { src: p.src, poster: p.poster, controls: true, playsInline: true, preload: 'metadata' }));
+  else if (p.kind === 'video' && !(p.more && p.more.length)) media.appendChild(Object.assign(el('video'), { src: p.src, poster: p.poster, controls: true, playsInline: true, preload: 'metadata' }));
   else if (p.more && p.more.length) {
     const [car, count, l, r, dots] = carousel(p);
     media.classList.add('multi');
@@ -408,10 +409,30 @@ function closeReels() {
   document.body.classList.remove('reels-open');
 }
 // A post of several photos: swiped sideways, with dots and a "1/3" that fades, as on Instagram.
+// Each slide is a photo, or a video that plays while its slide is on screen (with its words and stickers over it).
+let slideWatch = null;
+const slideWatcher = () => slideWatch || (slideWatch = new IntersectionObserver(entries => {
+  for (const e of entries) {
+    const v = e.target.querySelector('video');
+    if (!v) continue;
+    if (e.isIntersecting && e.intersectionRatio > .6) { v.muted = !feedSound; v.play().catch(() => { v.muted = true; v.play().catch(() => {}); }); }
+    else v.pause();
+  }
+}, { threshold: [0, .6] }));
 function carousel(p, dotsHost) {
-  const srcs = [p.src, ...(p.more || [])];
+  const items = [{ src: p.src, kind: p.kind, poster: p.poster, layers: p.layers || [] }, ...(p.more || []).map(x => (typeof x === 'string' ? { src: x, kind: 'photo' } : x))];
+  const srcs = items;
   const car = el('div', 'fc-car');
-  for (const src of srcs) car.appendChild(Object.assign(el('img'), { src, alt: p.caption || '', loading: 'lazy', draggable: false }));
+  for (const it of items) {
+    const slide = el('div', 'slide');
+    if (it.kind === 'video') {
+      const v = Object.assign(el('video'), { src: it.src, poster: it.poster || '', muted: true, loop: true, playsInline: true, preload: 'metadata' });
+      slide.appendChild(v);
+      if (it.layers && it.layers.length) layerBox(v, it.layers);
+      slideWatcher().observe(slide);
+    } else slide.appendChild(Object.assign(el('img'), { src: it.src, alt: p.caption || '', loading: 'lazy', draggable: false }));
+    car.appendChild(slide);
+  }
   const count = el('span', 'fc-count', `1/${num(srcs.length)}`);
   const dots = el('div', 'fc-dots');
   for (let i = 0; i < srcs.length; i++) dots.appendChild(el('i', i ? '' : 'on'));
