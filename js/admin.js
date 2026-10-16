@@ -236,6 +236,17 @@ const PAGES = {
     box.appendChild(grid);
   } },
 
+  sounds: { title: 'সাউন্ড', icon: 'comment', async draw(box) {
+    const d = await api('sounds');
+    box.appendChild(h('p', 'hint', 'ব্যবহারকারীরা রিলের জন্য যে সাউন্ড আপলোড করেছেন। অন্যের কপিরাইট করা গান (সিনেমার গান ইত্যাদি) পেলে বা কেউ অভিযোগ করলে সরিয়ে দিন — সরালে যেসব পোস্টে ব্যবহার হয়েছে সেখান থেকেও উঠে যায়।'));
+    if (!d.sounds.length) { box.appendChild(empty('এখনো কেউ সাউন্ড আপলোড করেননি।')); return; }
+    box.appendChild(table(['সাউন্ড', 'কে', 'ব্যবহার', 'কখন', ''], d.sounds.map(x => {
+      const a = h('audio'); a.src = x.src; a.controls = true; a.preload = 'none'; a.style.maxWidth = '220px';
+      const t = h('div'); t.append(h('b', null, x.title), a);
+      return [t, `${x.user.name} (${x.user.email})`, num(x.uses), ago(x.created), btn('সরান', 'bad quiet small', async () => { if (confirm(`"${x.title}" সরাবেন?`) && await act(api('sound', { id: x.id }), 'সাউন্ড সরানো হলো।')) show('sounds'); })];
+    })));
+  } },
+
   comments: { title: 'মন্তব্য', icon: 'comment', async draw(box) {
     const d = await api('comments');
     box.appendChild(h('p', 'hint', 'পোস্টের নিচে করা সাম্প্রতিক মন্তব্য। গালিগালাজ, স্প্যাম বা হুমকি থাকলে সরান।'));
@@ -406,7 +417,7 @@ const PAGES = {
   audit: { title: 'কাজের খতিয়ান', icon: 'list', async draw(box) {
     const d = await api('audit');
     const WHAT = { verify: 'ব্যাজ দেওয়া', unverify: 'ব্যাজ সরানো', 'creator approve': 'ক্রিয়েটর অনুমোদন', 'creator reject': 'ক্রিয়েটর আবেদন বাতিল', 'creator revoke': 'ক্রিয়েটর বন্ধ',
-                   earning: 'আয় যোগ', 'payout paid': 'টাকা পাঠানো', 'payout rejected': 'টাকা তোলা বাতিল', 'creator rules': 'ক্রিয়েটর নিয়ম বদল', ban: 'অ্যাকাউন্ট বন্ধ', unban: 'অ্যাকাউন্ট চালু', role: 'ভূমিকা বদল', delete: 'অ্যাকাউন্ট মোছা', signout: 'সব ডিভাইস থেকে লগআউট', reply: 'সাপোর্টে উত্তর',
+                   earning: 'আয় যোগ', 'payout paid': 'টাকা পাঠানো', 'payout rejected': 'টাকা তোলা বাতিল', 'creator rules': 'ক্রিয়েটর নিয়ম বদল', 'sound removed': 'সাউন্ড সরানো', 'story removed': 'স্টোরি সরানো', 'comment removed': 'মন্তব্য সরানো', 'group removed': 'গ্রুপ বন্ধ', flag: 'সুইচ বদল', export: 'তালিকা ডাউনলোড', ban: 'অ্যাকাউন্ট বন্ধ', unban: 'অ্যাকাউন্ট চালু', role: 'ভূমিকা বদল', delete: 'অ্যাকাউন্ট মোছা', signout: 'সব ডিভাইস থেকে লগআউট', reply: 'সাপোর্টে উত্তর',
                    notice: 'ঘোষণা বদল', 'fare removed': 'ভাড়া সরানো', 'report dismissed': 'রিপোর্ট বন্ধ', 'post removed': 'পোস্ট সরানো' };
     box.appendChild(h('p', 'hint', 'অ্যাডমিন ও সাপোর্ট টিম এই প্যানেল থেকে যা যা বদলেছেন, তার তালিকা। এটি মোছা যায় না।'));
     if (!d.audit.length) { box.appendChild(empty('এখনো কিছু বদলানো হয়নি।')); return; }
@@ -603,7 +614,7 @@ async function show(name) {
     if (e.status !== 403) $('gate-text').textContent = 'সার্ভারের সাথে যোগাযোগ করা যায়নি। একটু পরে আবার চেষ্টা করুন।';
     return;
   }
-  const NAV = [['প্রধান', ['overview']], ['মানুষ', ['users', 'support', 'reports']], ['কনটেন্ট', ['posts', 'stories', 'comments', 'groups']],
+  const NAV = [['প্রধান', ['overview']], ['মানুষ', ['users', 'support', 'reports']], ['কনটেন্ট', ['posts', 'stories', 'sounds', 'comments', 'groups']],
                ['আয় ও কমিউনিটি', ['creators', 'fares']], ['সিস্টেম', ['audit', 'settings']]];
   for (const [label, keys] of NAV) {
     $('nav').appendChild(h('div', 'nav-group', label));

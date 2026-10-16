@@ -150,7 +150,7 @@ function postSound(p) {
       this.stop();
       if (muted) return;
       if (m.label.kind === 'gen') handle = MUSIC.play(m.label.track, m.start + at, { volume: .75 });
-      else if (m.label.kind === 'post') { el = new Audio(m.label.src); el.currentTime = m.start + at; el.loop = true; el.play().catch(() => {}); }
+      else if (m.label.kind === 'post' || m.label.kind === 'file') { el = new Audio(m.label.src); el.currentTime = m.start + at; el.loop = true; el.play().catch(() => {}); }
     },
     stop() { if (handle) { handle.stop(); handle = null; } if (el) { el.pause(); el = null; } },
     mute(on) { muted = on; if (on) this.stop(); }
@@ -161,5 +161,6 @@ function soundLabel(p) {
   const l = p.music.label;
   if (l.kind === 'gen') return `${MUSIC.name(l.track)} · BD Map Music`;
   if (l.kind === 'post') return `${l.by} · ${LANG === 'en' ? 'Original audio' : 'মূল অডিও'}`;
+  if (l.kind === 'file') return `${l.title} · ${l.by}`;
   return '';
 }

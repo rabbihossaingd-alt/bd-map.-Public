@@ -95,42 +95,70 @@ function takeFile(file, baked) {
   drawEdit();
 }
 
-// ---- 2. the camera ----
+// ---- 2. the camera: drawn through an effect (effects.js), so photos and videos carry it ----
 async function openCamera() {
   const st = studio;
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { chatToast(ME, 'এই ব্রাউজারে ক্যামেরা খোলা যায় না।'); return; }
   stopCamera();
   try {
-    st.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: st.facing, width: { ideal: 1080 }, height: { ideal: 1920 } }, audio: true });
+    st.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: st.facing, width: { ideal: 1280 }, height: { ideal: 1280 } }, audio: true });
   } catch { chatToast(ME, 'ক্যামেরা ও মাইক্রোফোনের অনুমতি দিন।'); drawSource(); return; }
   if (studio !== st) { stopCamera(); return; }
-  const view = Object.assign(el('video'), { autoplay: true, muted: true, playsInline: true, srcObject: st.stream });
-  view.classList.toggle('mirror', st.facing === 'user');
-  view.style.filter = fxCss(st.fx);
+  const video = Object.assign(el('video'), { autoplay: true, muted: true, playsInline: true, srcObject: st.stream });
+  video.play().catch(() => {});
+  const canvas = el('canvas', 'st-canvas');
+  [canvas.width, canvas.height] = st.mode === 'post' ? [864, 1080] : [720, 1280];
+  const status = el('div', 'st-status');
+  status.hidden = true;
+  st.cam = effectCamera(video, canvas, { mirror: st.facing === 'user', onStatus: s => {
+    status.hidden = s === 'ready';
+    status.textContent = s === 'loading' ? (LANG === 'en' ? 'Loading face effects…' : 'ফেস ইফেক্ট লোড হচ্ছে…') : s === 'failed' ? (LANG === 'en' ? 'Face effects need a newer browser' : 'এই ব্রাউজারে ফেস ইফেক্ট চলছে না') : '';
+    if (s === 'failed') setTimeout(() => { status.hidden = true; }, 2500);
+  } });
+  st.cam.set(st.effect || 'none');
   const stage = el('div', 'st-camera');
+  const name = el('div', 'st-fxname');
   const timer = el('div', 'st-rec-time');
   timer.hidden = true;
-  // Top: music, flip.
+  stage.append(canvas, video, name, status, timer);
+  video.className = 'st-src';
+  // top: music; right: flip, microphone, effects
   const tune = el('button', 'st-chip');
   const paintTune = () => { tune.replaceChildren(Object.assign(el('i'), { innerHTML: svg('note') }), document.createTextNode(st.music ? musicTitle(st.music) : (LANG === 'en' ? 'Add music' : 'গান যোগ করুন'))); tune.classList.toggle('on', !!st.music); };
   paintTune();
-  tune.addEventListener('click', () => openMusicPicker(paintTune));
+  tune.addEventListener('click', () => openMusicSheet(paintTune));
   const flip = sbtn('flip', 'ক্যামেরা ঘোরান', () => { st.facing = st.facing === 'user' ? 'environment' : 'user'; openCamera(); }, 'round');
   const mic = sbtn('mic', 'মাইক্রোফোন', () => { st.orig = !st.orig; mic.classList.toggle('off', !st.orig); }, 'round');
   mic.classList.toggle('off', !st.orig);
+  const allFx = sbtn('magic', 'সব ইফেক্ট', () => openEffectSheet(pick), 'round');
   const tools = el('div', 'st-tools');
-  tools.append(flip, mic);
-  // Bottom: filters, then the shutter. Photo and video in post mode; video only for a reel; story both.
-  const strip = filterStrip(id => { st.fx = id; view.style.filter = fxCss(id); }, null);
-  // The filter circles show what the camera sees, each through its own filter.
-  view.addEventListener('loadeddata', () => setTimeout(() => {
-    if (!view.videoWidth) return;
-    const c = el('canvas'), k = 120 / Math.min(view.videoWidth, view.videoHeight);
-    c.width = Math.round(view.videoWidth * k); c.height = Math.round(view.videoHeight * k);
-    c.getContext('2d').drawImage(view, 0, 0, c.width, c.height);
-    const url = c.toDataURL('image/jpeg', .7);
-    for (const f of strip.querySelectorAll('.face')) f.style.backgroundImage = `url("${url}")`;
-  }, 500), { once: true });
+  tools.append(flip, mic, allFx);
+  stage.appendChild(tools);
+  // the effects around the shutter, as on Instagram: swipe through, the middle one is on
+  const ring = el('div', 'st-ring-strip');
+  const showName = e => { name.textContent = effectName(e); name.classList.remove('show'); void name.offsetWidth; name.classList.add('show'); };
+  function pick(id) {
+    st.effect = id;
+    st.cam.set(id);
+    // an effect chosen from the sheet joins the row beside the shutter
+    if (![...ring.children].some(b => b.dataset.id === id)) {
+      const e = EFFECTS.find(x => x.id === id);
+      if (e) ring.insertBefore(fxButton(e), ring.children[1] || null);
+    }
+    for (const b of ring.children) b.classList.toggle('on', b.dataset.id === id);
+    const e = EFFECTS.find(x => x.id === id);
+    if (e) showName(e);
+  }
+  function fxButton(e) {
+    const b = el('button', 'st-fx' + (e.id === (st.effect || 'none') ? ' on' : ''));
+    b.dataset.id = e.id;
+    b.style.background = e.bg;
+    b.textContent = e.icon;
+    b.setAttribute('aria-label', effectName(e));
+    b.addEventListener('click', () => pick(e.id));
+    return b;
+  }
+  for (const e of EFFECTS.filter(x => x.tabs.includes('trend'))) ring.appendChild(fxButton(e));
   let kind = st.mode === 'reel' ? 'video' : 'photo';
   const kinds = el('div', 'st-kinds');
   if (st.mode !== 'reel') for (const [k, bn, en] of [['photo', 'ছবি', 'Photo'], ['video', 'ভিডিও', 'Video']]) {
@@ -145,21 +173,16 @@ async function openCamera() {
   const stopRec = () => { if (rec && rec.state !== 'inactive') rec.stop(); };
   shutter.addEventListener('click', () => {
     if (kind === 'photo') {
-      const c = el('canvas'), w = view.videoWidth, h = view.videoHeight;
-      if (!w) return;
-      c.width = w; c.height = h;
-      const g = c.getContext('2d');
-      if (st.facing === 'user') { g.translate(w, 0); g.scale(-1, 1); }
-      if (canvasFilters) g.filter = fxCss(st.fx);
-      g.drawImage(view, 0, 0, w, h);
       stage.classList.add('flash');
-      c.toBlob(b => { if (!b) return; const baked = canvasFilters; if (baked) st.fx = ''; stopCamera(); takeFile(new File([b], 'photo.jpg', { type: 'image/jpeg' }), baked); }, 'image/jpeg', .9);
+      canvas.toBlob(b => { if (!b) return; st.fx = ''; stopCamera(); takeFile(new File([b], 'photo.jpg', { type: 'image/jpeg' }), true); }, 'image/jpeg', .92);
       return;
     }
     if (rec) { stopRec(); return; }
-    const type = ['video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm'].find(t => window.MediaRecorder && MediaRecorder.isTypeSupported(t)) || '';
-    const tracks = [...st.stream.getVideoTracks(), ...(st.orig ? st.stream.getAudioTracks() : [])];
-    try { rec = new MediaRecorder(new MediaStream(tracks), type ? { mimeType: type, videoBitsPerSecond: 2.5e6 } : undefined); }
+    const type = ['video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'].find(t => window.MediaRecorder && MediaRecorder.isTypeSupported(t)) || '';
+    const out = canvas.captureStream ? canvas.captureStream(30) : null;
+    if (!out) { chatToast(ME, 'এই ব্রাউজারে ভিডিও রেকর্ড করা যায় না।'); return; }
+    if (st.orig) for (const t of st.stream.getAudioTracks()) out.addTrack(t);
+    try { rec = new MediaRecorder(out, type ? { mimeType: type, videoBitsPerSecond: 3e6 } : undefined); }
     catch { chatToast(ME, 'এই ব্রাউজারে ভিডিও রেকর্ড করা যায় না।'); return; }
     chunks = [];
     rec.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
@@ -169,15 +192,16 @@ async function openCamera() {
       const base = (rec.mimeType || 'video/webm').split(';')[0];
       const file = new File(chunks, `reel.${base.includes('mp4') ? 'mp4' : 'webm'}`, { type: base });
       rec = null;
+      st.fx = '';
       stopCamera();
-      takeFile(file, false);
+      takeFile(file, true);
     };
     rec.start(500);
     started = Date.now();
     shutter.classList.add('rec');
+    ring.classList.add('hide');
     timer.hidden = false;
-    // You hear the music while recording; it is not recorded into the file — it plays with the reel later.
-    if (st.music) playing = playMusicChoice(st.music, 0);
+    if (st.music) playing = playMusicChoice(st.music, 0);   // heard while recording; it plays with the reel later
     tick = setInterval(() => {
       const s = (Date.now() - started) / 1000;
       timer.textContent = `${num(Math.floor(s / 60))}:${num(Math.floor(s % 60)).padStart(2, num(0))}`;
@@ -188,15 +212,44 @@ async function openCamera() {
   const galleryBtn = sbtn('image', 'গ্যালারি', drawSource, 'round');
   const row = el('div', 'st-shoot');
   row.append(galleryBtn, shutter, el('span', 'st-gap'));
-  stage.append(view, timer, tools);
   const bottom = el('div', 'st-cam-bottom');
-  bottom.append(strip, kinds, row);
-  const top = studioBar(modeTitle(), tune);
-  st.box.replaceChildren(stage, top, bottom);
-  stage.addEventListener('animationend', () => stage.classList.remove('flash'));
+  bottom.append(ring, kinds, row);
+  st.box.replaceChildren(stage, studioBar(modeTitle(), tune), bottom);
+  stage.addEventListener('animationend', e => { if (e.animationName === 'shot-flash') stage.classList.remove('flash'); });
 }
 function stopCamera() {
+  if (studio && studio.cam) { studio.cam.stop(); studio.cam = null; }
   if (studio && studio.stream) { for (const t of studio.stream.getTracks()) t.stop(); studio.stream = null; }
+}
+
+// Every effect, in tabs, as a sheet over the camera.
+function openEffectSheet(pick) {
+  const st = studio;
+  const sheet = el('div', 'st-sheet');
+  const grab = el('div', 'grab');
+  const tabs = el('div', 'fx-tabs');
+  const grid = el('div', 'fx-grid');
+  let tab = 'trend';
+  const draw = () => {
+    for (const b of tabs.children) b.classList.toggle('on', b.dataset.t === tab);
+    grid.replaceChildren(...EFFECTS.filter(e => e.tabs.includes(tab)).map(e => {
+      const b = el('button', 'fx-cell' + (e.id === (st.effect || 'none') ? ' on' : ''));
+      const face = el('span', 'fx-face');
+      face.style.background = e.bg;
+      face.textContent = e.icon;
+      b.append(face, el('span', 'nm', effectName(e)));
+      b.addEventListener('click', () => { pick(e.id); for (const x of grid.children) x.classList.toggle('on', x === b); });
+      return b;
+    }));
+  };
+  for (const [k, bn, en] of FX_TABS) { const b = el('button', null, LANG === 'en' ? en : bn); b.dataset.t = k; b.addEventListener('click', () => { tab = k; draw(); }); tabs.appendChild(b); }
+  const close = () => { sheet.classList.add('out'); setTimeout(() => sheet.remove(), 250); };
+  grab.addEventListener('click', close);
+  const done = el('button', 'fx-done', LANG === 'en' ? 'Done' : 'ঠিক আছে');
+  done.addEventListener('click', close);
+  sheet.append(grab, tabs, grid, done);
+  st.box.appendChild(sheet);
+  draw();
 }
 
 // A row of round previews, one per filter. `src` is the picture to preview with (none: plain colour tiles).
@@ -239,7 +292,7 @@ async function drawEdit() {
   const tune = el('button', 'st-chip');
   const paintTune = () => { tune.replaceChildren(Object.assign(el('i'), { innerHTML: svg('note') }), document.createTextNode(st.music ? musicTitle(st.music) : (LANG === 'en' ? 'Music' : 'গান'))); tune.classList.toggle('on', !!st.music); };
   paintTune();
-  tune.addEventListener('click', () => openMusicPicker(() => { paintTune(); restartMusic(); }));
+  tune.addEventListener('click', () => openMusicSheet(() => { paintTune(); restartMusic(); }));
   if (st.mode !== 'story') tools.appendChild(tune);
   if (st.kind === 'video') {
     const vol = el('button', 'st-chip');
@@ -341,69 +394,172 @@ function bakePhoto(file, fx) {
   });
 }
 
-// ---- music: the app's tracks, and reels' own sounds ----
-const musicTitle = m => m.id.startsWith('gen:') ? MUSIC.name(m.id.slice(4)) : `${m.by || ''} · ${LANG === 'en' ? 'Original audio' : 'মূল অডিও'}`;
+// ---- music: a sheet like TikTok's — popular, for you, saved, recent, search; trim; save ----
+// Sources: BD Map's own tracks (music.js), sounds people uploaded, reels' original sounds, and — when the server
+// has a Jamendo id — Jamendo's Creative Commons catalogue.
+const musicTitle = m => m.id.startsWith('gen:') ? MUSIC.name(m.id.slice(4)) : m.title || `${m.by || ''} · ${LANG === 'en' ? 'Original audio' : 'মূল অডিও'}`;
 function playMusicChoice(m, at = 0) {
   if (m.id.startsWith('gen:')) return MUSIC.play(m.id.slice(4), (m.start || 0) + at, { volume: .75 });
   const a = new Audio(m.src);
-  a.currentTime = (m.start || 0) + at;
-  a.play().catch(() => {});
-  return { stop() { a.pause(); }, setVolume(v) { a.volume = v; } };
+  a.preload = 'auto';
+  const go = () => { try { a.currentTime = (m.start || 0) + at; } catch { /* not seekable yet */ } a.play().catch(() => {}); };
+  if (a.readyState >= 1) go(); else { a.addEventListener('loadedmetadata', go, { once: true }); a.load(); a.play().catch(() => {}); }
+  return { stop() { a.pause(); a.src = ''; }, setVolume(v) { a.volume = v; } };
 }
-async function openMusicPicker(done) {
+const MUSIC_SAVED = 'bdmap.music.saved', MUSIC_RECENT = 'bdmap.music.recent';
+const readList = k => { try { return JSON.parse(localStorage.getItem(k)) || []; } catch { return []; } };
+const writeList = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v.slice(0, 40))); } catch { /* storage unavailable */ } };
+const durText = s => s ? `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}` : (LANG === 'en' ? 'Loop' : 'লুপ');
+
+async function openMusicSheet(done) {
   const st = studio;
-  let previewing = null, previewId = '';
-  const stopPreview = () => { if (previewing) previewing.stop(); previewing = null; previewId = ''; for (const b of list.querySelectorAll('.mp-play')) b.classList.remove('on'); };
+  let data = { tracks: [], audios: [], sounds: [], tracksUsed: [], catalogue: false };
+  let tab = 'hot', q = '', previewing = null, previewId = '', catalogue = [];
+  const sheet = el('div', 'st-sheet light mp-sheet');
+  const grab = el('div', 'grab');
+  const tabs = el('div', 'mp-tabs');
+  const search = el('label', 'mp-search');
+  const qi = Object.assign(el('input'), { type: 'search', placeholder: LANG === 'en' ? 'Search songs and sounds' : 'গান বা সাউন্ড খুঁজুন', autocomplete: 'off' });
+  search.append(ic('search'), qi);
   const list = el('div', 'mp-list');
-  const row = (m, title, sub, art) => {
-    const r = el('div', 'mp-row' + (st.music && st.music.id === m.id ? ' picked' : ''));
-    const play = el('button', 'mp-play');
-    play.innerHTML = svg('play');
-    play.setAttribute('aria-label', 'শুনুন');
-    play.addEventListener('click', e => {
-      e.stopPropagation();
-      const was = previewId === m.id;
+  const upload = el('button', 'mp-upload');
+  upload.append(ic('plus'), el('span', null, LANG === 'en' ? 'Upload your own sound' : 'নিজের সাউন্ড আপলোড করুন'));
+  upload.addEventListener('click', () => uploadSound(s => { data.sounds.unshift({ ...s, uses: 0, created: Date.now() }); choose(soundItem(s)); }));
+  const stopPreview = () => { if (previewing) previewing.stop(); previewing = null; previewId = ''; for (const b of list.querySelectorAll('.mp-row')) b.classList.remove('playing'); };
+  const close = () => { stopPreview(); sheet.classList.add('out'); setTimeout(() => sheet.remove(), 250); };
+  grab.addEventListener('click', close);
+
+  // Every source becomes one shape: { id, title, by, art (url or gradient class), secs, uses, src? }
+  const genItem = (t, i) => ({ id: 'gen:' + t.id, title: MUSIC.name(t.id), by: `BD Map Music · ${MUSIC.mood(t.id)}`, art: 'g' + (i % 8), secs: 0, uses: (data.tracks.find(x => x.id === t.id) || {}).uses || 0 });
+  const soundItem = s => ({ id: s.id, title: s.title, by: s.user.name, art: '', pic: s.user, secs: s.secs, uses: s.uses || 0, src: s.src });
+  const reelItem = a => ({ id: a.id, title: `${a.user.name} · ${LANG === 'en' ? 'original sound' : 'মূল সাউন্ড'}`, by: a.user.name, art: a.poster, secs: 0, uses: a.uses || 0, src: a.src });
+  const extItem = t => ({ id: t.id, title: t.title, by: t.artist, art: t.image, secs: t.secs, uses: t.uses || 0, src: t.audio });
+  const all = () => [...MUSIC.TRACKS.map(genItem), ...data.sounds.map(soundItem), ...data.audios.map(reelItem), ...data.tracksUsed.map(extItem), ...catalogue.map(extItem)];
+
+  function choose(it) {
+    stopPreview();
+    st.music = { id: it.id, start: it.start || 0, title: it.id.startsWith('gen:') ? '' : it.title, by: it.by, src: it.src };
+    if (st.kind === 'video' || st.stream) st.orig = false;
+    writeList(MUSIC_RECENT, [it, ...readList(MUSIC_RECENT).filter(x => x.id !== it.id)]);
+    close();
+    done();
+  }
+  function row(it) {
+    const r = el('div', 'mp-row' + (st.music && st.music.id === it.id ? ' picked' : ''));
+    const art = el('span', 'mp-art' + (it.art && it.art.length <= 3 ? ' ' + it.art : ''));
+    if (it.art && it.art.length > 3) art.style.backgroundImage = `url("${it.art}")`;
+    else if (it.pic) art.appendChild(avatar(it.pic, 'sm'));
+    else art.innerHTML = svg('note');
+    const eq = el('i', 'mp-eq');
+    eq.innerHTML = '<b></b><b></b><b></b>';
+    art.appendChild(eq);
+    const t = el('div', 't no-tr');
+    t.append(el('b', null, it.title), el('span', null, [it.by, it.uses ? `${num(it.uses)} ${LANG === 'en' ? 'posts' : 'পোস্ট'}` : '', durText(it.secs)].filter(Boolean).join(' · ')));
+    // tap: listen; tap again: stop. The tick uses it.
+    r.addEventListener('click', e => {
+      if (e.target.closest('button')) return;
+      const was = previewId === it.id;
       stopPreview();
       if (was) return;
-      previewing = playMusicChoice(m, 0);
-      previewId = m.id;
-      play.classList.add('on');
+      previewing = playMusicChoice({ ...it, start: it.start || 0 }, 0);
+      previewId = it.id;
+      r.classList.add('playing');
     });
-    const t = el('div', 't no-tr');
-    t.append(el('b', null, title), el('span', null, sub));
-    const use = el('button', 'pill-btn', st.music && st.music.id === m.id ? 'বাছা হয়েছে' : 'বাছুন');
-    use.addEventListener('click', () => { stopPreview(); st.music = { ...m, start: Number(start.value) || 0 }; if (st.kind === 'video' || st.stream) st.orig = false; closeModal(); done(); });
-    r.append(art, t, play, use);
+    const cut = sbtnLight('cut', 'কোথা থেকে বাজবে', () => openTrim(it, r));
+    const saved = readList(MUSIC_SAVED).some(x => x.id === it.id);
+    const keep = sbtnLight('bookmark', 'সেভ', () => {
+      const list0 = readList(MUSIC_SAVED), on = !list0.some(x => x.id === it.id);
+      writeList(MUSIC_SAVED, on ? [it, ...list0] : list0.filter(x => x.id !== it.id));
+      keep.classList.toggle('on', on);
+    });
+    keep.classList.toggle('on', saved);
+    const use = el('button', 'mp-use');
+    use.innerHTML = svg('check');
+    use.setAttribute('aria-label', 'ব্যবহার করুন');
+    use.addEventListener('click', () => choose(it));
+    r.append(art, t, cut, keep, use);
     return r;
-  };
-  list.appendChild(el('div', 'info-label', 'BD Map Music — কপিরাইট ছাড়া, যে কেউ ব্যবহার করতে পারেন'));
-  MUSIC.TRACKS.forEach((tr, i) => {
-    const art = el('span', 'mp-art g' + (i % 8));
-    art.innerHTML = svg('note');
-    list.appendChild(row({ id: 'gen:' + tr.id, start: 0 }, MUSIC.name(tr.id), `${MUSIC.mood(tr.id)} · ${num(tr.bpm)} BPM`, art));
+  }
+  // ✂ where the sound starts
+  function openTrim(it, r) {
+    for (const x of list.querySelectorAll('.mp-trim')) x.remove();
+    const box = el('div', 'mp-trim');
+    const range = Object.assign(el('input'), { type: 'range', min: 0, max: it.secs ? Math.max(0, it.secs - 5) : 60, step: 1, value: it.start || 0 });
+    const v = el('span', null, `${num(range.value)} ${LANG === 'en' ? 's' : 'সে.'}`);
+    range.addEventListener('input', () => { it.start = Number(range.value); v.textContent = `${num(range.value)} ${LANG === 'en' ? 's' : 'সে.'}`; });
+    range.addEventListener('change', () => { stopPreview(); previewing = playMusicChoice(it, 0); previewId = it.id; r.classList.add('playing'); });
+    box.append(el('span', null, LANG === 'en' ? 'Start at' : 'শুরু'), range, v);
+    r.after(box);
+  }
+  function draw() {
+    for (const b of tabs.children) b.classList.toggle('on', b.dataset.t === tab);
+    let items;
+    const needle = q.trim().toLowerCase();
+    if (needle) items = all().filter(x => (x.title + ' ' + x.by).toLowerCase().includes(needle));
+    else if (tab === 'hot') items = all().sort((a, b) => b.uses - a.uses);
+    else if (tab === 'you') items = [...MUSIC.TRACKS.map(genItem), ...data.audios.map(reelItem).slice(0, 10), ...catalogue.slice(0, 15).map(extItem)];
+    else if (tab === 'saved') items = readList(MUSIC_SAVED);
+    else items = readList(MUSIC_RECENT);
+    const seen = new Set();
+    items = items.filter(x => !seen.has(x.id) && seen.add(x.id));
+    list.replaceChildren(...(items.length ? items.map(row) : [el('div', 'mp-none', tab === 'saved' ? (LANG === 'en' ? 'Tap 🔖 on a sound to keep it here.' : 'কোনো সাউন্ডে 🔖 চাপলে এখানে থাকবে।') : tab === 'recent' ? (LANG === 'en' ? 'Sounds you use show up here.' : 'যে সাউন্ড ব্যবহার করবেন, এখানে আসবে।') : (LANG === 'en' ? 'Nothing found.' : 'কিছু পাওয়া যায়নি।'))]));
+    if (!data.catalogue && tab === 'hot' && !needle) list.appendChild(el('div', 'mp-note', LANG === 'en' ? 'Popular film songs need a licence from the music labels, so they are not here. BD Map Music, your own uploads and reels’ original sounds are free to use.' : 'সিনেমা ও জনপ্রিয় গান ব্যবহারের জন্য গানের কোম্পানির লাইসেন্স লাগে, তাই সেগুলো এখানে নেই। BD Map Music, নিজের আপলোড আর রিলের মূল সাউন্ড সবাই ব্যবহার করতে পারেন।'));
+  }
+  for (const [k, bn, en] of [['hot', 'জনপ্রিয়', 'Hot'], ['you', 'আপনার জন্য', 'For you'], ['saved', 'সেভ করা', 'Saved'], ['recent', 'সাম্প্রতিক', 'Recent']]) {
+    const b = el('button', null, LANG === 'en' ? en : bn);
+    b.dataset.t = k;
+    b.addEventListener('click', () => { tab = k; draw(); });
+    tabs.appendChild(b);
+  }
+  let timer = null;
+  qi.addEventListener('input', () => {
+    q = qi.value;
+    draw();
+    clearTimeout(timer);
+    if (data.catalogue && q.trim().length >= 2) timer = setTimeout(async () => { try { catalogue = (await exploreApi('music?q=' + encodeURIComponent(q.trim()))).tracks; draw(); } catch { /* local results stay */ } }, 350);
   });
-  const reels = el('div');
-  list.append(el('div', 'info-label', 'রিলের মূল অডিও — অন্যদের রিলের শব্দ দিয়ে বানান'), reels);
-  // Where the music starts, in seconds.
-  const start = Object.assign(el('input'), { type: 'range', min: 0, max: 60, step: 1, value: st.music ? st.music.start || 0 : 0 });
-  const startLabel = el('span', 'mp-start-v', `${num(start.value)} সেকেন্ড`);
-  start.addEventListener('input', () => { startLabel.textContent = `${num(start.value)} সেকেন্ড`; });
-  const startBox = el('label', 'mp-start');
-  startBox.append(el('span', null, 'কোথা থেকে বাজবে'), start, startLabel);
-  const actions = [];
-  if (st.music) actions.push(button('trash', 'গান সরান', () => { stopPreview(); st.music = null; st.orig = true; closeModal(); done(); }, true));
-  openModal('গান বাছুন', 'রিল বা পোস্টের সাথে বাজবে', [startBox, list], actions);
-  $('modal').classList.add('music-modal');
-  const obs = new MutationObserver(() => { if ($('modal').hidden) { stopPreview(); obs.disconnect(); } });
-  obs.observe($('modal'), { attributes: true, attributeFilter: ['hidden'] });
+  const head = el('div', 'mp-head');
+  head.append(tabs);
+  const remove = el('button', 'mp-remove', LANG === 'en' ? 'Remove music' : 'গান সরান');
+  remove.hidden = !st.music;
+  remove.addEventListener('click', () => { stopPreview(); st.music = null; st.orig = true; close(); done(); });
+  sheet.append(grab, search, head, upload, list, remove);
+  st.box.appendChild(sheet);
+  draw();
   try {
-    const { audios } = await exploreApi('audios');
-    if (!audios.length) { reels.appendChild(el('div', 'empty', 'এখনো কোনো রিল নেই।')); return; }
-    for (const a of audios) {
-      const art = el('span', 'mp-art pic');
-      if (a.poster) art.style.backgroundImage = `url("${a.poster}")`;
-      else art.appendChild(avatar(a.user, 'sm'));
-      reels.appendChild(row({ id: a.id, start: 0, src: a.src, by: a.user.name }, `${a.user.name} · ${LANG === 'en' ? 'Original audio' : 'মূল অডিও'}`, a.uses ? `${num(a.uses)}টি রিলে ব্যবহার হয়েছে` : agoText(a.created), art));
-    }
-  } catch { reels.appendChild(el('div', 'empty', 'দেখানো যায়নি।')); }
+    data = await exploreApi('audios');
+    if (data.catalogue) catalogue = (await exploreApi('music')).tracks;
+    draw();
+  } catch { /* the app's own tracks are already there */ }
+}
+function sbtnLight(icon, label, fn) { const b = el('button', 'mp-icon'); b.innerHTML = svg(icon); b.setAttribute('aria-label', label); b.title = label; b.addEventListener('click', e => { e.stopPropagation(); fn(); }); return b; }
+
+// A sound of one's own: an audio file from the phone, with a title and a promise about the rights.
+function uploadSound(done) {
+  const chooser = Object.assign(el('input'), { type: 'file', accept: 'audio/*' });
+  chooser.addEventListener('change', () => {
+    const file = chooser.files[0];
+    if (!file) return;
+    if (file.size > 10e6) { chatToast(ME, 'ফাইলটি ১০ এমবির বেশি।'); return; }
+    const [titleBox, title] = field('সাউন্ডের নাম', { maxLength: 80, value: file.name.replace(/\.[^.]+$/, '').slice(0, 80) });
+    const rights = Object.assign(el('input'), { type: 'checkbox' });
+    const label = el('label', 'mp-rights');
+    label.append(rights, el('span', null, 'এই সাউন্ডটি আমার নিজের, অথবা ব্যবহারের অনুমতি আমার আছে। অন্যের কপিরাইট করা গান দিলে তা সরিয়ে দেওয়া হবে।'));
+    const note = el('div', 'form-note');
+    const go = button('send', 'আপলোড করুন', async () => {
+      if (!rights.checked) { note.className = 'form-note bad'; note.textContent = 'আগে নিশ্চিত করুন যে সাউন্ডটি ব্যবহারের অনুমতি আছে।'; return; }
+      go.disabled = true;
+      note.className = 'form-note'; note.textContent = 'আপলোড হচ্ছে…';
+      try {
+        const secs = await new Promise(r => { const a = new Audio(URL.createObjectURL(file)); a.onloadedmetadata = () => r(a.duration || 0); a.onerror = () => r(0); setTimeout(() => r(0), 4000); });
+        const up = await fetch('api/chat/upload', { method: 'POST', headers: { 'Content-Type': file.type || 'audio/mpeg', 'X-Name': encodeURIComponent(file.name) }, body: file }).then(r => r.json());
+        if (up.kind !== 'audio') throw new Error('type');
+        const { sound } = await exploreApi('sound', { media: up.media, title: title.value, secs, rights: true });
+        closeModal();
+        done({ ...sound, secs });
+      } catch (e) { go.disabled = false; note.className = 'form-note bad'; note.textContent = e.message === 'type' ? 'MP3, M4A, OGG বা WebM অডিও দিন।' : 'আপলোড করা যায়নি।'; }
+    });
+    openModal('নিজের সাউন্ড', 'অন্যরাও এটি দিয়ে রিল বানাতে পারবেন', [titleBox, label, note], [go]);
+  });
+  chooser.click();
 }

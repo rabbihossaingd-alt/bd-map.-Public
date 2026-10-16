@@ -433,7 +433,9 @@ async function openReels(startId, user) {
     audio.append(Object.assign(el('i'), { innerHTML: svg('note') }), document.createTextNode(p.music ? soundLabel(p) : `${p.user.name} · ${LANG === 'en' ? 'Original audio' : 'মূল অডিও'}`));
     // Instagram's "use audio": a new reel with this sound (another reel's own sound, or the same app track).
     audio.addEventListener('click', () => {
-      const music = p.music ? (p.music.label.kind === 'gen' ? { id: 'gen:' + p.music.label.track, start: p.music.start } : p.music.label.kind === 'post' ? { id: 'post:' + p.music.label.post, start: p.music.start, src: p.music.label.src, by: p.music.label.by } : null)
+      const l = p.music && p.music.label;
+      const music = p.music ? (l.kind === 'gen' ? { id: 'gen:' + l.track, start: p.music.start } : l.kind === 'post' ? { id: 'post:' + l.post, start: p.music.start, src: l.src, by: l.by }
+        : l.kind === 'file' ? { id: p.music.id, start: p.music.start, src: l.src, title: l.title, by: l.by } : null)
         : { id: 'post:' + p.id, start: 0, src: p.src, by: p.user.name };
       closeReels();
       if (music) openNewPost({ music, mode: 'reel' });

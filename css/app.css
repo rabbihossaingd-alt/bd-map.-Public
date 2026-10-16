@@ -2218,3 +2218,79 @@ body.studio-open { overflow: hidden; }
 .mp-play svg { width: 14px; height: 14px; fill: currentColor; stroke: none; }
 .mp-play.on { background: var(--ig-blue); color: #fff; animation: pulse-soft 1.4s ease-in-out infinite; }
 .mp-row .pill-btn { padding: 7px 14px; border-radius: 10px; background: var(--ig-blue); }
+
+/* ================= Camera effects, the effect sheet, the music sheet ================= */
+/* anything opened from the studio sits above it */
+body.studio-open #modal { z-index: 3500; }
+body.studio-open .chat-toast { z-index: 3600; }
+
+.st-camera canvas.st-canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }   /* what you see is what is saved */
+.st-camera video.st-src { position: absolute; width: 2px; height: 2px; opacity: 0; pointer-events: none; left: 0; top: 0; }
+.st-fxname { position: absolute; left: 0; right: 0; top: 42%; text-align: center; font-size: 22px; font-weight: 800; text-shadow: 0 2px 14px rgba(0, 0, 0, .6); opacity: 0; pointer-events: none; }
+.st-fxname.show { animation: fxname 1.4s var(--ease); }
+@keyframes fxname { 0% { opacity: 0; transform: scale(.9); } 15%, 70% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+.st-status { position: absolute; left: 50%; top: calc(110px + env(safe-area-inset-top)); transform: translateX(-50%); padding: 7px 14px; border-radius: 999px; background: rgba(0, 0, 0, .6); font-size: 13px; font-weight: 600; z-index: 2; }
+.st-status[hidden] { display: none; }
+
+/* the effects beside the shutter */
+.st-ring-strip { display: flex; gap: 12px; overflow-x: auto; padding: 6px 18px 14px; scrollbar-width: none; scroll-snap-type: x mandatory; transition: opacity .2s; }
+.st-ring-strip::-webkit-scrollbar { display: none; }
+.st-ring-strip.hide { opacity: 0; pointer-events: none; }
+.st-fx { flex: none; width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center; font-size: 26px; scroll-snap-align: center; border: 2.5px solid rgba(255, 255, 255, .25); transition: transform .2s var(--ease), border-color .2s; box-shadow: 0 6px 18px rgba(0, 0, 0, .35); }
+.st-fx.on { border-color: #fff; transform: scale(1.12); }
+
+/* sheets inside the studio (effects, music) */
+.st-sheet { position: absolute; left: 0; right: 0; bottom: 0; z-index: 10; max-height: 72%; display: flex; flex-direction: column; border-radius: 22px 22px 0 0; background: #1c1c1e; color: #fff;
+  padding-bottom: env(safe-area-inset-bottom); box-shadow: 0 -20px 60px rgba(0, 0, 0, .5); animation: sheet-up .32s var(--ease); transition: transform .25s var(--ease); }
+.st-sheet.out { transform: translateY(105%); }
+@keyframes sheet-up { from { transform: translateY(40%); opacity: 0; } to { transform: none; opacity: 1; } }
+.st-sheet .grab { flex: none; width: 100%; height: 22px; display: grid; place-items: center; cursor: pointer; }
+.st-sheet .grab::before { content: ''; width: 40px; height: 4.5px; border-radius: 999px; background: rgba(255, 255, 255, .3); }
+.fx-tabs, .mp-tabs { flex: none; display: flex; gap: 20px; padding: 2px 18px 10px; overflow-x: auto; scrollbar-width: none; border-bottom: 1px solid rgba(255, 255, 255, .08); }
+.fx-tabs button, .mp-tabs button { flex: none; padding: 6px 0; font-weight: 700; font-size: 15px; color: rgba(255, 255, 255, .5); border-bottom: 2px solid transparent; }
+.fx-tabs button.on, .mp-tabs button.on { color: #fff; border-color: #fff; }
+.fx-grid { flex: 1; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; padding: 14px; }
+.fx-cell { display: grid; justify-items: center; gap: 7px; padding: 12px 6px; border-radius: 16px; background: rgba(255, 255, 255, .06); border: 2px solid transparent; transition: border-color .2s, background .2s; }
+.fx-cell.on { border-color: var(--ig-blue); background: rgba(0, 149, 246, .12); }
+.fx-face { width: 66px; height: 66px; border-radius: 50%; display: grid; place-items: center; font-size: 32px; border: 3px solid rgba(255, 255, 255, .85); }
+.fx-cell .nm { font-size: 12.5px; font-weight: 600; text-align: center; }
+.fx-done { flex: none; margin: 4px 14px 12px; height: 46px; border-radius: 12px; background: #fff; color: #000; font-weight: 700; }
+
+/* music: a light sheet, as on TikTok */
+.st-sheet.light { background: var(--bg); color: var(--ink); max-height: 84%; }
+:root[data-theme=light] .st-sheet.light { background: #fff; }
+.st-sheet.light .grab::before { background: var(--line); }
+.mp-sheet .mp-tabs { border-color: var(--line); }
+.mp-sheet .mp-tabs button { color: var(--muted); } .mp-sheet .mp-tabs button.on { color: var(--ink); border-color: var(--ink); }
+.mp-search { flex: none; display: flex; align-items: center; gap: 8px; margin: 2px 16px 10px; height: 40px; padding: 0 12px; border-radius: 10px; background: var(--raised); color: var(--muted); }
+.mp-search .ic { display: grid; font-size: 16px; }
+.mp-search input { flex: 1; min-width: 0; border: 0; outline: none; background: none; color: var(--ink); font: inherit; font-size: 16px; }
+.mp-upload { flex: none; display: flex; align-items: center; gap: 10px; margin: 10px 16px 2px; padding: 10px 12px; border-radius: 12px; border: 1.5px dashed var(--line); color: var(--ink-2); font-weight: 600; font-size: 14px; }
+.mp-upload .ic { display: grid; font-size: 18px; color: var(--ig-blue); }
+.mp-sheet .mp-list { flex: 1; overflow-y: auto; padding: 4px 6px 10px; gap: 0; }
+.mp-sheet .mp-row { padding: 9px 10px; border-radius: 12px; cursor: pointer; }
+.mp-sheet .mp-row:hover { background: color-mix(in srgb, var(--raised) 60%, transparent); }
+.mp-sheet .mp-row.playing { background: color-mix(in srgb, #ff2d55 9%, transparent); }
+.mp-sheet .mp-row.playing .t b { color: #ff2d55; }
+.mp-sheet .mp-row.picked .mp-use { background: var(--ig-blue); color: #fff; }
+.mp-sheet .mp-art { position: relative; width: 52px; height: 52px; border-radius: 10px; }
+.mp-sheet .mp-art .avatar { width: 100%; height: 100%; border-radius: 10px; }
+.mp-eq { position: absolute; inset: 0; display: none; align-items: flex-end; justify-content: center; gap: 3px; padding-bottom: 14px; background: rgba(0, 0, 0, .35); border-radius: inherit; }
+.mp-row.playing .mp-eq { display: flex; }
+.mp-eq b { width: 3.5px; height: 10px; border-radius: 2px; background: #fff; animation: eq .7s ease-in-out infinite alternate; }
+.mp-eq b:nth-child(2) { animation-delay: .2s; } .mp-eq b:nth-child(3) { animation-delay: .4s; }
+@keyframes eq { from { height: 5px; } to { height: 20px; } }
+.mp-sheet .mp-row .t span { font-size: 12.5px; }
+.mp-icon { flex: none; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; color: var(--ink-2); font-size: 19px; }
+.mp-icon svg { width: 1em; height: 1em; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.mp-icon.on { color: #f5a524; } .mp-icon.on svg { fill: currentColor; }
+.mp-use { flex: none; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: var(--raised); color: var(--ink); font-size: 16px; }
+.mp-use svg { width: 1em; height: 1em; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.mp-trim { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; margin: 0 12px 6px 74px; padding: 8px 12px; border-radius: 10px; background: var(--raised); font-size: 13px; animation: rise .2s var(--ease); }
+.mp-trim input { accent-color: #ff2d55; width: 100%; }
+.mp-none { padding: 40px 20px; text-align: center; color: var(--muted); }
+.mp-note { margin: 12px 10px 4px; padding: 12px; border-radius: 12px; background: var(--raised); font-size: 12.5px; line-height: 1.5; color: var(--ink-2); }
+.mp-remove { flex: none; margin: 4px 16px 12px; height: 42px; border-radius: 12px; color: #ff453a; font-weight: 700; background: color-mix(in srgb, #ff453a 10%, transparent); }
+.mp-remove[hidden] { display: none; }
+.mp-rights { display: flex; gap: 10px; align-items: flex-start; font-size: 13.5px; line-height: 1.5; color: var(--ink-2); margin: 10px 0; }
+.mp-rights input { margin-top: 4px; width: 18px; height: 18px; accent-color: var(--ig-blue); }

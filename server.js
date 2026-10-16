@@ -1255,12 +1255,35 @@ for (const [col, def] of [['fx', "TEXT NOT NULL DEFAULT ''"], ['music', "TEXT NO
   if (!db.prepare("SELECT COUNT(*) AS n FROM pragma_table_info('posts') WHERE name = ?").get(col).n) db.exec(`ALTER TABLE posts ADD COLUMN ${col} ${def}`);
 const FX = ['', 'bright', 'warm', 'cool', 'mono', 'vintage', 'drama', 'soft', 'sunset', 'green', 'fade'];
 const GEN_TRACKS = ['dhaka-nights', 'sunrise', 'river-lofi', 'baul-road', 'monsoon', 'festival', 'tea-garden', 'city-run'];
-// What a post may say about its sound: a known track, or the original sound of a video post that still exists.
+// Sounds people upload for their reels (they confirm the rights), and tracks from Jamendo's Creative Commons
+// catalogue, kept here once someone uses them so the post still knows its title and where to play it from.
+db.exec(`CREATE TABLE IF NOT EXISTS sounds (id INTEGER PRIMARY KEY, user INTEGER NOT NULL, file TEXT NOT NULL, title TEXT NOT NULL, secs INTEGER NOT NULL DEFAULT 0, created INTEGER NOT NULL)`);
+db.exec(`CREATE TABLE IF NOT EXISTS ext_tracks (id TEXT PRIMARY KEY, title TEXT NOT NULL, artist TEXT NOT NULL, image TEXT NOT NULL DEFAULT '', audio TEXT NOT NULL, secs INTEGER NOT NULL DEFAULT 0, licence TEXT NOT NULL DEFAULT '')`);
+// What a post may say about its sound: a known track, an uploaded sound, a Jamendo track, or another video's own sound.
 function cleanMusic(m) {
   const s = String(m || '');
   if (s.startsWith('gen:') && GEN_TRACKS.includes(s.slice(4))) return s;
   if (/^post:\d+$/.test(s) && db.prepare("SELECT 1 FROM posts WHERE id = ? AND kind = 'video'").get(Number(s.slice(5)))) return s;
+  if (/^snd:\d+$/.test(s) && db.prepare('SELECT 1 FROM sounds WHERE id = ?').get(Number(s.slice(4)))) return s;
+  if (/^jam:\d+$/.test(s) && db.prepare('SELECT 1 FROM ext_tracks WHERE id = ?').get(s)) return s;
   return '';
+}
+const usesOf = id => count('SELECT COUNT(*) AS n FROM posts WHERE music = ?', id);
+// Jamendo (jamendo.com): free music under Creative Commons licences, searchable. Needs JAMENDO_ID (a free
+// client id from devportal.jamendo.com). Results are kept in ext_tracks so posts can refer to them.
+async function jamendo(params) {
+  if (!process.env.JAMENDO_ID) return [];
+  const q = new URLSearchParams({ client_id: process.env.JAMENDO_ID, format: 'json', limit: '30', audioformat: 'mp32', imagesize: '200', include: 'licenses', ...params });
+  try {
+    const r = await fetch('https://api.jamendo.com/v3.0/tracks/?' + q, { signal: AbortSignal.timeout(6000) });
+    const d = await r.json();
+    return (d.results || []).filter(t => t.audio && t.audiodownload_allowed !== false).map(t => {
+      const row = { id: 'jam:' + t.id, title: String(t.name || '').slice(0, 120), artist: String(t.artist_name || '').slice(0, 80), image: t.image || t.album_image || '', audio: t.audio, secs: Number(t.duration) || 0, licence: t.license_ccurl || '' };
+      db.prepare('INSERT INTO ext_tracks (id, title, artist, image, audio, secs, licence) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO UPDATE SET audio = excluded.audio, image = excluded.image')
+        .run(row.id, row.title, row.artist, row.image, row.audio, row.secs, row.licence);
+      return { ...row, uses: usesOf(row.id) };
+    });
+  } catch (e) { console.error('jamendo failed:', e.message); return []; }
 }
 db.exec(`CREATE TABLE IF NOT EXISTS post_saves (post INTEGER NOT NULL, user INTEGER NOT NULL, made INTEGER NOT NULL, PRIMARY KEY (post, user))`);
 // A story is a photo or video that shows for 24 hours and is then deleted, file and all.
@@ -1288,6 +1311,14 @@ const shownPost = p => ({ id: p.id, kind: p.kind, src: p.file ? 'media/' + p.fil
 // "dhaka-nights" for the app's own tracks; "<name> · original audio" (with where to find it) for another reel's sound.
 function musicLabel(m) {
   if (m.startsWith('gen:')) return { kind: 'gen', track: m.slice(4) };
+  if (m.startsWith('snd:')) {
+    const s = db.prepare('SELECT s.file, s.title, u.name FROM sounds s JOIN users u ON u.id = s.user WHERE s.id = ?').get(Number(m.slice(4)));
+    return s ? { kind: 'file', src: 'media/' + s.file, title: s.title, by: s.name } : { kind: 'gone' };
+  }
+  if (m.startsWith('jam:')) {
+    const t = db.prepare('SELECT * FROM ext_tracks WHERE id = ?').get(m);
+    return t ? { kind: 'file', src: t.audio, title: t.title, by: t.artist, licence: t.licence } : { kind: 'gone' };
+  }
   const src = db.prepare('SELECT p.id, p.file, u.name FROM posts p JOIN users u ON u.id = p.user WHERE p.id = ?').get(Number(m.slice(5)));
   return src ? { kind: 'post', post: src.id, src: 'media/' + src.file, by: src.name } : { kind: 'gone' };
 }
@@ -1314,8 +1345,17 @@ async function exploreApi(req, res, action, query) {
     if (action === 'audios') {
       const rows = db.prepare(`SELECT p.id, p.file, p.poster, p.caption, p.created, u.name, u.pic_v, u.id AS uid, (SELECT COUNT(*) FROM posts x WHERE x.music = 'post:' || p.id) AS uses
         FROM posts p JOIN users u ON u.id = p.user WHERE p.kind = 'video' AND p.orig = 1 AND p.music = '' AND u.banned = 0 ORDER BY uses DESC, p.id DESC LIMIT 30`).all();
-      return json(res, 200, { tracks: GEN_TRACKS, audios: rows.map(r => ({ id: 'post:' + r.id, post: r.id, src: 'media/' + r.file, poster: r.poster ? 'media/' + r.poster : '', uses: r.uses, created: r.created,
-        user: { id: r.uid, name: r.name, pic: r.pic_v } })) });
+      const sounds = db.prepare(`SELECT s.*, u.name, u.pic_v, (SELECT COUNT(*) FROM posts x WHERE x.music = 'snd:' || s.id) AS uses FROM sounds s JOIN users u ON u.id = s.user
+        WHERE u.banned = 0 ORDER BY uses DESC, s.id DESC LIMIT 40`).all();
+      const used = db.prepare("SELECT t.*, (SELECT COUNT(*) FROM posts x WHERE x.music = t.id) AS uses FROM ext_tracks t WHERE uses > 0 ORDER BY uses DESC LIMIT 20").all();
+      return json(res, 200, { tracks: GEN_TRACKS.map(id => ({ id, uses: usesOf('gen:' + id) })), catalogue: !!process.env.JAMENDO_ID,
+        audios: rows.map(r => ({ id: 'post:' + r.id, post: r.id, src: 'media/' + r.file, poster: r.poster ? 'media/' + r.poster : '', uses: r.uses, created: r.created, user: { id: r.uid, name: r.name, pic: r.pic_v } })),
+        sounds: sounds.map(s => ({ id: 'snd:' + s.id, src: 'media/' + s.file, title: s.title, secs: s.secs, uses: s.uses, created: s.created, user: { id: s.user, name: s.name, pic: s.pic_v } })),
+        tracksUsed: used.map(t => ({ id: t.id, title: t.title, artist: t.artist, image: t.image, audio: t.audio, secs: t.secs, uses: t.uses })) });
+    }
+    if (action === 'music') {                          // Jamendo: this week's most played, or a search
+      const q = (query.get('q') || '').trim().slice(0, 60);
+      return json(res, 200, { catalogue: !!process.env.JAMENDO_ID, tracks: await jamendo(q ? { search: q, order: 'relevance' } : { order: 'popularity_week' }) });
     }
     if (action === 'stories') {
       // Everyone's stories from the last 24 hours, grouped by person: mine first, then the newest.
@@ -1405,6 +1445,14 @@ async function exploreApi(req, res, action, query) {
       .run(me.id, up.kind, up.name, poster, cleanText(body.caption, 500), place ? cleanText(place.label, 80) : '', place ? place.lat : null, place ? place.lon : null, now, fx, music, mstart, orig);
     db.prepare('UPDATE uploads SET used = 1 WHERE name = ?').run(up.name);
     return json(res, 200, { post: shownPost(db.prepare(`${POST_SELECT} AND p.id = ?2`).get(me.id, Number(lastInsertRowid))) });
+  }
+  if (action === 'sound') {                          // a sound of one's own for reels (the uploader confirms the rights)
+    const up = db.prepare("SELECT * FROM uploads WHERE name = ? AND user = ? AND used = 0 AND kind = 'audio'").get(String(body.media), me.id);
+    if (!up || body.rights !== true) return json(res, 400, { error: 'media' });
+    if (count('SELECT COUNT(*) AS n FROM sounds WHERE user = ? AND created > ?', me.id, now - 864e5) >= 20) return json(res, 429, { error: 'slow' });
+    db.prepare('UPDATE uploads SET used = 1 WHERE name = ?').run(up.name);
+    const id = Number(db.prepare('INSERT INTO sounds (user, file, title, secs, created) VALUES (?, ?, ?, ?, ?)').run(me.id, up.name, cleanText(body.title, 80) || 'নিজের সাউন্ড', Math.max(0, Math.min(600, Math.round(Number(body.secs) || 0))), now).lastInsertRowid);
+    return json(res, 200, { sound: { id: 'snd:' + id, src: 'media/' + up.name, title: cleanText(body.title, 80) || 'নিজের সাউন্ড', user: { id: me.id, name: me.name, pic: me.pic_v } } });
   }
   if (action === 'story-delete') {
     const st = db.prepare('SELECT * FROM stories WHERE id = ?').get(Number(body.id));
@@ -1804,6 +1852,8 @@ async function adminApi(req, res, action, query) {
     }
     if (action === 'stories') return json(res, 200, { stories: db.prepare('SELECT s.id, s.kind, s.file, s.poster, s.created, u.id AS uid, u.name, u.email, u.pic_v AS pic FROM stories s JOIN users u ON u.id = s.user ORDER BY s.id DESC LIMIT 200').all()
       .map(s => ({ id: s.id, kind: s.kind, src: 'media/' + s.file, poster: s.poster ? 'media/' + s.poster : '', created: s.created, user: { id: s.uid, name: s.name, email: s.email, pic: s.pic } })) });
+    if (action === 'sounds') return json(res, 200, { sounds: db.prepare('SELECT s.id, s.title, s.file, s.created, u.id AS uid, u.name, u.email, (SELECT COUNT(*) FROM posts x WHERE x.music = \'snd:\' || s.id) AS uses FROM sounds s JOIN users u ON u.id = s.user ORDER BY s.id DESC LIMIT 200').all()
+      .map(s => ({ id: s.id, title: s.title, src: 'media/' + s.file, created: s.created, uses: s.uses, user: { id: s.uid, name: s.name, email: s.email } })) });
     if (action === 'comments') return json(res, 200, { comments: db.prepare(`SELECT c.id, c.body, c.created, c.post, u.id AS uid, u.name, u.email, u.pic_v AS pic FROM post_comments c JOIN users u ON u.id = c.user ORDER BY c.id DESC LIMIT 200`).all()
       .map(c => ({ id: c.id, body: c.body, created: c.created, post: c.post, user: { id: c.uid, name: c.name, email: c.email, pic: c.pic } })) });
     if (action === 'sessions') {                        // where one person is signed in
@@ -1921,6 +1971,11 @@ async function adminApi(req, res, action, query) {
   if (action === 'story') {
     const st = db.prepare('SELECT * FROM stories WHERE id = ?').get(Number(body.id));
     if (st) { deleteStory(st); log('story removed', 'story ' + st.id); }
+    return json(res, 200, { ok: true });
+  }
+  if (action === 'sound') {
+    const s = db.prepare('SELECT * FROM sounds WHERE id = ?').get(Number(String(body.id).replace('snd:', '')));
+    if (s) { unlinkMedia(s.file); db.prepare('DELETE FROM sounds WHERE id = ?').run(s.id); db.prepare("UPDATE posts SET music = '' WHERE music = ?").run('snd:' + s.id); log('sound removed', 'sound ' + s.id, s.title); }
     return json(res, 200, { ok: true });
   }
   if (action === 'comment') {
