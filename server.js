@@ -1355,7 +1355,11 @@ async function exploreApi(req, res, action, query) {
     }
     if (action === 'music') {                          // Jamendo: this week's most played, or a search
       const q = (query.get('q') || '').trim().slice(0, 60);
-      return json(res, 200, { catalogue: !!process.env.JAMENDO_ID, tracks: await jamendo(q ? { search: q, order: 'relevance' } : { order: 'popularity_week' }) });
+      let tracks = await jamendo(q ? { search: q, order: 'relevance' } : { order: 'popularity_week' });
+      // The weekly chart can come back empty; then the all-time favourites, then popular pop tracks.
+      if (!q && !tracks.length) tracks = await jamendo({ order: 'popularity_total' });
+      if (!q && !tracks.length) tracks = await jamendo({ tags: 'pop', order: 'popularity_total' });
+      return json(res, 200, { catalogue: !!process.env.JAMENDO_ID, tracks });
     }
     if (action === 'stories') {
       // Everyone's stories from the last 24 hours, grouped by person: mine first, then the newest.
