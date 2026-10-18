@@ -3767,3 +3767,8 @@ button.dg-wiki { background: none; border: 0; padding: 0; cursor: pointer; font:
   body.trip-print .trip-acts { display: none; }
 }
 .trip-cost .per-head span, .trip-cost .per-head b { color: #fff !important; -webkit-text-fill-color: #fff; background: none !important; }
+.pl-facts dl { display: grid; grid-template-columns: minmax(96px, 34%) 1fr; margin: 0; border-radius: 16px; overflow: hidden; border: 1px solid var(--tx-line, var(--line)); }
+.pl-facts dt, .pl-facts dd { margin: 0; padding: 11px 14px; font-size: 14px; line-height: 1.55; border-top: 1px solid var(--tx-line, var(--line)); }
+.pl-facts dt { font-weight: 700; color: var(--muted); background: color-mix(in srgb, var(--ink) 4%, transparent); }
+.pl-facts dd { font-weight: 600; color: var(--ink); }
+.pl-facts dt:first-of-type, .pl-facts dt:first-of-type + dd { border-top: 0; }

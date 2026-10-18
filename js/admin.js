@@ -155,7 +155,7 @@ const PAGES = {
     task(o.ticketsOpen, 'সাপোর্টে উত্তর বাকি', 'ব্যবহারকারীরা অপেক্ষা করছেন', () => show('support'), 'warn');
     task(o.reportsOpen, 'রিপোর্ট দেখা বাকি', 'অভিযোগগুলো যাচাই করুন', () => show('reports'), 'bad');
     task(o.placePhotosWaiting, 'জায়গার ছবি দেখা বাকি', 'অনুমোদন দিন বা বাদ দিন', () => show('photos'), 'violet');
-    task(o.gemsWaiting, 'লুকানো রত্ন দেখা বাকি', 'নতুন জায়গার খোঁজ', () => show('gems'), 'violet');
+    task(o.gemsWaiting, 'মেঠোপথে নতুন জায়গা দেখা বাকি', 'নতুন জায়গার খোঁজ', () => show('gems'), 'violet');
     task(o.payoutsWaiting, 'টাকা পাঠানো বাকি', `মোট ৳${num(o.payoutsPendingTaka)}`, () => { PAGES.creators.state.tab = 'payouts'; show('creators'); }, 'warn');
     task(o.creatorsWaiting, 'ক্রিয়েটর আবেদন', 'অনুমোদন দিন বা বাতিল করুন', () => { PAGES.creators.state.tab = 'creators'; show('creators'); }, 'violet');
     task(o.verifyWaiting, 'ব্যাজের আবেদন', 'সাপোর্টে "ব্যাজ" বিষয়ের অনুরোধ', () => show('support'), 'violet');
@@ -356,7 +356,7 @@ const PAGES = {
     box.appendChild(grid);
   } },
 
-  gems: { title: 'লুকানো রত্ন', icon: 'flag', state: { status: 'pending' }, async draw(box) {
+  gems: { title: 'মেঠোপথ', icon: 'flag', state: { status: 'pending' }, async draw(box) {
     const st = this.state;
     const d = await api('gems?status=' + st.status);
     const badge = document.querySelector('#nav [data-page=gems] em');

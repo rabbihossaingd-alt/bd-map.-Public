@@ -301,7 +301,7 @@ const coverStyle = (img, division) => {
   };
   const kmText = km => km < 1 ? tl2(`${num(Math.round(km * 1000))} মিটার`, `${Math.round(km * 1000)} m`) : tl2(`${num(km, km < 10 ? 1 : 0)} কিমি`, `${km.toFixed(km < 10 ? 1 : 0)} km`);
 
-  // ---- "যেতে চাই": kept on this phone, and with the account when signed in (merged on sign-in) ----
+  // ---- "যাব একদিন" (someday): kept on this phone, and with the account when signed in (merged on sign-in) ----
   async function syncWants() {
     if (!ME) { renderWants(); return; }
     try { const { keys } = await placesPost('wants-merge', { keys: [...wanted()] }); setWanted(new Set(keys)); } catch { /* offline: the phone's list stays */ }
@@ -343,7 +343,7 @@ const coverStyle = (img, division) => {
     }));
   }
 
-  // ---- লুকানো রত্ন: places people know that the guide does not; each is checked by an admin first ----
+  // ---- মেঠোপথ: places people know that the guide does not; each is checked by an admin first ----
   const GEM_KINDS = [['water', 'ঝর্ণা', 'Waterfall'], ['river', 'নদী / সৈকত / লেক', 'River, beach or lake'], ['hill', 'পাহাড় / বন', 'Hills or forest'], ['heritage', 'ঐতিহাসিক স্থাপনা', 'Heritage'],
     ['faith', 'ধর্মীয় স্থান', 'Place of worship'], ['wetland', 'হাওর / বিল', 'Haor or wetland'], ['village', 'গ্রাম ও গ্রামীণ জীবন', 'Village life'], ['other', 'অন্যান্য', 'Other']];
   const kindName = k => { const x = GEM_KINDS.find(g => g[0] === k); return x ? tl2(x[1], x[2]) : ''; };
@@ -355,7 +355,7 @@ const coverStyle = (img, division) => {
     const c = el('button', 'dg-place gm-card');
     const ph = el('span', 'ph');
     photo(ph, g.photos[0], d.division, 500, kindArt(GEM_ART[g.kind] || g.name) || 'pin');
-    ph.appendChild(el('span', 'gm-badge', tl2('💎 লুকানো রত্ন', '💎 Hidden gem')));
+    ph.appendChild(el('span', 'gm-badge', tl2('🌿 মেঠোপথ', '🌿 Methopath')));
     const t = el('span', 't');
     t.append(el('b', 'no-tr', g.name), el('small', null, `${d.bn}${g.place ? ' · ' + g.place : ''}`));
     c.append(ph, t);
@@ -371,8 +371,8 @@ const coverStyle = (img, division) => {
     add.querySelector('.t').append(el('b', null, tl2('জায়গার খোঁজ দিন', 'Share a place')), el('small', null, tl2('অনুমোদন হলে ৫ পয়েন্ট', '5 points once approved')));
     add.addEventListener('click', () => openGemForm());
     rail.replaceChildren(add, ...gemsAll.map(gemCard));
-    $('dg-gem-n').textContent = gemsAll.length ? tl2(`স্থানীয়দের পাঠানো ${num(gemsAll.length)}টি জায়গা — আমাদের টিম যাচাই করেছে`, `${gemsAll.length} places sent by locals, checked by our team`)
-      : tl2('আপনার এলাকার এমন সুন্দর জায়গা, যার কথা খুব কম মানুষ জানে — আমাদের জানান। যাচাই করে আপনার নামসহ প্রকাশ করা হবে।', 'A beautiful place near you that few people know? Tell us — once checked it is published with your name.');
+    $('dg-gem-n').textContent = gemsAll.length ? tl2(`স্থানীয়দের চেনা ${num(gemsAll.length)}টি জায়গা — আমাদের টিম দেখে নিয়েছে`, `${gemsAll.length} places sent by locals, checked by our team`)
+      : tl2('আপনার গ্রাম বা উপজেলার কোনো জায়গা, যা গাইডবইয়ে নেই অথচ দেখার মতো? মেঠোপথে যোগ করুন — দেখে নিয়ে আপনার নামে প্রকাশ করব।', 'A place near you that no guidebook lists but everyone should see? Add it to Methopath — once checked it goes up under your name.');
     renderWants();
   }
 
@@ -422,14 +422,14 @@ const coverStyle = (img, division) => {
         const media = [];
         for (const [i, f] of files.entries()) { note.className = 'pl-givenote'; note.textContent = tl2(`ছবি ${num(i + 1)}/${num(files.length)} পাঠানো হচ্ছে…`, `Sending photo ${i + 1}/${files.length}…`); const b = await shrink(f); media.push(await uploadMedia(b, b.type || 'image/jpeg', () => {})); }
         await placesPost('gem', { district: district.value, name: name.value, kind: kind.value, where: where.value, about: about.value, how: how.value, lat: pos && pos.lat, lon: pos && pos.lon, media });
-        card.replaceChildren(x, Object.assign(el('div', 'gm-done'), { innerHTML: '<b>💎</b>' }), el('h3', null, tl2('ধন্যবাদ!', 'Thank you!')),
+        card.replaceChildren(x, Object.assign(el('div', 'gm-done'), { innerHTML: '<b>🌿</b>' }), el('h3', null, tl2('ধন্যবাদ!', 'Thank you!')),
           el('p', null, tl2('আমাদের টিম জায়গাটি যাচাই করে প্রকাশ করবে — তখন আপনার নামসহ সবাই দেখবে, আর আপনি পাবেন ৫ পয়েন্ট।', 'Our team will check it and publish it with your name — and you earn 5 points.')));
       } catch (e) {
         send.disabled = false; note.className = 'pl-givenote bad';
         note.textContent = e.message === 'slow' ? tl2('আজ অনেকগুলো পাঠিয়েছেন — কাল আবার চেষ্টা করুন।', 'You sent many today; try tomorrow.') : tl2('পাঠানো গেল না। ইন্টারনেট দেখে আবার চেষ্টা করুন।', 'Could not send; try again.');
       }
     });
-    card.append(x, el('h3', null, tl2('লুকানো রত্নের খোঁজ দিন', 'Share a hidden gem')), el('p', 'gm-lead', tl2('আপনার এলাকার যে সুন্দর জায়গার কথা খুব কম মানুষ জানে। যাচাই করে আপনার নামসহ প্রকাশ করা হবে।', 'A beautiful place few people know. It is checked, then published with your name.')),
+    card.append(x, el('h3', null, tl2('মেঠোপথে নতুন জায়গা দিন', 'Add a place to Methopath')), el('p', 'gm-lead', tl2('যে জায়গার পথ আপনি চেনেন, অন্যরা চেনে না — তার কথা লিখুন। দেখে নিয়ে আপনার নামে প্রকাশ করা হবে।', 'A place whose way you know and others do not — tell us about it. Once checked it goes up under your name.')),
       field(tl2('জেলা', 'District'), district), field(tl2('জায়গার নাম', 'Name of the place'), name), field(tl2('ধরন', 'Kind'), kind), field(tl2('কোথায়', 'Where'), where),
       field(tl2('জায়গাটির কথা', 'About it'), about), field(tl2('যাবেন কীভাবে', 'How to get there'), how, tl2('ঐচ্ছিক', 'optional')),
       el('span', 'gm-label', tl2('ছবি (৩টি পর্যন্ত, নিজের তোলা)', 'Photos (up to 3, your own)')), shots, chooser, locate, note, send);
@@ -467,7 +467,9 @@ const coverStyle = (img, division) => {
     gal.addEventListener('scroll', paintCount, { passive: true });
     if (s.img && s.gemId) addSlide(s.img, tl2(`ছবি: ${s.gemBy.name}`, `Photo: ${s.gemBy.name}`), '');
     for (const src of s.gemPhotos || []) addSlide(src, tl2(`ছবি: ${s.gemBy.name}`, `Photo: ${s.gemBy.name}`), '');
-    if (s.img && !s.gemId) addSlide(s.img, s.imgCaption ? tl2(`ছবি: ${s.imgCaption}`, `Photo: ${s.imgCaption}`) : tl2('ছবি: উইকিমিডিয়া কমন্স', 'Photo: Wikimedia Commons'), s.file ? commonsLink(s.file) : '');
+    const by = (who, lic) => who ? tl2(`ছবি: ${who}${lic ? ' · ' + lic : ''}`, `Photo: ${who}${lic ? ' · ' + lic : ''}`) : tl2('ছবি: উইকিমিডিয়া কমন্স', 'Photo: Wikimedia Commons');
+    if (s.img && !s.gemId) addSlide(s.img, s.imgCaption ? tl2(`ছবি: ${s.imgCaption}`, `Photo: ${s.imgCaption}`) : by(s.imgBy, s.imgLic), s.file ? commonsLink(s.file) : '');
+    for (const g of s.gallery || []) addSlide(g.img, by(g.by, g.lic), commonsLink(g.file));
     const empty = el('div', 'pl-empty');
     if (!s.img) {
       empty.append(Object.assign(el('span', 'ph-art'), { innerHTML: `<svg viewBox="0 0 24 24" aria-hidden="true">${kindArt(s.artName || s.name) || ''}</svg>` }));
@@ -485,16 +487,16 @@ const coverStyle = (img, division) => {
     head.appendChild(el('h2', 'no-tr', s.name));
     const badges = el('div', 'pl-badges');
     const rank = (g.sights || []).filter(t => (t.views || 0) > (s.views || 0)).length;
-    if (s.gemId) badges.append(el('span', 'pl-badge gem', tl2('💎 লুকানো রত্ন', '💎 Hidden gem')), el('span', 'pl-badge calm', kindName(s.gemKind)), el('span', 'pl-badge by', tl2(`${s.gemBy.name} জানিয়েছেন`, `shared by ${s.gemBy.name}`)));
-    if (s.views) badges.appendChild(el('span', 'pl-badge ' + (rank < 3 ? 'hot' : 'calm'), rank < 3 ? tl2('জেলার জনপ্রিয়', 'Popular here') : tl2('কম পরিচিত', 'Lesser known')));
+    if (s.gemId) badges.append(el('span', 'pl-badge gem', tl2('🌿 মেঠোপথ', '🌿 Methopath')), el('span', 'pl-badge calm', kindName(s.gemKind)), el('span', 'pl-badge by', tl2(`${s.gemBy.name} জানিয়েছেন`, `shared by ${s.gemBy.name}`)));
+    if (s.views) badges.appendChild(el('span', 'pl-badge ' + (rank < 3 ? 'hot' : 'calm'), rank < 3 ? tl2('সবার প্রিয়', 'Loved by many') : tl2('নিরিবিলি', 'Quiet find')));
     const rating = el('span', 'pl-badge rate'); rating.hidden = true;
     badges.appendChild(rating);
     head.appendChild(badges);
     // actions
     const acts = el('div', 'pl-acts');
     const want = el('button', 'pl-act want');
-    const paintWant = () => { const on = wanted().has(key); want.classList.toggle('on', on); want.replaceChildren(ic(on ? 'check' : 'plus'), el('span', null, on ? tl2('যেতে চাই — সেভ হয়েছে', 'Saved') : tl2('যেতে চাই', 'Want to go'))); };
-    want.addEventListener('click', () => { const on = !wanted().has(key); toggleWant(key, on); if (on) flash(ME ? tl2('“যেতে চাই” তালিকায় রাখা হলো — সব ডিভাইসে থাকবে', 'Saved — on all your devices') : tl2('“যেতে চাই” তালিকায় রাখা হলো', 'Saved to “want to go”')); paintWant(); });
+    const paintWant = () => { const on = wanted().has(key); want.classList.toggle('on', on); want.replaceChildren(ic(on ? 'check' : 'plus'), el('span', null, on ? tl2('যাব একদিন ✓', 'Saved') : tl2('যাব একদিন', 'Someday'))); };
+    want.addEventListener('click', () => { const on = !wanted().has(key); toggleWant(key, on); if (on) flash(ME ? tl2('“যাব একদিন” তালিকায় রাখা হলো — সব ডিভাইসে থাকবে', 'Saved — on all your devices') : tl2('“যাব একদিন” তালিকায় রাখা হলো', 'Saved to “want to go”')); paintWant(); });
     paintWant();
     acts.appendChild(want);
     const leave = fn => () => { for (const b of document.querySelectorAll('.dg-sheet')) b.remove(); document.body.classList.remove('reels-open'); fn(); };
@@ -522,10 +524,20 @@ const coverStyle = (img, division) => {
     if (s.views) fact('eye', tl2('উইকিপিডিয়ায় পড়া', 'Read on Wikipedia'), tl2(`${num(s.views)} বার`, `${s.views} times`), tl2('গত ৬০ দিনে', 'last 60 days'));
     if (glance.children.length) body.appendChild(glance);
 
+    // at a glance, from the article's infobox: built, architect, style, address ...
+    if (s.facts && s.facts.length) {
+      const t = el('section', 'pl-card pl-facts');
+      t.appendChild(el('h3', null, tl2('এক নজরে', 'At a glance')));
+      const dl = el('dl');
+      for (const [k, v] of s.facts) dl.append(el('dt', null, k), el('dd', 'no-tr', v));
+      t.append(dl, el('p', 'pl-muted pl-src', tl2('তথ্য: বাংলা উইকিপিডিয়ার নিবন্ধ', 'From the Bangla Wikipedia article')));
+      body.appendChild(t);
+    }
     // about
     if (s.text) {
       const about = el('section', 'pl-card');
-      about.append(el('h3', null, tl2('জায়গাটির কথা', 'About')), el('p', 'no-tr', s.text));
+      about.append(el('h3', null, tl2('জায়গাটির কথা', 'About')), Object.assign(el('p', 'no-tr', s.text), s.textLang === 'en' ? { lang: 'en' } : {}));
+      if (s.textLang === 'en') { const a = el('a', 'pl-link', tl2('বাংলা উইকিপিডিয়ায় এখনো নিবন্ধ নেই — ইংরেজি উইকিপিডিয়ায় পুরোটা পড়ুন ↗', 'Read it all on English Wikipedia ↗')); a.href = 'https://en.wikipedia.org/wiki/' + encodeURIComponent(s.enPage.replace(/ /g, '_')); a.target = '_blank'; a.rel = 'noopener'; about.appendChild(a); }
       if (s.page) { const more = el('button', 'pl-link', tl2('পুরো লেখা পড়ুন →', 'Read it all →')); more.addEventListener('click', () => openArticle(s.page, { title: s.name, img: s.img, file: s.file, sub: d.bn, place: s.lat != null ? s : null })); about.appendChild(more); }
       body.appendChild(about);
     }
@@ -534,7 +546,7 @@ const coverStyle = (img, division) => {
     const others = (g.sights || []).filter(t => t !== s).map(t => ({ t, km: s.lat != null && t.lat != null ? haversineKm(s, t) : null }))
       .sort((a, b) => (a.km ?? 1e9) - (b.km ?? 1e9) || (b.t.views || 0) - (a.t.views || 0)).slice(0, 8);
     if (others.length) {
-      body.appendChild(el('h3', 'pl-h', tl2('কাছাকাছি আরও যা দেখবেন', 'Also nearby')));
+      body.appendChild(el('h3', 'pl-h', tl2('আশেপাশে আরও', 'Around here')));
       const rail = el('div', 'pl-rail');
       for (const { t, km } of others) {
         const c = el('button', 'pl-mini');
@@ -587,7 +599,7 @@ const coverStyle = (img, division) => {
     // photos people took
     const giveBox = el('section', 'pl-card pl-givebox');
     const givenote = el('p', 'pl-givenote');
-    giveBox.append(el('h3', null, s.img ? tl2('আরও ভালো ছবি আছে?', 'Have a better photo?') : tl2('এই জায়গার প্রথম ছবিটি আপনিই দিন', 'Be the first to add a photo')),
+    giveBox.append(el('h3', null, s.img ? tl2('আপনার চোখে জায়গাটি', 'The place through your eyes') : tl2('এই জায়গার প্রথম ছবিটি আপনিই দিন', 'Be the first to add a photo')),
       el('p', null, tl2('নিজের তোলা ছবি পাঠান (একসাথে ৩টি পর্যন্ত)। আমাদের টিম দেখে অনুমোদন দিলে ছবিটি সবাই দেখবে, আর আপনি পাবেন প্রতিটিতে ৩ পয়েন্ট।', 'Send photos you took (up to 3). Once our team approves one, everyone sees it and you earn 3 points for each.')));
     const pick = el('button', 'btn pl-pick'); pick.append(ic('camera'), el('span', null, tl2('ছবি পাঠান', 'Send photos')));
     const chooser = Object.assign(el('input'), { type: 'file', accept: 'image/jpeg,image/png,image/webp', multiple: true, hidden: true });
@@ -711,6 +723,10 @@ const coverStyle = (img, division) => {
     been.addEventListener('click', () => { const set = visited(); if (set.has(d.id)) set.delete(d.id); else set.add(d.id); setVisited(set); paintBeen(); paintRing(); renderDivisions(); renderList(); });
     paintBeen();
     chips.appendChild(been);
+    if (d !== dhaka) {
+      const off = officialFare(dhaka, d), km = off ? off.km : haversineKm(dhaka, d) * 1.3, h = Math.round(km / 42 * 2) / 2;
+      chips.appendChild(el('span', null, tl2(`ঢাকা থেকে ${num(Math.round(km))} কিমি · বাসে ~${fmtMin(h * 60)}`, `${Math.round(km)} km from Dhaka · ~${fmtMin(h * 60)} by bus`)));
+    }
     if ((g.sights || []).length) chips.appendChild(el('span', null, tl2(`${num(g.sights.length)}টি দর্শনীয় স্থান`, `${g.sights.length} sights`)));
     if (gi.length) chips.appendChild(el('span', null, tl2(`${num(gi.length)}টি জিআই পণ্য`, `${gi.length} GI products`)));
     title.appendChild(chips);
@@ -737,7 +753,7 @@ const coverStyle = (img, division) => {
     if ((g.sights || []).length) {
       body.appendChild(el('h3', 'dg-h', tl2('কোথায় ঘুরবেন', 'Where to go')));
       body.appendChild(el('p', 'dg-note', g.near ? tl2('এই জেলার উইকিপিডিয়া নিবন্ধে দর্শনীয় স্থানের তালিকা নেই — তাই জেলা শহরের ১০ কিমির মধ্যে যেসব জায়গার নিবন্ধ আছে, সেগুলো; বেশি পড়া আগে।', 'This district’s Wikipedia article has no list of sights, so these are the places within 10 km of its town that have an article, the most-read first.')
-        : tl2('জেলার উইকিপিডিয়া নিবন্ধে যেসব দর্শনীয় স্থানের নাম আছে — সবচেয়ে বেশি পড়া আগে।', 'The sights the district’s Wikipedia article names — the most-read first.')));
+        : tl2('উইকিপিডিয়া আর উইকিমিডিয়া কমন্সে যেসব দর্শনীয় স্থানের খোঁজ আছে — সবচেয়ে বেশি পড়া আগে।', 'The sights found on Wikipedia and Wikimedia Commons — the most-read first.')));
       const grid = el('div', 'dg-sights');
       for (const s of g.sights) {
         const c = el('article', 'dg-sight' + (s.page === focusPage ? ' focus' : ''));
@@ -772,7 +788,7 @@ const coverStyle = (img, division) => {
     }
     // hidden gems people sent for this district
     const gemSec = el('section', 'dg-gemsec');
-    gemSec.append(el('h3', 'dg-h', tl2('💎 লুকানো রত্ন', '💎 Hidden gems')));
+    gemSec.append(el('h3', 'dg-h', tl2('🌿 মেঠোপথ', '🌿 Methopath')));
     const gemRail = el('div', 'dg-rail');
     const gemAdd = el('button', 'dg-place gm-add');
     gemAdd.append(Object.assign(el('span', 'ph'), { innerHTML: '<span class="gm-plus">+</span>' }), el('span', 't'));
