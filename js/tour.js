@@ -15,6 +15,7 @@
   const CITY_PRICES = [1200, 3000, 6000], TOWN_PRICES = [800, 1800, 3500];
   const CITIES = ['khulna', 'rajshahi', 'rangpur', 'barishal', 'mymensingh', 'cumilla', 'bogura', 'jashore', 'gazipur', 'narayanganj'];
   const hotelPrices = d => HOTEL_PRICES[d.id] || (CITIES.includes(d.id) ? CITY_PRICES : TOWN_PRICES);
+  window.tourHotelPrices = hotelPrices;   // the multi-district planner (trip.js) uses the same estimates
   // Districts with an airport that has scheduled domestic flights.
   const AIRPORTS = ['dhaka', 'chattogram', 'coxsbazar', 'sylhet', 'jashore', 'rajshahi', 'nilphamari', 'barishal'];
   const plan = { from: dhaka, to: districtById('coxsbazar'), people: 4, nights: 2, ac: false, roundTrip: true,

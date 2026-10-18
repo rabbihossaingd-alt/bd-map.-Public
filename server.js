@@ -1963,6 +1963,13 @@ async function adminApi(req, res, action, query) {
 
   if (req.method === 'GET') {
     if (action === 'me') return json(res, 200, { user: publicUser(me).user });
+    if (action === 'gems') {                          // hidden gems people sent: waiting, approved or turned down
+      const status = ['pending', 'ok', 'no'].includes(query.get('status')) ? query.get('status') : 'pending';
+      const rows = db.prepare(`SELECT g.*, u.name AS uname, u.email AS uemail, u.pic_v AS upic, u.points AS upoints FROM gems g JOIN users u ON u.id = g.user
+        WHERE g.status = ? ORDER BY ${status === 'pending' ? 'g.id' : 'g.decided DESC'} LIMIT 200`).all(status);
+      return json(res, 200, { gems: rows.map(g => ({ ...shownGem(g), decided: g.decided, user: { id: g.user, name: g.uname, email: g.uemail, pic: g.upic, points: g.upoints } })),
+        waiting: count("SELECT COUNT(*) AS n FROM gems WHERE status = 'pending'") });
+    }
     if (action === 'place-photos') {                  // photos of places, waiting for a yes or no (or the latest decided)
       const status = ['pending', 'ok', 'no'].includes(query.get('status')) ? query.get('status') : 'pending';
       const rows = db.prepare(`SELECT p.*, u.name AS uname, u.email AS uemail, u.pic_v AS upic, u.points AS upoints FROM place_photos p JOIN users u ON u.id = p.user
@@ -1979,7 +1986,7 @@ async function adminApi(req, res, action, query) {
         messages: count('SELECT COUNT(*) AS n FROM messages'), messagesToday: count('SELECT COUNT(*) AS n FROM messages WHERE sent >= ?', dayStart),
         friendships: count("SELECT COUNT(*) AS n FROM friends WHERE state = 'friends'"),
         ticketsOpen: count("SELECT COUNT(*) AS n FROM tickets WHERE status = 'open'"), tickets: count('SELECT COUNT(*) AS n FROM tickets'),
-        reportsOpen: count("SELECT COUNT(*) AS n FROM reports WHERE status = 'open'"), placePhotosWaiting: count("SELECT COUNT(*) AS n FROM place_photos WHERE status = 'pending'"),
+        reportsOpen: count("SELECT COUNT(*) AS n FROM reports WHERE status = 'open'"), placePhotosWaiting: count("SELECT COUNT(*) AS n FROM place_photos WHERE status = 'pending'"), gemsWaiting: count("SELECT COUNT(*) AS n FROM gems WHERE status = 'pending'"),
         ratings: count('SELECT COUNT(*) AS n FROM ratings'), fares: count('SELECT COUNT(*) AS n FROM fare_reports') + count('SELECT COUNT(*) AS n FROM contributions'),
         posts: count('SELECT COUNT(*) AS n FROM posts'), postsToday: count('SELECT COUNT(*) AS n FROM posts WHERE created >= ?', dayStart),
         signups: series('users', 'created', 14), chats: series('messages', 'sent', 14), support: series('tickets', 'created', 14),
@@ -2141,6 +2148,19 @@ async function adminApi(req, res, action, query) {
     if (!p) return json(res, 404, { error: 'not found' });
     deletePost(p);
     log('post removed', 'post ' + p.id, cleanText(p.caption, 80));
+    return json(res, 200, { ok: true });
+  }
+  if (action === 'gem') {                            // approve a hidden gem (its sender earns points) or turn it down
+    const g = db.prepare('SELECT * FROM gems WHERE id = ?').get(Number(body.id));
+    if (!g) return json(res, 404, { error: 'not found' });
+    const to = body.do === 'approve' ? 'ok' : body.do === 'reject' ? 'no' : '';
+    if (!to) return json(res, 400, { error: 'bad request' });
+    if (g.status !== to) {
+      db.prepare('UPDATE gems SET status = ?, decided = ?, by = ? WHERE id = ?').run(to, now, me.id, g.id);
+      if (to === 'ok') db.prepare('UPDATE users SET points = points + ? WHERE id = ?').run(POINTS_PER_GEM, g.user);
+      if (g.status === 'ok') db.prepare('UPDATE users SET points = MAX(0, points - ?) WHERE id = ?').run(POINTS_PER_GEM, g.user);
+      log(to === 'ok' ? 'gem approved' : 'gem rejected', 'gem ' + g.id, g.name);
+    }
     return json(res, 200, { ok: true });
   }
   if (action === 'place-photo') {                    // approve a place photo (its taker earns points) or turn it down
@@ -2392,8 +2412,74 @@ const placeKey = v => { const k = cleanText(v, 200); return /^[a-z]{3,20}\|.{2,}
 const reviewTally = key => db.prepare('SELECT COALESCE(ROUND(AVG(r.stars), 1), 0) AS stars, COUNT(*) AS n FROM place_reviews r JOIN users u ON u.id = r.user WHERE r.key = ? AND u.banned = 0').get(key);
 const placePerson = (id, name, pic) => ({ id, name, pic });
 
+// ---- "যেতে চাই" kept with the account, and লুকানো রত্ন: places people know that the guide does not ----
+//   GET  /api/places/wants                 -> { keys: [...] }                      (login)
+//   POST /api/places/want  { key, on }      -> { keys }                             (login)
+//   POST /api/places/wants-merge { keys }   -> { keys }   the phone's list joins the account's after signing in
+//   GET  /api/places/gems?d=district        -> { gems: [...] }   approved ones (all districts, newest first, without d)
+//   POST /api/places/gem { district, name, kind, where, about, how, lat, lon, media: [up to 3] }  -> { id }  (login; waits for an admin)
+db.exec('CREATE TABLE IF NOT EXISTS place_wants (user INTEGER NOT NULL, key TEXT NOT NULL, created INTEGER NOT NULL, PRIMARY KEY (user, key))');
+db.exec(`CREATE TABLE IF NOT EXISTS gems (id INTEGER PRIMARY KEY, user INTEGER NOT NULL, district TEXT NOT NULL, name TEXT NOT NULL, kind TEXT NOT NULL,
+  place TEXT NOT NULL DEFAULT '', about TEXT NOT NULL DEFAULT '', how TEXT NOT NULL DEFAULT '', lat REAL, lon REAL, files TEXT NOT NULL DEFAULT '[]',
+  status TEXT NOT NULL DEFAULT 'pending', created INTEGER NOT NULL, decided INTEGER NOT NULL DEFAULT 0, by INTEGER NOT NULL DEFAULT 0)`);
+db.exec('CREATE INDEX IF NOT EXISTS gems_district ON gems (district, status)');
+const POINTS_PER_GEM = 5, GEM_KINDS = ['water', 'river', 'hill', 'heritage', 'faith', 'wetland', 'village', 'other'];
+const wantKeys = userId => db.prepare('SELECT key FROM place_wants WHERE user = ? ORDER BY created DESC').all(userId).map(r => r.key);
+const shownGem = g => ({ id: g.id, district: g.district, name: g.name, kind: g.kind, place: g.place, about: g.about, how: g.how, lat: g.lat, lon: g.lon,
+  photos: JSON.parse(g.files || '[]').map(f => '/media/' + f), by: { id: g.user, name: g.uname, pic: g.upic }, created: g.created });
+const GEM_SELECT = 'SELECT g.*, u.name AS uname, u.pic_v AS upic FROM gems g JOIN users u ON u.id = g.user WHERE u.banned = 0';
+
+async function gemsApi(req, res, action, query, me) {
+  const now = Date.now();
+  if (req.method === 'GET' && action === 'gems') {
+    const d = cleanText(query.get('d'), 20);
+    const rows = /^[a-z]{3,20}$/.test(d) ? db.prepare(`${GEM_SELECT} AND g.district = ? AND g.status = 'ok' ORDER BY g.decided DESC LIMIT 60`).all(d)
+      : db.prepare(`${GEM_SELECT} AND g.status = 'ok' ORDER BY g.decided DESC LIMIT 24`).all();
+    return json(res, 200, { gems: rows.map(shownGem) });
+  }
+  if (req.method === 'GET' && action === 'wants') {
+    if (!me) return json(res, 401, { error: 'login' });
+    return json(res, 200, { keys: wantKeys(me.id) });
+  }
+  if (req.method !== 'POST') return null;
+  if (!me) { req.resume(); return json(res, 401, { error: 'login' }); }
+  let body;
+  try { body = JSON.parse(await readBody(req, 30000)) || {}; } catch { return json(res, 400, { error: 'bad request' }); }
+  if (action === 'want') {
+    const key = placeKey(body.key);
+    if (!key) return json(res, 400, { error: 'bad request' });
+    if (body.on) {
+      if (count('SELECT COUNT(*) AS n FROM place_wants WHERE user = ?', me.id) >= 500) return json(res, 429, { error: 'full' });
+      db.prepare('INSERT OR IGNORE INTO place_wants (user, key, created) VALUES (?, ?, ?)').run(me.id, key, now);
+    } else db.prepare('DELETE FROM place_wants WHERE user = ? AND key = ?').run(me.id, key);
+    return json(res, 200, { keys: wantKeys(me.id) });
+  }
+  if (action === 'wants-merge') {
+    const add = db.prepare('INSERT OR IGNORE INTO place_wants (user, key, created) VALUES (?, ?, ?)');
+    for (const k of (Array.isArray(body.keys) ? body.keys : []).slice(0, 300).map(placeKey).filter(Boolean)) add.run(me.id, k, now);
+    return json(res, 200, { keys: wantKeys(me.id) });
+  }
+  if (action === 'gem') {
+    const district = cleanText(body.district, 20), name = cleanText(body.name, 80), about = cleanText(body.about, 2000);
+    if (!/^[a-z]{3,20}$/.test(district) || name.length < 2 || about.length < 20 || !GEM_KINDS.includes(body.kind)) return json(res, 400, { error: 'bad request' });
+    if (count('SELECT COUNT(*) AS n FROM gems WHERE user = ? AND created > ?', me.id, now - 864e5) >= 5) return json(res, 429, { error: 'slow' });
+    const files = [];
+    for (const m of (Array.isArray(body.media) ? body.media : []).slice(0, 3)) {
+      const up = db.prepare('SELECT * FROM uploads WHERE name = ? AND user = ? AND used = 0').get(String(m), me.id);
+      if (up && up.kind === 'photo') { files.push(up.name); db.prepare('UPDATE uploads SET used = 1 WHERE name = ?').run(up.name); }
+    }
+    const lat = Number(body.lat), lon = Number(body.lon), inBd = lat > 20.3 && lat < 26.8 && lon > 88 && lon < 92.8;
+    const id = Number(db.prepare(`INSERT INTO gems (user, district, name, kind, place, about, how, lat, lon, files, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(me.id, district, name, body.kind, cleanText(body.where, 160), about, cleanText(body.how, 1000), inBd ? lat : null, inBd ? lon : null, JSON.stringify(files), now).lastInsertRowid);
+    return json(res, 200, { id });
+  }
+  return null;
+}
+
+
 async function placesApi(req, res, action, query) {
   const me = userOf(req), now = Date.now();
+  if (['gems', 'wants', 'want', 'wants-merge', 'gem'].includes(action)) { const done = await gemsApi(req, res, action, query, me); if (done !== null) return done; return json(res, 404, { error: 'not found' }); }
   if (req.method === 'GET') {
     if (action === 'summary') {
       const d = cleanText(query.get('d'), 20);

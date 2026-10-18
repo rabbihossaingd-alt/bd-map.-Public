@@ -155,6 +155,7 @@ const PAGES = {
     task(o.ticketsOpen, 'সাপোর্টে উত্তর বাকি', 'ব্যবহারকারীরা অপেক্ষা করছেন', () => show('support'), 'warn');
     task(o.reportsOpen, 'রিপোর্ট দেখা বাকি', 'অভিযোগগুলো যাচাই করুন', () => show('reports'), 'bad');
     task(o.placePhotosWaiting, 'জায়গার ছবি দেখা বাকি', 'অনুমোদন দিন বা বাদ দিন', () => show('photos'), 'violet');
+    task(o.gemsWaiting, 'লুকানো রত্ন দেখা বাকি', 'নতুন জায়গার খোঁজ', () => show('gems'), 'violet');
     task(o.payoutsWaiting, 'টাকা পাঠানো বাকি', `মোট ৳${num(o.payoutsPendingTaka)}`, () => { PAGES.creators.state.tab = 'payouts'; show('creators'); }, 'warn');
     task(o.creatorsWaiting, 'ক্রিয়েটর আবেদন', 'অনুমোদন দিন বা বাতিল করুন', () => { PAGES.creators.state.tab = 'creators'; show('creators'); }, 'violet');
     task(o.verifyWaiting, 'ব্যাজের আবেদন', 'সাপোর্টে "ব্যাজ" বিষয়ের অনুরোধ', () => show('support'), 'violet');
@@ -353,6 +354,34 @@ const PAGES = {
       grid.appendChild(card);
     }
     box.appendChild(grid);
+  } },
+
+  gems: { title: 'লুকানো রত্ন', icon: 'flag', state: { status: 'pending' }, async draw(box) {
+    const st = this.state;
+    const d = await api('gems?status=' + st.status);
+    const badge = document.querySelector('#nav [data-page=gems] em');
+    if (badge) { badge.textContent = num(d.waiting); badge.hidden = !d.waiting; }
+    box.appendChild(tabs([['pending', `দেখা বাকি (${num(d.waiting)})`], ['ok', 'অনুমোদিত'], ['no', 'বাদ দেওয়া']], st.status, v => { st.status = v; show('gems'); }));
+    box.appendChild(h('p', 'hint', 'ব্যবহারকারীরা যেসব অজানা জায়গার খোঁজ পাঠিয়েছেন। জায়গাটি সত্যিই আছে, বর্ণনা ঠিক আর ভদ্র, ছবি ওই জায়গার — এমন হলে অনুমোদন দিন; পাঠানো মানুষটি ৫ পয়েন্ট পান। বিজ্ঞাপন, ব্যক্তিগত বাড়ি বা ভুয়া তথ্য বাদ দিন।'));
+    if (!d.gems.length) { box.appendChild(empty(st.status === 'pending' ? 'দেখার মতো কিছু বাকি নেই।' : 'এখানে এখনো কিছু নেই।')); return; }
+    const KIND = { water: 'ঝর্ণা', river: 'নদী / সৈকত / লেক', hill: 'পাহাড় / বন', heritage: 'ঐতিহাসিক স্থাপনা', faith: 'ধর্মীয় স্থান', wetland: 'হাওর / বিল', village: 'গ্রাম ও গ্রামীণ জীবন', other: 'অন্যান্য' };
+    for (const g of d.gems) {
+      const card = h('div', 'card report');
+      const head = h('div', 'rhead');
+      const who = person(g.user, `${g.user.email} · ${num(g.user.points)} পয়েন্ট`);
+      who.classList.add('click'); who.addEventListener('click', () => openUser(g.user.id));
+      head.append(who, chip(KIND[g.kind] || g.kind, 'violet'));
+      card.append(head, h('b', null, `${g.name} — ${g.district}${g.place ? ' · ' + g.place : ''}`), h('p', 'reason', g.about));
+      if (g.how) card.appendChild(h('p', 'reason', 'যাবেন কীভাবে: ' + g.how));
+      if (g.lat != null) { const a = h('a', null, 'ম্যাপে অবস্থান দেখুন ↗'); a.href = `https://www.openstreetmap.org/?mlat=${g.lat}&mlon=${g.lon}#map=15/${g.lat}/${g.lon}`; a.target = '_blank'; card.appendChild(a); }
+      if (g.photos.length) { const row = h('div', 'pgrid'); for (const src of g.photos) { const i = h('img'); i.src = src; i.loading = 'lazy'; i.style.cssText = 'width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:12px;cursor:zoom-in'; i.addEventListener('click', () => window.open(src, '_blank')); row.appendChild(i); } card.appendChild(row); }
+      card.appendChild(h('small', null, ago(st.status === 'pending' ? g.created : g.decided)));
+      const acts = h('div', 'acts');
+      if (st.status !== 'ok') acts.append(btn('অনুমোদন দিন', '', async () => { if (await act(api('gem', { id: g.id, do: 'approve' }), 'জায়গাটি অ্যাপে দেখা যাবে, ৫ পয়েন্ট দেওয়া হলো।')) show('gems'); }));
+      if (st.status !== 'no') acts.append(btn(st.status === 'ok' ? 'সরিয়ে দিন' : 'বাদ দিন', 'bad', async () => { if (await act(api('gem', { id: g.id, do: 'reject' }), 'বাদ দেওয়া হলো।')) show('gems'); }));
+      card.appendChild(acts);
+      box.appendChild(card);
+    }
   } },
 
   posts: { title: 'পোস্ট', icon: 'image', async draw(box) {
@@ -584,7 +613,7 @@ function switchRow(title, sub, key, on) {
 }
 
 function setCounts(o) {
-  for (const [key, n] of [['support', o.ticketsOpen], ['reports', o.reportsOpen], ['photos', o.placePhotosWaiting], ['creators', (o.payoutsWaiting || 0) + (o.creatorsWaiting || 0)]]) {
+  for (const [key, n] of [['support', o.ticketsOpen], ['reports', o.reportsOpen], ['photos', o.placePhotosWaiting], ['gems', o.gemsWaiting], ['creators', (o.payoutsWaiting || 0) + (o.creatorsWaiting || 0)]]) {
     const b = document.querySelector(`#nav [data-page=${key}] em`);
     if (b) { b.textContent = num(n); b.hidden = !n; }
   }
@@ -641,7 +670,7 @@ async function show(name) {
     if (e.status !== 403) $('gate-text').textContent = 'সার্ভারের সাথে যোগাযোগ করা যায়নি। একটু পরে আবার চেষ্টা করুন।';
     return;
   }
-  const NAV = [['প্রধান', ['overview']], ['মানুষ', ['users', 'support', 'reports']], ['কনটেন্ট', ['photos', 'posts', 'stories', 'sounds', 'comments', 'groups']],
+  const NAV = [['প্রধান', ['overview']], ['মানুষ', ['users', 'support', 'reports']], ['কনটেন্ট', ['photos', 'gems', 'posts', 'stories', 'sounds', 'comments', 'groups']],
                ['আয় ও কমিউনিটি', ['creators', 'fares']], ['সিস্টেম', ['audit', 'settings']]];
   for (const [label, keys] of NAV) {
     $('nav').appendChild(h('div', 'nav-group', label));

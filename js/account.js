@@ -110,6 +110,7 @@ function signedOut() {
   authChanged();
 }
 function authChanged() {
+  document.dispatchEvent(new Event('bdmap:auth'));    // other parts (the guide's saved places) follow the account
   renderAccount();
   loadRatings();
   loadFareReports();

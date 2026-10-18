@@ -260,7 +260,7 @@ const coverStyle = (img, division) => {
   window.openStory = openStory;
 
   // ---- one place, full screen: its photos (Wikimedia and people's own), what it is, how far, how to go, reviews ----
-  const placeKeyOf = (d, s) => `${d.id}|${s.page || s.name}`;
+  const placeKeyOf = (d, s) => `${d.id}|${s.gemId ? 'gem:' + s.gemId : s.page || s.name}`;
   const wanted = () => { try { return new Set(JSON.parse(localStorage.getItem('bdmap.want') || '[]')); } catch { return new Set(); } };
   const setWanted = set => { try { localStorage.setItem('bdmap.want', JSON.stringify([...set])); } catch { /* storage off */ } };
   async function placesGet(path) { const r = await fetch('api/places/' + path, { credentials: 'same-origin' }); if (!r.ok) throw new Error(String(r.status)); return r.json(); }
@@ -301,6 +301,145 @@ const coverStyle = (img, division) => {
   };
   const kmText = km => km < 1 ? tl2(`${num(Math.round(km * 1000))} মিটার`, `${Math.round(km * 1000)} m`) : tl2(`${num(km, km < 10 ? 1 : 0)} কিমি`, `${km.toFixed(km < 10 ? 1 : 0)} km`);
 
+  // ---- "যেতে চাই": kept on this phone, and with the account when signed in (merged on sign-in) ----
+  async function syncWants() {
+    if (!ME) { renderWants(); return; }
+    try { const { keys } = await placesPost('wants-merge', { keys: [...wanted()] }); setWanted(new Set(keys)); } catch { /* offline: the phone's list stays */ }
+    renderWants();
+  }
+  function toggleWant(key, on) {
+    const set = wanted();
+    if (on) set.add(key); else set.delete(key);
+    setWanted(set);
+    if (ME) placesPost('want', { key, on }).catch(() => {});
+    renderWants();
+  }
+  document.addEventListener('bdmap:auth', syncWants);
+  // The saved places, as a rail on the guide's front page (gems are found among the loaded ones).
+  let gemsAll = [];
+  function placeFromKey(key) {
+    const [id, rest] = [key.slice(0, key.indexOf('|')), key.slice(key.indexOf('|') + 1)];
+    const d = districtById(id);
+    if (!d || !GUIDE) return null;
+    if (rest.startsWith('gem:')) { const g = gemsAll.find(x => String(x.id) === rest.slice(4)); return g ? { d, s: gemSight(g) } : null; }
+    const s = ((GUIDE[id] || {}).sights || []).find(x => (x.page || x.name) === rest);
+    return s ? { d, s } : null;
+  }
+  function renderWants() {
+    const sec = $('dg-want-sec'), rail = $('dg-want');
+    if (!sec || !GUIDE) return;
+    const items = [...wanted()].map(placeFromKey).filter(Boolean);
+    sec.hidden = !items.length;
+    $('dg-want-n').textContent = tl2(`${num(items.length)}টি জায়গা${ME ? ' · অ্যাকাউন্টে সেভ করা' : ' · লগইন করলে সব ফোনে থাকবে'}`, `${items.length} places${ME ? ' · saved to your account' : ' · sign in to keep them on every device'}`);
+    rail.replaceChildren(...items.map(({ d, s }) => {
+      const c = el('button', 'dg-place');
+      const ph = el('span', 'ph');
+      photo(ph, s.img, d.division, 500, kindArt(s.name) || 'pin');
+      const t = el('span', 't');
+      t.append(el('b', 'no-tr', s.name), el('small', null, d.bn));
+      c.append(ph, t);
+      c.addEventListener('click', () => openPlace(d, s));
+      return c;
+    }));
+  }
+
+  // ---- লুকানো রত্ন: places people know that the guide does not; each is checked by an admin first ----
+  const GEM_KINDS = [['water', 'ঝর্ণা', 'Waterfall'], ['river', 'নদী / সৈকত / লেক', 'River, beach or lake'], ['hill', 'পাহাড় / বন', 'Hills or forest'], ['heritage', 'ঐতিহাসিক স্থাপনা', 'Heritage'],
+    ['faith', 'ধর্মীয় স্থান', 'Place of worship'], ['wetland', 'হাওর / বিল', 'Haor or wetland'], ['village', 'গ্রাম ও গ্রামীণ জীবন', 'Village life'], ['other', 'অন্যান্য', 'Other']];
+  const kindName = k => { const x = GEM_KINDS.find(g => g[0] === k); return x ? tl2(x[1], x[2]) : ''; };
+  const GEM_ART = { water: 'ঝর্ণা', river: 'দিঘি', hill: 'বন', heritage: 'জমিদার', faith: 'মসজিদ', wetland: 'বিল', village: 'বাড়ি', other: '' };
+  // a gem, in the shape the place page reads
+  const gemSight = g => ({ name: g.name, text: g.about, img: g.photos[0] || '', lat: g.lat, lon: g.lon, page: null, gemId: g.id, gemPhotos: g.photos.slice(1), gemBy: g.by, gemHow: g.how, gemWhere: g.place, gemKind: g.kind, artName: GEM_ART[g.kind] || '' });
+  function gemCard(g) {
+    const d = districtById(g.district);
+    const c = el('button', 'dg-place gm-card');
+    const ph = el('span', 'ph');
+    photo(ph, g.photos[0], d.division, 500, kindArt(GEM_ART[g.kind] || g.name) || 'pin');
+    ph.appendChild(el('span', 'gm-badge', tl2('💎 লুকানো রত্ন', '💎 Hidden gem')));
+    const t = el('span', 't');
+    t.append(el('b', 'no-tr', g.name), el('small', null, `${d.bn}${g.place ? ' · ' + g.place : ''}`));
+    c.append(ph, t);
+    c.addEventListener('click', () => openPlace(d, gemSight(g)));
+    return c;
+  }
+  async function renderGems() {
+    try { gemsAll = (await placesGet('gems')).gems; } catch { gemsAll = []; }
+    const rail = $('dg-gems');
+    if (!rail) return;
+    const add = el('button', 'dg-place gm-add');
+    add.append(Object.assign(el('span', 'ph'), { innerHTML: '<span class="gm-plus">+</span>' }), Object.assign(el('span', 't'), { innerHTML: '' }));
+    add.querySelector('.t').append(el('b', null, tl2('জায়গার খোঁজ দিন', 'Share a place')), el('small', null, tl2('অনুমোদন হলে ৫ পয়েন্ট', '5 points once approved')));
+    add.addEventListener('click', () => openGemForm());
+    rail.replaceChildren(add, ...gemsAll.map(gemCard));
+    $('dg-gem-n').textContent = gemsAll.length ? tl2(`স্থানীয়দের পাঠানো ${num(gemsAll.length)}টি জায়গা — আমাদের টিম যাচাই করেছে`, `${gemsAll.length} places sent by locals, checked by our team`)
+      : tl2('আপনার এলাকার এমন সুন্দর জায়গা, যার কথা খুব কম মানুষ জানে — আমাদের জানান। যাচাই করে আপনার নামসহ প্রকাশ করা হবে।', 'A beautiful place near you that few people know? Tell us — once checked it is published with your name.');
+    renderWants();
+  }
+
+  function openGemForm(d0) {
+    if (!ME) { openLogin(); return; }
+    const box = el('div', 'gm-sheet');
+    const card = el('div', 'gm-form');
+    const close = () => { box.classList.add('out'); setTimeout(() => box.remove(), 260); };
+    box.addEventListener('click', e => { if (e.target === box) close(); });
+    const x = el('button', 'lv-icon gm-x'); x.innerHTML = svg('close'); x.addEventListener('click', close);
+    const field = (label, input, hint) => { const f = el('label', 'gm-field'); f.append(el('span', null, label), input); if (hint) f.appendChild(el('small', null, hint)); return f; };
+    const district = el('select');
+    for (const div of [...new Set(DISTRICTS.map(d => d.division))]) {
+      const og = document.createElement('optgroup'); og.label = tl2(`${div} বিভাগ`, div);
+      for (const d of DISTRICTS.filter(d => d.division === div)) og.appendChild(new Option(d.bn, d.id));
+      district.appendChild(og);
+    }
+    if (d0) district.value = d0.id;
+    const name = Object.assign(el('input'), { maxLength: 80, placeholder: tl2('যেমন: চারান বিল', 'e.g. Charan Bil') });
+    const kind = el('select'); for (const [k, bn, en] of GEM_KINDS) kind.appendChild(new Option(tl2(bn, en), k));
+    const where = Object.assign(el('input'), { maxLength: 160, placeholder: tl2('উপজেলা, ইউনিয়ন বা গ্রাম — যেমন: কালিহাতী', 'Upazila, union or village') });
+    const about = Object.assign(el('textarea'), { rows: 4, maxLength: 2000, placeholder: tl2('জায়গাটি কেমন, কেন সুন্দর, কখন গেলে ভালো — নিজের ভাষায় লিখুন (অন্তত ২০ অক্ষর)', 'What it is like, why it is special, the best time to go (at least 20 characters)') });
+    const how = Object.assign(el('textarea'), { rows: 2, maxLength: 1000, placeholder: tl2('নিকটস্থ বাসস্ট্যান্ড থেকে কীভাবে যাবেন, ভাড়া কত', 'How to get there from the nearest bus stand, and the fare') });
+    let pos = null;
+    const locate = el('button', 'btn quiet gm-locate'); locate.type = 'button'; locate.append(ic('pin'), el('span', null, tl2('আমি এখন এখানে — অবস্থান দিন', 'I am here — add my location')));
+    locate.addEventListener('click', () => {
+      if (!navigator.geolocation) return;
+      locate.querySelector('span').textContent = tl2('অবস্থান নেওয়া হচ্ছে…', 'Getting your location…');
+      navigator.geolocation.getCurrentPosition(p => { pos = { lat: p.coords.latitude, lon: p.coords.longitude }; locate.classList.add('on'); locate.querySelector('span').textContent = tl2('অবস্থান যোগ হয়েছে ✓', 'Location added ✓'); },
+        () => { locate.querySelector('span').textContent = tl2('অবস্থান পাওয়া যায়নি — ঐচ্ছিক, বাদ দিতে পারেন', 'No location — it is optional'); }, { enableHighAccuracy: true, timeout: 12000 });
+    });
+    const files = [];
+    const shots = el('div', 'gm-shots');
+    const chooser = Object.assign(el('input'), { type: 'file', accept: 'image/jpeg,image/png,image/webp', multiple: true, hidden: true });
+    const drawShots = () => {
+      shots.replaceChildren(...files.map((f, i) => { const b = el('button', 'gm-shot'); b.type = 'button'; b.style.backgroundImage = `url(${URL.createObjectURL(f)})`; b.innerHTML = svg('close'); b.addEventListener('click', () => { files.splice(i, 1); drawShots(); }); return b; }));
+      if (files.length < 3) { const a = el('button', 'gm-shot add'); a.type = 'button'; a.innerHTML = svg('camera'); a.addEventListener('click', () => chooser.click()); shots.appendChild(a); }
+    };
+    chooser.addEventListener('change', () => { files.push(...[...chooser.files].slice(0, 3 - files.length)); chooser.value = ''; drawShots(); });
+    drawShots();
+    const note = el('p', 'pl-givenote');
+    const send = el('button', 'btn gm-send', tl2('পাঠান', 'Send'));
+    send.addEventListener('click', async () => {
+      if (name.value.trim().length < 2 || about.value.trim().length < 20) { note.className = 'pl-givenote bad'; note.textContent = tl2('জায়গার নাম আর অন্তত ২০ অক্ষরের বর্ণনা দিন।', 'Give the name and at least 20 characters about it.'); return; }
+      send.disabled = true;
+      try {
+        const media = [];
+        for (const [i, f] of files.entries()) { note.className = 'pl-givenote'; note.textContent = tl2(`ছবি ${num(i + 1)}/${num(files.length)} পাঠানো হচ্ছে…`, `Sending photo ${i + 1}/${files.length}…`); const b = await shrink(f); media.push(await uploadMedia(b, b.type || 'image/jpeg', () => {})); }
+        await placesPost('gem', { district: district.value, name: name.value, kind: kind.value, where: where.value, about: about.value, how: how.value, lat: pos && pos.lat, lon: pos && pos.lon, media });
+        card.replaceChildren(x, Object.assign(el('div', 'gm-done'), { innerHTML: '<b>💎</b>' }), el('h3', null, tl2('ধন্যবাদ!', 'Thank you!')),
+          el('p', null, tl2('আমাদের টিম জায়গাটি যাচাই করে প্রকাশ করবে — তখন আপনার নামসহ সবাই দেখবে, আর আপনি পাবেন ৫ পয়েন্ট।', 'Our team will check it and publish it with your name — and you earn 5 points.')));
+      } catch (e) {
+        send.disabled = false; note.className = 'pl-givenote bad';
+        note.textContent = e.message === 'slow' ? tl2('আজ অনেকগুলো পাঠিয়েছেন — কাল আবার চেষ্টা করুন।', 'You sent many today; try tomorrow.') : tl2('পাঠানো গেল না। ইন্টারনেট দেখে আবার চেষ্টা করুন।', 'Could not send; try again.');
+      }
+    });
+    card.append(x, el('h3', null, tl2('লুকানো রত্নের খোঁজ দিন', 'Share a hidden gem')), el('p', 'gm-lead', tl2('আপনার এলাকার যে সুন্দর জায়গার কথা খুব কম মানুষ জানে। যাচাই করে আপনার নামসহ প্রকাশ করা হবে।', 'A beautiful place few people know. It is checked, then published with your name.')),
+      field(tl2('জেলা', 'District'), district), field(tl2('জায়গার নাম', 'Name of the place'), name), field(tl2('ধরন', 'Kind'), kind), field(tl2('কোথায়', 'Where'), where),
+      field(tl2('জায়গাটির কথা', 'About it'), about), field(tl2('যাবেন কীভাবে', 'How to get there'), how, tl2('ঐচ্ছিক', 'optional')),
+      el('span', 'gm-label', tl2('ছবি (৩টি পর্যন্ত, নিজের তোলা)', 'Photos (up to 3, your own)')), shots, chooser, locate, note, send);
+    box.appendChild(card);
+    document.body.appendChild(box);
+    requestAnimationFrame(() => box.classList.add('in'));
+    name.focus();
+  }
+  window.openGemForm = openGemForm;
+
   async function openPlace(d, s) {
     await loadGuide();
     const g = GUIDE[d.id] || {}, key = placeKeyOf(d, s), dhaka = districtById('dhaka');
@@ -326,10 +465,12 @@ const coverStyle = (img, division) => {
       dots.hidden = slides.length < 2;
     };
     gal.addEventListener('scroll', paintCount, { passive: true });
-    if (s.img) addSlide(s.img, s.imgCaption ? tl2(`ছবি: ${s.imgCaption}`, `Photo: ${s.imgCaption}`) : tl2('ছবি: উইকিমিডিয়া কমন্স', 'Photo: Wikimedia Commons'), s.file ? commonsLink(s.file) : '');
+    if (s.img && s.gemId) addSlide(s.img, tl2(`ছবি: ${s.gemBy.name}`, `Photo: ${s.gemBy.name}`), '');
+    for (const src of s.gemPhotos || []) addSlide(src, tl2(`ছবি: ${s.gemBy.name}`, `Photo: ${s.gemBy.name}`), '');
+    if (s.img && !s.gemId) addSlide(s.img, s.imgCaption ? tl2(`ছবি: ${s.imgCaption}`, `Photo: ${s.imgCaption}`) : tl2('ছবি: উইকিমিডিয়া কমন্স', 'Photo: Wikimedia Commons'), s.file ? commonsLink(s.file) : '');
     const empty = el('div', 'pl-empty');
     if (!s.img) {
-      empty.append(Object.assign(el('span', 'ph-art'), { innerHTML: `<svg viewBox="0 0 24 24" aria-hidden="true">${kindArt(s.name) || ''}</svg>` }));
+      empty.append(Object.assign(el('span', 'ph-art'), { innerHTML: `<svg viewBox="0 0 24 24" aria-hidden="true">${kindArt(s.artName || s.name) || ''}</svg>` }));
       hero.classList.add('bare');
     }
     const x = el('button', 'lv-icon dg-x'); x.innerHTML = svg('close'); x.setAttribute('aria-label', tl2('বন্ধ করুন', 'Close'));
@@ -340,10 +481,11 @@ const coverStyle = (img, division) => {
     const body = el('div', 'pl-body');
     // title
     const head = el('div', 'pl-head');
-    head.appendChild(el('small', null, tl2(`${d.bn} জেলা · ${d.division} বিভাগ`, `${d.bn} · ${d.division} division`)));
+    head.appendChild(el('small', null, tl2(`${s.gemWhere ? s.gemWhere + ', ' : ''}${d.bn} জেলা · ${d.division} বিভাগ`, `${s.gemWhere ? s.gemWhere + ', ' : ''}${d.bn} · ${d.division} division`)));
     head.appendChild(el('h2', 'no-tr', s.name));
     const badges = el('div', 'pl-badges');
     const rank = (g.sights || []).filter(t => (t.views || 0) > (s.views || 0)).length;
+    if (s.gemId) badges.append(el('span', 'pl-badge gem', tl2('💎 লুকানো রত্ন', '💎 Hidden gem')), el('span', 'pl-badge calm', kindName(s.gemKind)), el('span', 'pl-badge by', tl2(`${s.gemBy.name} জানিয়েছেন`, `shared by ${s.gemBy.name}`)));
     if (s.views) badges.appendChild(el('span', 'pl-badge ' + (rank < 3 ? 'hot' : 'calm'), rank < 3 ? tl2('জেলার জনপ্রিয়', 'Popular here') : tl2('কম পরিচিত', 'Lesser known')));
     const rating = el('span', 'pl-badge rate'); rating.hidden = true;
     badges.appendChild(rating);
@@ -352,7 +494,7 @@ const coverStyle = (img, division) => {
     const acts = el('div', 'pl-acts');
     const want = el('button', 'pl-act want');
     const paintWant = () => { const on = wanted().has(key); want.classList.toggle('on', on); want.replaceChildren(ic(on ? 'check' : 'plus'), el('span', null, on ? tl2('যেতে চাই — সেভ হয়েছে', 'Saved') : tl2('যেতে চাই', 'Want to go'))); };
-    want.addEventListener('click', () => { const set = wanted(); if (set.has(key)) set.delete(key); else { set.add(key); flash(tl2('“যেতে চাই” তালিকায় রাখা হলো', 'Saved to “want to go”')); } setWanted(set); paintWant(); });
+    want.addEventListener('click', () => { const on = !wanted().has(key); toggleWant(key, on); if (on) flash(ME ? tl2('“যেতে চাই” তালিকায় রাখা হলো — সব ডিভাইসে থাকবে', 'Saved — on all your devices') : tl2('“যেতে চাই” তালিকায় রাখা হলো', 'Saved to “want to go”')); paintWant(); });
     paintWant();
     acts.appendChild(want);
     const leave = fn => () => { for (const b of document.querySelectorAll('.dg-sheet')) b.remove(); document.body.classList.remove('reels-open'); fn(); };
@@ -415,6 +557,7 @@ const coverStyle = (img, division) => {
       if (f) lines.push(tl2(`কাউন্টারে সাধারণত ${fareRange(f[0], f[1])}${f.length > 2 ? `, এসি ${fareRange(f[2], f[3])}` : ''}।`, `At the counter usually ${fareRange(f[0], f[1])}${f.length > 2 ? `, AC ${fareRange(f[2], f[3])}` : ''}.`));
       const ops = [...new Set([...operatorsBetween(dhaka, d).map(o => o.bn), ...(DIVISION_OPERATORS[d.division] || [])])].slice(0, 6);
       if (ops.length) lines.push(tl2(`যেসব বাস চলে: ${ops.join(', ')}।`, `Buses: ${ops.join(', ')}.`));
+      if (s.gemHow) lines.unshift(tl2(`যারা জানিয়েছেন তাদের কথায়: ${s.gemHow}`, `In the sender's words: ${s.gemHow}`));
       if (s.lat != null) lines.push(tl2(`জেলা শহর থেকে জায়গাটি প্রায় ${kmText(haversineKm(d, s))} দূরে — স্থানীয় সিএনজি বা অটোতে যাওয়া যায়।`, `The place is about ${kmText(haversineKm(d, s))} from the district town — a CNG or auto-rickshaw goes there.`));
       for (const l of lines) go.appendChild(el('p', null, l));
       body.appendChild(go);
@@ -423,12 +566,20 @@ const coverStyle = (img, division) => {
     // emergency
     const sos = el('section', 'pl-card pl-sos');
     sos.appendChild(el('h3', null, tl2('জরুরি দরকারে', 'In an emergency')));
+    const bn = n => (LANG === 'en' ? n : n.replace(/\d/g, c => '০১২৩৪৫৬৭৮৯'[c]));
+    for (const [office, number] of TOURIST_POLICE[d.id] || []) {
+      const a = el('a', 'pl-call tp'); a.href = 'tel:' + number.replace(/\D/g, '');
+      a.append(el('b', null, bn(number)), el('span', null, office), el('small', null, tl2('ট্যুরিস্ট পুলিশ · পর্যটকদের সাহায্য', 'Tourist Police · help for visitors')));
+      sos.appendChild(a);
+    }
     for (const h of HELPLINES.slice(0, 3)) {
       const a = el('a', 'pl-call'); a.href = 'tel:' + h.number;
       a.append(el('b', null, LANG === 'en' ? h.number : h.number.replace(/\d/g, c => '০১২৩৪৫৬৭৮৯'[c])), el('span', null, h.bn), el('small', null, h.sub));
       sos.appendChild(a);
     }
     const hos = el('button', 'pl-link', tl2('কাছের হাসপাতাল ও ফার্মেসি খুঁজুন →', 'Find hospitals and pharmacies nearby →'));
+    sos.appendChild(el('p', 'pl-muted pl-src', TOURIST_POLICE[d.id] ? tl2(`ট্যুরিস্ট পুলিশের নম্বর তাদের সরকারি ওয়েবসাইট (touristpolice.gov.bd) থেকে নেওয়া, যাচাই ${TOURIST_POLICE_CHECKED.bn}।`, `Tourist Police numbers from touristpolice.gov.bd, checked ${TOURIST_POLICE_CHECKED.en}.`)
+      : tl2('এই জেলায় ট্যুরিস্ট পুলিশের কোনো অফিসের সরকারি নম্বর প্রকাশিত নেই — বিপদে ৯৯৯-এ ফোন করুন।', 'Tourist Police publish no office number in this district — call 999 in an emergency.')));
     hos.addEventListener('click', leave(() => nearbyAt(s.lat != null ? { lat: s.lat, lon: s.lon, label: s.name } : asPlace(d))));
     sos.appendChild(hos);
     body.appendChild(sos);
@@ -619,6 +770,29 @@ const coverStyle = (img, division) => {
         }
       }).catch(() => {});
     }
+    // hidden gems people sent for this district
+    const gemSec = el('section', 'dg-gemsec');
+    gemSec.append(el('h3', 'dg-h', tl2('💎 লুকানো রত্ন', '💎 Hidden gems')));
+    const gemRail = el('div', 'dg-rail');
+    const gemAdd = el('button', 'dg-place gm-add');
+    gemAdd.append(Object.assign(el('span', 'ph'), { innerHTML: '<span class="gm-plus">+</span>' }), el('span', 't'));
+    gemAdd.querySelector('.t').append(el('b', null, tl2(`${d.bn}-এর কোনো জায়গা জানেন?`, `Know a place in ${d.bn}?`)), el('small', null, tl2('খোঁজ দিন · অনুমোদন হলে ৫ পয়েন্ট', 'Share it · 5 points once approved')));
+    gemAdd.addEventListener('click', () => openGemForm(d));
+    gemRail.appendChild(gemAdd);
+    gemSec.appendChild(gemRail);
+    placesGet('gems?d=' + d.id).then(({ gems }) => { gemRail.append(...gems.map(gemCard)); }).catch(() => {});
+    body.appendChild(gemSec);
+    if (TOURIST_POLICE[d.id]) {
+      const tp = el('section', 'pl-card pl-sos dg-tp');
+      tp.appendChild(el('h3', null, tl2('ট্যুরিস্ট পুলিশ', 'Tourist Police')));
+      for (const [office, number] of TOURIST_POLICE[d.id]) {
+        const a = el('a', 'pl-call tp'); a.href = 'tel:' + number.replace(/\D/g, '');
+        a.append(el('b', null, LANG === 'en' ? number : number.replace(/\d/g, c => '০১২৩৪৫৬৭৮৯'[c])), el('span', null, office), el('small', null, tl2('পর্যটকদের সাহায্য ও নিরাপত্তা', 'Help and safety for visitors')));
+        tp.appendChild(a);
+      }
+      tp.appendChild(el('p', 'pl-muted pl-src', tl2(`সূত্র: touristpolice.gov.bd · যাচাই ${TOURIST_POLICE_CHECKED.bn} · জরুরি দরকারে ৯৯৯`, `Source: touristpolice.gov.bd · checked ${TOURIST_POLICE_CHECKED.en} · emergency 999`)));
+      body.appendChild(tp);
+    }
     if ((g.sights || []).length < 3) {
       // Wikipedia names few or none for this district: say so, and offer the map's own list nearby
       const few = el('div', 'dg-few');
@@ -703,6 +877,7 @@ const coverStyle = (img, division) => {
     renderTop();
     renderGI();
     renderList();
+    renderGems().then(syncWants);
   };
   if (current === 'districts') enter.districts();
 })();

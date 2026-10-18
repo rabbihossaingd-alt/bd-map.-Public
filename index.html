@@ -487,9 +487,19 @@
       <div class="tx-pane" id="rb-guide" role="tabpanel">
       <label class="filter tx-find dg-find"><i data-ic="search"></i><input id="district-filter" autocomplete="off" placeholder="জেলার নাম — যেমন: সিলেট, coxbazar" aria-label="জেলা খুঁজুন"></label>
 
+      <section class="dg-sec" id="dg-want-sec" hidden>
+        <div class="dg-head"><h3>যেতে চাই</h3><p id="dg-want-n"></p></div>
+        <div class="dg-rail" id="dg-want"></div>
+      </section>
+
       <section class="dg-sec" id="dg-top-sec" hidden>
         <div class="dg-head"><h3>সবচেয়ে বেশি দেখা জায়গা</h3><p>উইকিপিডিয়ায় গত ৬০ দিনে সবচেয়ে বেশি পড়া জায়গাগুলো</p></div>
         <div class="dg-rail" id="dg-top"></div>
+      </section>
+
+      <section class="dg-sec" id="dg-gem-sec">
+        <div class="dg-head"><h3>💎 লুকানো রত্ন</h3><p id="dg-gem-n">স্থানীয়দের চেনা, গাইডে নেই এমন জায়গা</p></div>
+        <div class="dg-rail" id="dg-gems"></div>
       </section>
 
       <section class="dg-sec">
@@ -679,12 +689,14 @@
 <script src="js/i18n.js"></script>
 <script src="js/core.js"></script>
 <script src="js/app.js"></script>
+<script src="data/tourist-police.js"></script>
 <script src="data/bd-outline.js"></script>
 <script src="js/tour.js"></script>
 <script src="js/scene.js"></script>
 <script src="js/train.js"></script>
 <script src="data/district-famous.js"></script>
 <script src="js/guide.js"></script>
+<script src="js/trip.js"></script>
 <script src="js/account.js"></script>
 <script src="js/chat.js"></script>
 <script src="js/chat-extra.js"></script>
