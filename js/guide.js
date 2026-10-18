@@ -108,7 +108,7 @@ const coverStyle = (img, division) => {
       const t = el('span', 't');
       t.append(el('b', 'no-tr', s.name), el('small', null, s.d.bn));
       c.append(ph, t);
-      c.addEventListener('click', () => openGuide(s.d, s.page));
+      c.addEventListener('click', () => openPlace(s.d, GUIDE[s.d.id].sights.find(x => x.page === s.page) || s));
       return c;
     }));
     $('dg-top-sec').hidden = !top.length;
@@ -259,6 +259,287 @@ const coverStyle = (img, division) => {
   }
   window.openStory = openStory;
 
+  // ---- one place, full screen: its photos (Wikimedia and people's own), what it is, how far, how to go, reviews ----
+  const placeKeyOf = (d, s) => `${d.id}|${s.page || s.name}`;
+  const wanted = () => { try { return new Set(JSON.parse(localStorage.getItem('bdmap.want') || '[]')); } catch { return new Set(); } };
+  const setWanted = set => { try { localStorage.setItem('bdmap.want', JSON.stringify([...set])); } catch { /* storage off */ } };
+  async function placesGet(path) { const r = await fetch('api/places/' + path, { credentials: 'same-origin' }); if (!r.ok) throw new Error(String(r.status)); return r.json(); }
+  async function placesPost(path, body) {
+    const r = await fetch('api/places/' + path, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw Object.assign(new Error(data.error || 'server'), { status: r.status });
+    return data;
+  }
+  function flash(text) {
+    const t = el('div', 'pl-toast', text);
+    document.body.appendChild(t);
+    requestAnimationFrame(() => t.classList.add('in'));
+    setTimeout(() => { t.classList.remove('in'); setTimeout(() => t.remove(), 400); }, 2600);
+  }
+  // A phone photo, made at most 2000 px on its long side before it is sent (a 12 MP original is 4–8 MB).
+  function shrink(file) {
+    return new Promise(resolve => {
+      const img = new Image(), url = URL.createObjectURL(file);
+      img.onload = () => {
+        const k = Math.min(1, 2000 / Math.max(img.naturalWidth, img.naturalHeight));
+        if (k === 1 && file.size < 2.5e6) { URL.revokeObjectURL(url); resolve(file); return; }
+        const c = Object.assign(el('canvas'), { width: Math.round(img.naturalWidth * k), height: Math.round(img.naturalHeight * k) });
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        URL.revokeObjectURL(url);
+        c.toBlob(b => resolve(b || file), 'image/jpeg', 0.86);
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+      img.src = url;
+    });
+  }
+  const starRow = (v, size = 16) => {
+    const s = el('span', 'pl-stars');
+    s.style.setProperty('--v', String(Math.max(0, Math.min(5, v)) / 5));
+    s.style.fontSize = size + 'px';
+    s.setAttribute('aria-label', tl2(`৫-এর মধ্যে ${num(v, 1)}`, `${v} out of 5`));
+    return s;
+  };
+  const kmText = km => km < 1 ? tl2(`${num(Math.round(km * 1000))} মিটার`, `${Math.round(km * 1000)} m`) : tl2(`${num(km, km < 10 ? 1 : 0)} কিমি`, `${km.toFixed(km < 10 ? 1 : 0)} km`);
+
+  async function openPlace(d, s) {
+    await loadGuide();
+    const g = GUIDE[d.id] || {}, key = placeKeyOf(d, s), dhaka = districtById('dhaka');
+    const box = el('div', 'dg-sheet pl-sheet');
+    const scroller = el('div', 'dg-scroll');
+    const close = () => { box.classList.add('out'); setTimeout(() => box.remove(), 280); if (!document.querySelector('.dg-sheet:not(.out):not(.pl-sheet)')) document.body.classList.remove('reels-open'); };
+    // gallery
+    const hero = el('header', 'pl-hero');
+    const gal = el('div', 'pl-gal'), count = el('span', 'pl-count'), dots = el('div', 'pl-dots');
+    const slides = [];
+    const addSlide = (src, credit, href) => {
+      const f = el('figure', 'pl-slide');
+      photo(f, src, d.division, 1280, kindArt(s.name) || 'pin');
+      if (credit) { const c = el(href ? 'a' : 'span', 'pl-credit', credit); if (href) { c.href = href; c.target = '_blank'; c.rel = 'noopener'; } f.appendChild(c); }
+      gal.appendChild(f); slides.push(f);
+      dots.appendChild(el('i'));
+      paintCount();
+    };
+    const paintCount = () => {
+      const i = Math.round(gal.scrollLeft / Math.max(1, gal.clientWidth));
+      count.textContent = slides.length > 1 ? `${num(i + 1)} / ${num(slides.length)}` : '';
+      [...dots.children].forEach((x, k) => x.classList.toggle('on', k === i));
+      dots.hidden = slides.length < 2;
+    };
+    gal.addEventListener('scroll', paintCount, { passive: true });
+    if (s.img) addSlide(s.img, s.imgCaption ? tl2(`ছবি: ${s.imgCaption}`, `Photo: ${s.imgCaption}`) : tl2('ছবি: উইকিমিডিয়া কমন্স', 'Photo: Wikimedia Commons'), s.file ? commonsLink(s.file) : '');
+    const empty = el('div', 'pl-empty');
+    if (!s.img) {
+      empty.append(Object.assign(el('span', 'ph-art'), { innerHTML: `<svg viewBox="0 0 24 24" aria-hidden="true">${kindArt(s.name) || ''}</svg>` }));
+      hero.classList.add('bare');
+    }
+    const x = el('button', 'lv-icon dg-x'); x.innerHTML = svg('close'); x.setAttribute('aria-label', tl2('বন্ধ করুন', 'Close'));
+    const give = el('button', 'pl-give'); give.append(ic('camera'), el('span', null, tl2('ছবি দিন', 'Add a photo')));
+    const arrows = ['prev', 'next'].map((k, i) => { const b = el('button', 'pl-arrow ' + k); b.innerHTML = svg(i ? 'next' : 'prev'); b.setAttribute('aria-label', i ? tl2('পরের ছবি', 'Next photo') : tl2('আগের ছবি', 'Previous photo')); b.addEventListener('click', () => gal.scrollBy({ left: (i ? 1 : -1) * gal.clientWidth, behavior: 'smooth' })); return b; });
+    hero.append(gal, empty, x, give, count, dots, ...arrows);
+
+    const body = el('div', 'pl-body');
+    // title
+    const head = el('div', 'pl-head');
+    head.appendChild(el('small', null, tl2(`${d.bn} জেলা · ${d.division} বিভাগ`, `${d.bn} · ${d.division} division`)));
+    head.appendChild(el('h2', 'no-tr', s.name));
+    const badges = el('div', 'pl-badges');
+    const rank = (g.sights || []).filter(t => (t.views || 0) > (s.views || 0)).length;
+    if (s.views) badges.appendChild(el('span', 'pl-badge ' + (rank < 3 ? 'hot' : 'calm'), rank < 3 ? tl2('জেলার জনপ্রিয়', 'Popular here') : tl2('কম পরিচিত', 'Lesser known')));
+    const rating = el('span', 'pl-badge rate'); rating.hidden = true;
+    badges.appendChild(rating);
+    head.appendChild(badges);
+    // actions
+    const acts = el('div', 'pl-acts');
+    const want = el('button', 'pl-act want');
+    const paintWant = () => { const on = wanted().has(key); want.classList.toggle('on', on); want.replaceChildren(ic(on ? 'check' : 'plus'), el('span', null, on ? tl2('যেতে চাই — সেভ হয়েছে', 'Saved') : tl2('যেতে চাই', 'Want to go'))); };
+    want.addEventListener('click', () => { const set = wanted(); if (set.has(key)) set.delete(key); else { set.add(key); flash(tl2('“যেতে চাই” তালিকায় রাখা হলো', 'Saved to “want to go”')); } setWanted(set); paintWant(); });
+    paintWant();
+    acts.appendChild(want);
+    const leave = fn => () => { for (const b of document.querySelectorAll('.dg-sheet')) b.remove(); document.body.classList.remove('reels-open'); fn(); };
+    if (s.lat != null) {
+      const m = el('button', 'pl-act'); m.append(ic('pin'), el('span', null, tl2('ম্যাপে', 'Map'))); m.addEventListener('click', leave(() => goTo({ lat: s.lat, lon: s.lon, label: s.name })));
+      const r = el('button', 'pl-act'); r.append(ic('route'), el('span', null, tl2('রুট', 'Route'))); r.addEventListener('click', leave(() => setPlace('to', { lat: s.lat, lon: s.lon, label: s.name })));
+      acts.append(m, r);
+    }
+    const sh = el('button', 'pl-act'); sh.append(ic('send'), el('span', null, tl2('শেয়ার', 'Share')));
+    sh.addEventListener('click', async () => {
+      const text = `${s.name}, ${d.bn} — BD Map`, url = location.origin + '/#/districts';
+      try { if (navigator.share) await navigator.share({ title: s.name, text, url }); else { await navigator.clipboard.writeText(`${text}\n${url}`); flash(tl2('লিংক কপি হয়েছে', 'Link copied')); } } catch { /* cancelled */ }
+    });
+    acts.appendChild(sh);
+    body.append(head, acts);
+
+    // at a glance — only what we know
+    const glance = el('div', 'pl-glance');
+    const fact = (icon, label, value, sub) => { const f = el('div', 'pl-fact'); f.append(Object.assign(el('i'), { innerHTML: svg(icon) }), el('small', null, label), el('b', null, value)); if (sub) f.appendChild(el('span', null, sub)); glance.appendChild(f); };
+    if (s.lat != null) fact('pin', tl2('জেলা শহর থেকে', 'From the town'), kmText(haversineKm(d, s)), tl2('সোজা দূরত্ব', 'as the crow flies'));
+    if (d !== dhaka) {
+      const official = officialFare(dhaka, d);
+      fact('bus', tl2('ঢাকা থেকে', 'From Dhaka'), official ? tl2(`${num(official.km)} কিমি`, `${official.km} km`) : kmText(haversineKm(dhaka, s.lat != null ? s : d) * 1.25), official ? tl2(`বাসে ${taka(official.f51)} থেকে`, `bus from ${taka(official.f51)}`) : tl2('সড়কপথে আনুমানিক', 'by road, roughly'));
+    }
+    if (s.views) fact('eye', tl2('উইকিপিডিয়ায় পড়া', 'Read on Wikipedia'), tl2(`${num(s.views)} বার`, `${s.views} times`), tl2('গত ৬০ দিনে', 'last 60 days'));
+    if (glance.children.length) body.appendChild(glance);
+
+    // about
+    if (s.text) {
+      const about = el('section', 'pl-card');
+      about.append(el('h3', null, tl2('জায়গাটির কথা', 'About')), el('p', 'no-tr', s.text));
+      if (s.page) { const more = el('button', 'pl-link', tl2('পুরো লেখা পড়ুন →', 'Read it all →')); more.addEventListener('click', () => openArticle(s.page, { title: s.name, img: s.img, file: s.file, sub: d.bn, place: s.lat != null ? s : null })); about.appendChild(more); }
+      body.appendChild(about);
+    }
+
+    // nearby: the district's other places, nearest first when both have a pin
+    const others = (g.sights || []).filter(t => t !== s).map(t => ({ t, km: s.lat != null && t.lat != null ? haversineKm(s, t) : null }))
+      .sort((a, b) => (a.km ?? 1e9) - (b.km ?? 1e9) || (b.t.views || 0) - (a.t.views || 0)).slice(0, 8);
+    if (others.length) {
+      body.appendChild(el('h3', 'pl-h', tl2('কাছাকাছি আরও যা দেখবেন', 'Also nearby')));
+      const rail = el('div', 'pl-rail');
+      for (const { t, km } of others) {
+        const c = el('button', 'pl-mini');
+        const ph = el('span', 'ph');
+        photo(ph, t.img, d.division, 400, kindArt(t.name) || 'pin');
+        c.append(ph, el('b', 'no-tr', t.name), el('small', null, km != null ? kmText(km) : tl2(`${d.bn} জেলায়`, `in ${d.bn}`)));
+        c.addEventListener('click', () => { box.remove(); openPlace(d, t); });
+        rail.appendChild(c);
+      }
+      body.appendChild(rail);
+    }
+
+    // getting there
+    if (d !== dhaka) {
+      const go = el('section', 'pl-card');
+      go.appendChild(el('h3', null, tl2('কীভাবে যাবেন', 'Getting there')));
+      const official = officialFare(dhaka, d), f = MARKET_FARES[d.id];
+      const lines = [];
+      if (official) lines.push(tl2(`ঢাকার ${official.terminal} থেকে ${d.bn}: নন-এসি বাসে বিআরটিএ নির্ধারিত ভাড়া ${taka(official.f51)}, দূরত্ব ${num(official.km)} কিমি।`, `From ${official.terminal}, Dhaka: BRTA non-AC fare ${taka(official.f51)}, ${official.km} km.`));
+      if (f) lines.push(tl2(`কাউন্টারে সাধারণত ${fareRange(f[0], f[1])}${f.length > 2 ? `, এসি ${fareRange(f[2], f[3])}` : ''}।`, `At the counter usually ${fareRange(f[0], f[1])}${f.length > 2 ? `, AC ${fareRange(f[2], f[3])}` : ''}.`));
+      const ops = [...new Set([...operatorsBetween(dhaka, d).map(o => o.bn), ...(DIVISION_OPERATORS[d.division] || [])])].slice(0, 6);
+      if (ops.length) lines.push(tl2(`যেসব বাস চলে: ${ops.join(', ')}।`, `Buses: ${ops.join(', ')}.`));
+      if (s.lat != null) lines.push(tl2(`জেলা শহর থেকে জায়গাটি প্রায় ${kmText(haversineKm(d, s))} দূরে — স্থানীয় সিএনজি বা অটোতে যাওয়া যায়।`, `The place is about ${kmText(haversineKm(d, s))} from the district town — a CNG or auto-rickshaw goes there.`));
+      for (const l of lines) go.appendChild(el('p', null, l));
+      body.appendChild(go);
+    }
+
+    // emergency
+    const sos = el('section', 'pl-card pl-sos');
+    sos.appendChild(el('h3', null, tl2('জরুরি দরকারে', 'In an emergency')));
+    for (const h of HELPLINES.slice(0, 3)) {
+      const a = el('a', 'pl-call'); a.href = 'tel:' + h.number;
+      a.append(el('b', null, LANG === 'en' ? h.number : h.number.replace(/\d/g, c => '০১২৩৪৫৬৭৮৯'[c])), el('span', null, h.bn), el('small', null, h.sub));
+      sos.appendChild(a);
+    }
+    const hos = el('button', 'pl-link', tl2('কাছের হাসপাতাল ও ফার্মেসি খুঁজুন →', 'Find hospitals and pharmacies nearby →'));
+    hos.addEventListener('click', leave(() => nearbyAt(s.lat != null ? { lat: s.lat, lon: s.lon, label: s.name } : asPlace(d))));
+    sos.appendChild(hos);
+    body.appendChild(sos);
+
+    // photos people took
+    const giveBox = el('section', 'pl-card pl-givebox');
+    const givenote = el('p', 'pl-givenote');
+    giveBox.append(el('h3', null, s.img ? tl2('আরও ভালো ছবি আছে?', 'Have a better photo?') : tl2('এই জায়গার প্রথম ছবিটি আপনিই দিন', 'Be the first to add a photo')),
+      el('p', null, tl2('নিজের তোলা ছবি পাঠান (একসাথে ৩টি পর্যন্ত)। আমাদের টিম দেখে অনুমোদন দিলে ছবিটি সবাই দেখবে, আর আপনি পাবেন প্রতিটিতে ৩ পয়েন্ট।', 'Send photos you took (up to 3). Once our team approves one, everyone sees it and you earn 3 points for each.')));
+    const pick = el('button', 'btn pl-pick'); pick.append(ic('camera'), el('span', null, tl2('ছবি পাঠান', 'Send photos')));
+    const chooser = Object.assign(el('input'), { type: 'file', accept: 'image/jpeg,image/png,image/webp', multiple: true, hidden: true });
+    giveBox.append(pick, chooser, givenote);
+    body.appendChild(giveBox);
+    const askPhoto = () => { if (!ME) { openLogin(); return; } chooser.click(); };
+    pick.addEventListener('click', askPhoto); give.addEventListener('click', () => { giveBox.scrollIntoView({ behavior: 'smooth', block: 'center' }); setTimeout(askPhoto, 350); });
+    chooser.addEventListener('change', async () => {
+      const files = [...chooser.files].slice(0, 3);
+      chooser.value = '';
+      if (!files.length) return;
+      pick.disabled = true;
+      let sent = 0, waiting = 0;
+      for (const [i, f] of files.entries()) {
+        givenote.className = 'pl-givenote'; givenote.textContent = tl2(`ছবি ${num(i + 1)}/${num(files.length)} পাঠানো হচ্ছে…`, `Sending photo ${i + 1} of ${files.length}…`);
+        try {
+          const blob = await shrink(f);
+          const media = await uploadMedia(blob, blob.type || 'image/jpeg', p => { givenote.textContent = tl2(`ছবি ${num(i + 1)}/${num(files.length)} · ${num(Math.round(p * 100))}%`, `Photo ${i + 1}/${files.length} · ${Math.round(p * 100)}%`); });
+          waiting = (await placesPost('photo', { key, name: s.name, media })).waiting; sent++;
+        } catch (e) {
+          givenote.className = 'pl-givenote bad';
+          givenote.textContent = e.message === 'three' ? tl2('এই জায়গার ৩টি ছবি অনুমোদনের অপেক্ষায় আছে — সেগুলো দেখা হলে আবার পাঠাতে পারবেন।', 'Three of your photos of this place are already waiting.')
+            : e.message === 'slow' ? tl2('আজ অনেক ছবি পাঠিয়েছেন — কাল আবার চেষ্টা করুন।', 'You have sent many photos today; try tomorrow.')
+            : e.message === 'big' ? tl2('ছবিটি অনেক বড়।', 'The photo is too large.') : tl2('পাঠানো গেল না। ইন্টারনেট দেখে আবার চেষ্টা করুন।', 'Could not send. Check the connection and try again.');
+          break;
+        }
+      }
+      pick.disabled = false;
+      if (sent) { givenote.className = 'pl-givenote ok'; givenote.textContent = tl2(`ধন্যবাদ! ${num(sent)}টি ছবি পাঠানো হয়েছে — অনুমোদনের অপেক্ষায় ${num(waiting)}টি। অনুমোদন হলে এখানে দেখা যাবে।`, `Thank you! ${sent} sent, ${waiting} waiting for approval.`); }
+    });
+
+    // reviews
+    const rev = el('section', 'pl-card pl-reviews');
+    const revHead = el('div', 'pl-revhead');
+    const revList = el('div', 'pl-revlist');
+    const write = el('button', 'btn quiet pl-write'); write.append(ic('star'), el('span', 'lbl', tl2('রিভিউ লিখুন', 'Write a review')));
+    rev.append(el('h3', null, tl2('যারা গিয়েছেন তাদের কথা', 'From people who went')), revHead, write, revList);
+    body.appendChild(rev);
+    let data = null;
+    const paintReviews = () => {
+      revHead.replaceChildren();
+      if (data && data.n) {
+        revHead.append(el('b', null, num(data.stars, 1)), starRow(data.stars, 20), el('span', null, tl2(`${num(data.n)}টি রিভিউ`, `${data.n} reviews`)));
+        rating.hidden = false; rating.replaceChildren(el('span', 'st', '★'), document.createTextNode(` ${num(data.stars, 1)} · ${num(data.n)}`));
+      } else { revHead.appendChild(el('p', 'pl-muted', tl2('এখনো কেউ রিভিউ দেননি — গিয়ে থাকলে প্রথমটি আপনিই লিখুন।', 'No reviews yet — if you have been, write the first.'))); rating.hidden = true; }
+      revList.replaceChildren(...((data && data.reviews) || []).map(r => {
+        const c = el('article', 'pl-rev');
+        const who = el('div', 'pl-who');
+        const av = el('span', 'pl-av'); if (r.by.pic) av.style.backgroundImage = `url(api/avatar/${r.by.id}?v=${r.by.pic})`; else av.textContent = [...(r.by.name || '?')][0];
+        who.append(av, el('b', null, r.by.name), starRow(r.stars, 13), el('small', null, new Date(r.created).toLocaleDateString(LANG === 'en' ? 'en-GB' : 'bn-BD', { day: 'numeric', month: 'short', year: 'numeric' })));
+        c.appendChild(who);
+        if (r.body) c.appendChild(el('p', 'no-tr', r.body));
+        return c;
+      }));
+      write.querySelector('.lbl').textContent = data && data.mine && data.mine.review ? tl2('আমার রিভিউ বদলান', 'Edit my review') : tl2('রিভিউ লিখুন', 'Write a review');
+    };
+    write.addEventListener('click', () => {
+      if (!ME) { openLogin(); return; }
+      if (rev.querySelector('.pl-form')) return;
+      const mine = (data && data.mine && data.mine.review) || { stars: 0, body: '' };
+      let stars = mine.stars;
+      const form = el('div', 'pl-form');
+      const pickStars = el('div', 'pl-pickstars');
+      const paint = () => [...pickStars.children].forEach((b, i) => b.classList.toggle('on', i < stars));
+      for (let i = 1; i <= 5; i++) { const b = el('button', null, '★'); b.type = 'button'; b.setAttribute('aria-label', tl2(`${num(i)} তারা`, `${i} stars`)); b.addEventListener('click', () => { stars = i; paint(); }); pickStars.appendChild(b); }
+      paint();
+      const text = Object.assign(el('textarea'), { rows: 3, maxLength: 600, placeholder: tl2('কেমন লাগল, কখন গিয়েছিলেন, কী জেনে যাওয়া ভালো — লিখুন (ঐচ্ছিক)', 'How was it, when did you go, what should others know (optional)'), value: mine.body });
+      const msg = el('p', 'pl-givenote');
+      const send = el('button', 'btn', tl2('পাঠান', 'Post'));
+      send.addEventListener('click', async () => {
+        if (!stars) { msg.className = 'pl-givenote bad'; msg.textContent = tl2('কত তারা দেবেন বেছে নিন।', 'Choose the stars.'); return; }
+        send.disabled = true;
+        try { await placesPost('review', { key, name: s.name, stars, body: text.value }); form.remove(); await load(); flash(tl2('রিভিউ যোগ হয়েছে — ধন্যবাদ!', 'Review posted — thank you!')); }
+        catch (e) { send.disabled = false; msg.className = 'pl-givenote bad'; msg.textContent = e.message === 'slow' ? tl2('আজ অনেক রিভিউ দিয়েছেন — কাল আবার চেষ্টা করুন।', 'Too many reviews today.') : tl2('পাঠানো গেল না, আবার চেষ্টা করুন।', 'Could not post; try again.'); }
+      });
+      const row = el('div', 'pl-formacts'); row.appendChild(send);
+      if (mine.stars) { const del = el('button', 'btn quiet', tl2('মুছে ফেলুন', 'Delete')); del.addEventListener('click', async () => { await placesPost('unreview', { key }).catch(() => {}); form.remove(); load(); }); row.appendChild(del); }
+      form.append(pickStars, text, msg, row);
+      write.after(form);
+      text.focus();
+    });
+    async function load() {
+      try { data = await placesGet('place?key=' + encodeURIComponent(key)); } catch { data = null; }
+      paintReviews();
+      // people's approved photos join the gallery after the Wikimedia one
+      for (const p of (data && data.photos) || []) if (!slides.some(f => f.dataset.id === String(p.id))) { addSlide(p.file, tl2(`ছবি: ${p.by.name}`, `Photo: ${p.by.name}`), ''); slides.at(-1).dataset.id = String(p.id); }
+      if (slides.length) { hero.classList.remove('bare'); empty.hidden = true; }
+      for (const a of arrows) a.hidden = slides.length < 2;
+      if (data && data.mine && data.mine.waiting) { givenote.className = 'pl-givenote ok'; givenote.textContent = tl2(`আপনার ${num(data.mine.waiting)}টি ছবি অনুমোদনের অপেক্ষায়।`, `${data.mine.waiting} of your photos are waiting for approval.`); }
+    }
+    for (const a of arrows) a.hidden = true;
+    load();
+    body.appendChild(el('p', 'tx-source', tl2('লেখা: বাংলা উইকিপিডিয়া (CC BY-SA) · ছবি: উইকিমিডিয়া কমন্স ও BD Map ব্যবহারকারীরা · ভাড়া: বিআরটিএ ও কাউন্টারের তালিকা · জরুরি নম্বর: সরকারি হেল্পলাইন',
+      'Text: Bangla Wikipedia (CC BY-SA) · Photos: Wikimedia Commons and BD Map users · Fares: BRTA and counters · Emergency: government helplines')));
+    scroller.append(hero, body);
+    box.append(scroller);
+    document.body.appendChild(box);
+    document.body.classList.add('reels-open');
+    x.addEventListener('click', close);
+    scroller.addEventListener('scroll', () => hero.style.setProperty('--k', Math.min(1, scroller.scrollTop / 300).toFixed(3)), { passive: true });
+  }
+  window.openPlace = openPlace;
+
   // ---- one district, full screen ----
   async function openGuide(d, focusPage) {
     await loadGuide();
@@ -318,13 +599,25 @@ const coverStyle = (img, division) => {
         if (s.text) t.appendChild(el('p', 'no-tr', s.text));
         const acts = el('div', 'acts');
         if (s.lat != null) { const m = button('pin', tl2('ম্যাপে', 'On map'), () => { box.remove(); document.body.classList.remove('reels-open'); goTo({ lat: s.lat, lon: s.lon, label: s.name }); }, true); acts.appendChild(m); }
-        const w = button('info', tl2('বিস্তারিত', 'More'), () => openArticle(s.page, { title: s.name, img: s.img, file: s.file, sub: d.bn, place: s.lat != null ? s : null }), true);
+        const w = button('info', tl2('বিস্তারিত', 'More'), () => openPlace(d, s), true);
         acts.appendChild(w);
+        c.dataset.key = placeKeyOf(d, s);
+        c.addEventListener('click', e => { if (!e.target.closest('a, button')) openPlace(d, s); });
         t.appendChild(acts);
         c.append(ph, t);
         grid.appendChild(c);
       }
       body.appendChild(grid);
+      // people's approved photos (for places Wikimedia has none of) and the stars they gave
+      placesGet('summary?d=' + d.id).then(({ places }) => {
+        for (const c of grid.children) {
+          const p = places[c.dataset.key];
+          if (!p) continue;
+          const ph = c.querySelector('.ph');
+          if (p.photo && !ph.querySelector('.dg-img')) { ph.querySelector('.ph-art')?.remove(); photo(ph, p.photo, d.division, 960); ph.appendChild(el('span', 'ph-cap', tl2('ছবি: BD Map ব্যবহারকারী', 'Photo: a BD Map user'))); }
+          if (p.reviews) c.querySelector('.t b').after(Object.assign(el('span', 'pl-cardrate'), { textContent: `★ ${num(p.stars, 1)} · ${tl2(`${num(p.reviews)}টি রিভিউ`, `${p.reviews} reviews`)}` }));
+        }
+      }).catch(() => {});
     }
     if ((g.sights || []).length < 3) {
       // Wikipedia names few or none for this district: say so, and offer the map's own list nearby

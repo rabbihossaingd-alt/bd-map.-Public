@@ -154,6 +154,7 @@ const PAGES = {
     };
     task(o.ticketsOpen, 'সাপোর্টে উত্তর বাকি', 'ব্যবহারকারীরা অপেক্ষা করছেন', () => show('support'), 'warn');
     task(o.reportsOpen, 'রিপোর্ট দেখা বাকি', 'অভিযোগগুলো যাচাই করুন', () => show('reports'), 'bad');
+    task(o.placePhotosWaiting, 'জায়গার ছবি দেখা বাকি', 'অনুমোদন দিন বা বাদ দিন', () => show('photos'), 'violet');
     task(o.payoutsWaiting, 'টাকা পাঠানো বাকি', `মোট ৳${num(o.payoutsPendingTaka)}`, () => { PAGES.creators.state.tab = 'payouts'; show('creators'); }, 'warn');
     task(o.creatorsWaiting, 'ক্রিয়েটর আবেদন', 'অনুমোদন দিন বা বাতিল করুন', () => { PAGES.creators.state.tab = 'creators'; show('creators'); }, 'violet');
     task(o.verifyWaiting, 'ব্যাজের আবেদন', 'সাপোর্টে "ব্যাজ" বিষয়ের অনুরোধ', () => show('support'), 'violet');
@@ -326,6 +327,32 @@ const PAGES = {
       card.append(head, h('p', 'reason', r.reason), h('small', null, `রিপোর্ট করেছেন ${r.bname} (${r.bemail}) · ${ago(r.made)}`), acts);
       box.appendChild(card);
     }
+  } },
+
+  photos: { title: 'জায়গার ছবি', icon: 'image', state: { status: 'pending' }, async draw(box) {
+    const st = this.state;
+    const d = await api('place-photos?status=' + st.status);
+    const badge = document.querySelector('#nav [data-page=photos] em');
+    if (badge) { badge.textContent = num(d.waiting); badge.hidden = !d.waiting; }
+    box.appendChild(tabs([['pending', `দেখা বাকি (${num(d.waiting)})`], ['ok', 'অনুমোদিত'], ['no', 'বাদ দেওয়া']], st.status, v => { st.status = v; show('photos'); }));
+    box.appendChild(h('p', 'hint', 'রূপসী বাংলায় ব্যবহারকারীরা জায়গার যে ছবি পাঠিয়েছেন। ছবিটি সত্যিই ওই জায়গার, পরিষ্কার, আর মানুষের মুখ মুখ্য নয় — এমন হলে অনুমোদন দিন; অনুমোদিত প্রতিটি ছবিতে পাঠানো মানুষটি ৩ পয়েন্ট পান। অন্য জায়গার, ঝাপসা, স্ক্রিনশট বা কারও ওয়াটারমার্ক থাকা ছবি বাদ দিন।'));
+    if (!d.photos.length) { box.appendChild(empty(st.status === 'pending' ? 'দেখার মতো কোনো ছবি বাকি নেই।' : 'এখানে এখনো কিছু নেই।')); return; }
+    const grid = h('div', 'pgrid');
+    for (const p of d.photos) {
+      const card = h('div', 'card pcard');
+      const img = h('img'); img.src = p.src; img.loading = 'lazy';
+      img.addEventListener('click', () => window.open(p.src, '_blank'));
+      const who = person(p.user, `${p.user.email} · ${num(p.user.points)} পয়েন্ট`);
+      who.classList.add('click'); who.addEventListener('click', () => openUser(p.user.id));
+      const acts = h('div', 'acts');
+      if (p.key) {
+        if (st.status !== 'ok') acts.append(btn('অনুমোদন দিন', '', async () => { if (await act(api('place-photo', { id: p.id, do: 'approve' }), 'ছবিটি অ্যাপে দেখা যাবে, ৩ পয়েন্ট দেওয়া হলো।')) show('photos'); }));
+        if (st.status !== 'no') acts.append(btn(st.status === 'ok' ? 'সরিয়ে দিন' : 'বাদ দিন', 'bad', async () => { if (await act(api('place-photo', { id: p.id, do: 'reject' }), 'ছবিটি বাদ দেওয়া হলো।')) show('photos'); }));
+      }
+      card.append(img, h('b', null, p.name), h('small', null, `${p.district} · ${ago(st.status === 'pending' ? p.created : p.decided)}`), who, acts);
+      grid.appendChild(card);
+    }
+    box.appendChild(grid);
   } },
 
   posts: { title: 'পোস্ট', icon: 'image', async draw(box) {
@@ -557,7 +584,7 @@ function switchRow(title, sub, key, on) {
 }
 
 function setCounts(o) {
-  for (const [key, n] of [['support', o.ticketsOpen], ['reports', o.reportsOpen], ['creators', (o.payoutsWaiting || 0) + (o.creatorsWaiting || 0)]]) {
+  for (const [key, n] of [['support', o.ticketsOpen], ['reports', o.reportsOpen], ['photos', o.placePhotosWaiting], ['creators', (o.payoutsWaiting || 0) + (o.creatorsWaiting || 0)]]) {
     const b = document.querySelector(`#nav [data-page=${key}] em`);
     if (b) { b.textContent = num(n); b.hidden = !n; }
   }
@@ -614,7 +641,7 @@ async function show(name) {
     if (e.status !== 403) $('gate-text').textContent = 'সার্ভারের সাথে যোগাযোগ করা যায়নি। একটু পরে আবার চেষ্টা করুন।';
     return;
   }
-  const NAV = [['প্রধান', ['overview']], ['মানুষ', ['users', 'support', 'reports']], ['কনটেন্ট', ['posts', 'stories', 'sounds', 'comments', 'groups']],
+  const NAV = [['প্রধান', ['overview']], ['মানুষ', ['users', 'support', 'reports']], ['কনটেন্ট', ['photos', 'posts', 'stories', 'sounds', 'comments', 'groups']],
                ['আয় ও কমিউনিটি', ['creators', 'fares']], ['সিস্টেম', ['audit', 'settings']]];
   for (const [label, keys] of NAV) {
     $('nav').appendChild(h('div', 'nav-group', label));

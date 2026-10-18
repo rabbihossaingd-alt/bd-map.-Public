@@ -1963,6 +1963,13 @@ async function adminApi(req, res, action, query) {
 
   if (req.method === 'GET') {
     if (action === 'me') return json(res, 200, { user: publicUser(me).user });
+    if (action === 'place-photos') {                  // photos of places, waiting for a yes or no (or the latest decided)
+      const status = ['pending', 'ok', 'no'].includes(query.get('status')) ? query.get('status') : 'pending';
+      const rows = db.prepare(`SELECT p.*, u.name AS uname, u.email AS uemail, u.pic_v AS upic, u.points AS upoints FROM place_photos p JOIN users u ON u.id = p.user
+        WHERE p.status = ? ORDER BY ${status === 'pending' ? 'p.id' : 'p.decided DESC'} LIMIT 200`).all(status);
+      return json(res, 200, { photos: rows.map(p => ({ id: p.id, key: p.key, district: p.district, name: p.name, src: '/media/' + p.file, created: p.created, decided: p.decided,
+        user: { id: p.user, name: p.uname, email: p.uemail, pic: p.upic, points: p.upoints } })), waiting: count("SELECT COUNT(*) AS n FROM place_photos WHERE status = 'pending'") });
+    }
     if (action === 'overview') {
       const dayStart = dayOf(now) * DAY - TZ;
       return json(res, 200, {
@@ -1972,7 +1979,7 @@ async function adminApi(req, res, action, query) {
         messages: count('SELECT COUNT(*) AS n FROM messages'), messagesToday: count('SELECT COUNT(*) AS n FROM messages WHERE sent >= ?', dayStart),
         friendships: count("SELECT COUNT(*) AS n FROM friends WHERE state = 'friends'"),
         ticketsOpen: count("SELECT COUNT(*) AS n FROM tickets WHERE status = 'open'"), tickets: count('SELECT COUNT(*) AS n FROM tickets'),
-        reportsOpen: count("SELECT COUNT(*) AS n FROM reports WHERE status = 'open'"),
+        reportsOpen: count("SELECT COUNT(*) AS n FROM reports WHERE status = 'open'"), placePhotosWaiting: count("SELECT COUNT(*) AS n FROM place_photos WHERE status = 'pending'"),
         ratings: count('SELECT COUNT(*) AS n FROM ratings'), fares: count('SELECT COUNT(*) AS n FROM fare_reports') + count('SELECT COUNT(*) AS n FROM contributions'),
         posts: count('SELECT COUNT(*) AS n FROM posts'), postsToday: count('SELECT COUNT(*) AS n FROM posts WHERE created >= ?', dayStart),
         signups: series('users', 'created', 14), chats: series('messages', 'sent', 14), support: series('tickets', 'created', 14),
@@ -2134,6 +2141,19 @@ async function adminApi(req, res, action, query) {
     if (!p) return json(res, 404, { error: 'not found' });
     deletePost(p);
     log('post removed', 'post ' + p.id, cleanText(p.caption, 80));
+    return json(res, 200, { ok: true });
+  }
+  if (action === 'place-photo') {                    // approve a place photo (its taker earns points) or turn it down
+    const p = db.prepare('SELECT * FROM place_photos WHERE id = ?').get(Number(body.id));
+    if (!p) return json(res, 404, { error: 'not found' });
+    const to = body.do === 'approve' ? 'ok' : body.do === 'reject' ? 'no' : '';
+    if (!to) return json(res, 400, { error: 'bad request' });
+    if (p.status !== to) {
+      db.prepare('UPDATE place_photos SET status = ?, decided = ?, by = ? WHERE id = ?').run(to, now, me.id, p.id);
+      if (to === 'ok' && p.status !== 'ok') db.prepare('UPDATE users SET points = points + ? WHERE id = ?').run(POINTS_PER_PHOTO, p.user);
+      if (p.status === 'ok' && to !== 'ok') db.prepare('UPDATE users SET points = MAX(0, points - ?) WHERE id = ?').run(POINTS_PER_PHOTO, p.user);
+      log(to === 'ok' ? 'place photo approved' : 'place photo rejected', 'photo ' + p.id, p.name);
+    }
     return json(res, 200, { ok: true });
   }
   if (action === 'report') {
@@ -2354,6 +2374,88 @@ function serveFile(req, res, pathname) {
   });
 }
 
+// ---- Places: photos people took there (shown once an admin approves them) and reviews ----
+// A place is keyed "district|article title" (or its name when it has no article). A photo is uploaded the usual way
+// (POST /api/explore/media), then offered here; it waits until approved, and its taker earns POINTS_PER_PHOTO.
+//   GET  /api/places/summary?d=district  -> { places: { key: { photo, photos, stars, reviews } } }
+//   GET  /api/places/place?key=          -> { photos: [{ id, file, by }], reviews: [{ by, stars, body, created }], stars, n, mine: { review, waiting } }
+//   POST /api/places/photo  { key, name, media }        -> { waiting }        (login)
+//   POST /api/places/review { key, name, stars, body }  -> { stars, n }       (login; one per person, sent again it is replaced)
+//   POST /api/places/unreview { key }                   -> { stars, n }
+db.exec(`CREATE TABLE IF NOT EXISTS place_photos (id INTEGER PRIMARY KEY, key TEXT NOT NULL, district TEXT NOT NULL, name TEXT NOT NULL, user INTEGER NOT NULL,
+  file TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', created INTEGER NOT NULL, decided INTEGER NOT NULL DEFAULT 0, by INTEGER NOT NULL DEFAULT 0)`);
+db.exec('CREATE INDEX IF NOT EXISTS place_photos_key ON place_photos (key, status)');
+db.exec(`CREATE TABLE IF NOT EXISTS place_reviews (key TEXT NOT NULL, district TEXT NOT NULL, name TEXT NOT NULL, user INTEGER NOT NULL, stars INTEGER NOT NULL,
+  body TEXT NOT NULL DEFAULT '', created INTEGER NOT NULL, PRIMARY KEY (key, user))`);
+const POINTS_PER_PHOTO = 3;
+const placeKey = v => { const k = cleanText(v, 200); return /^[a-z]{3,20}\|.{2,}$/.test(k) ? k : ''; };
+const reviewTally = key => db.prepare('SELECT COALESCE(ROUND(AVG(r.stars), 1), 0) AS stars, COUNT(*) AS n FROM place_reviews r JOIN users u ON u.id = r.user WHERE r.key = ? AND u.banned = 0').get(key);
+const placePerson = (id, name, pic) => ({ id, name, pic });
+
+async function placesApi(req, res, action, query) {
+  const me = userOf(req), now = Date.now();
+  if (req.method === 'GET') {
+    if (action === 'summary') {
+      const d = cleanText(query.get('d'), 20);
+      if (!/^[a-z]{3,20}$/.test(d)) return json(res, 400, { error: 'bad request' });
+      const places = {};
+      for (const p of db.prepare(`SELECT key, COUNT(*) AS n, (SELECT file FROM place_photos q WHERE q.key = p.key AND q.status = 'ok' ORDER BY q.decided DESC LIMIT 1) AS file
+                                  FROM place_photos p WHERE district = ? AND status = 'ok' GROUP BY key`).all(d))
+        places[p.key] = { photo: '/media/' + p.file, photos: p.n, stars: 0, reviews: 0 };
+      for (const r of db.prepare('SELECT r.key, ROUND(AVG(r.stars), 1) AS stars, COUNT(*) AS n FROM place_reviews r JOIN users u ON u.id = r.user WHERE r.district = ? AND u.banned = 0 GROUP BY r.key').all(d))
+        Object.assign(places[r.key] = places[r.key] || { photo: '', photos: 0 }, { stars: r.stars, reviews: r.n });
+      return json(res, 200, { places });
+    }
+    if (action === 'place') {
+      const key = placeKey(query.get('key'));
+      if (!key) return json(res, 400, { error: 'bad request' });
+      const photos = db.prepare(`SELECT p.id, p.file, u.id AS uid, u.name, u.pic_v AS pic FROM place_photos p JOIN users u ON u.id = p.user
+        WHERE p.key = ? AND p.status = 'ok' AND u.banned = 0 ORDER BY p.decided DESC LIMIT 20`).all(key).map(p => ({ id: p.id, file: '/media/' + p.file, by: placePerson(p.uid, p.name, p.pic) }));
+      const reviews = db.prepare(`SELECT r.stars, r.body, r.created, u.id AS uid, u.name, u.pic_v AS pic FROM place_reviews r JOIN users u ON u.id = r.user
+        WHERE r.key = ? AND u.banned = 0 ORDER BY (r.body <> '') DESC, r.created DESC LIMIT 50`).all(key).map(r => ({ by: placePerson(r.uid, r.name, r.pic), stars: r.stars, body: r.body, created: r.created }));
+      const t = reviewTally(key);
+      const mine = me && {
+        review: db.prepare('SELECT stars, body FROM place_reviews WHERE key = ? AND user = ?').get(key, me.id) || null,
+        waiting: count("SELECT COUNT(*) AS n FROM place_photos WHERE key = ? AND user = ? AND status = 'pending'", key, me.id)
+      };
+      return json(res, 200, { photos, reviews, stars: t.stars, n: t.n, mine });
+    }
+    return json(res, 404, { error: 'not found' });
+  }
+  if (req.method !== 'POST') return json(res, 405, { error: 'method' });
+  if (!me) { req.resume(); return json(res, 401, { error: 'login' }); }
+  let body;
+  try { body = JSON.parse(await readBody(req, 8000)) || {}; } catch { return json(res, 400, { error: 'bad request' }); }
+  const key = placeKey(body.key), name = cleanText(body.name, 120) || (key.split('|')[1] || '');
+  if (!key) return json(res, 400, { error: 'bad request' });
+  const district = key.split('|')[0];
+  if (action === 'photo') {
+    const up = db.prepare('SELECT * FROM uploads WHERE name = ? AND user = ? AND used = 0').get(String(body.media), me.id);
+    if (!up || up.kind !== 'photo') return json(res, 400, { error: 'media' });
+    if (count("SELECT COUNT(*) AS n FROM place_photos WHERE key = ? AND user = ? AND status = 'pending'", key, me.id) >= 3) return json(res, 429, { error: 'three' });
+    if (count('SELECT COUNT(*) AS n FROM place_photos WHERE user = ? AND created > ?', me.id, now - 864e5) >= 20) return json(res, 429, { error: 'slow' });
+    db.prepare('UPDATE uploads SET used = 1 WHERE name = ?').run(up.name);
+    db.prepare('INSERT INTO place_photos (key, district, name, user, file, created) VALUES (?, ?, ?, ?, ?, ?)').run(key, district, name, me.id, up.name, now);
+    return json(res, 200, { waiting: count("SELECT COUNT(*) AS n FROM place_photos WHERE key = ? AND user = ? AND status = 'pending'", key, me.id) });
+  }
+  if (action === 'review') {
+    const stars = Math.round(Number(body.stars));
+    if (!(stars >= 1 && stars <= 5)) return json(res, 400, { error: 'stars' });
+    if (count('SELECT COUNT(*) AS n FROM place_reviews WHERE user = ? AND created > ?', me.id, now - 864e5) >= 30) return json(res, 429, { error: 'slow' });
+    db.prepare(`INSERT INTO place_reviews (key, district, name, user, stars, body, created) VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT (key, user) DO UPDATE SET stars = excluded.stars, body = excluded.body, created = excluded.created`).run(key, district, name, me.id, stars, cleanText(body.body, 600), now);
+    const t = reviewTally(key);
+    return json(res, 200, { stars: t.stars, n: t.n });
+  }
+  if (action === 'unreview') {
+    db.prepare('DELETE FROM place_reviews WHERE key = ? AND user = ?').run(key, me.id);
+    const t = reviewTally(key);
+    return json(res, 200, { stars: t.stars, n: t.n });
+  }
+  return json(res, 404, { error: 'not found' });
+}
+
+
 const server = http.createServer((req, res) => {
   const { pathname, searchParams } = new URL(req.url, 'http://localhost');
   if (pathname === '/api/ratings') return api(req, res).catch(() => json(res, 500, { error: 'server error' }));
@@ -2370,6 +2472,7 @@ const server = http.createServer((req, res) => {
   if (pathname.startsWith('/media/')) return serveMedia(req, res, pathname.slice(7));
   if (pathname.startsWith('/api/explore/')) return exploreApi(req, res, pathname.slice(13), searchParams).catch(e => { console.error(e); if (!res.headersSent) json(res, 500, { error: 'server error' }); });
   if (pathname.startsWith('/api/people/')) { try { return peopleApi(req, res, pathname.slice(12), searchParams); } catch (e) { console.error(e); return json(res, 500, { error: 'server error' }); } }
+  if (pathname.startsWith('/api/places/')) return placesApi(req, res, pathname.slice(12), searchParams).catch(e => { console.error(e); if (!res.headersSent) json(res, 500, { error: 'server error' }); });
   if (pathname.startsWith('/api/community/')) return communityApi(req, res, pathname.slice(15), searchParams).catch(e => { console.error(e); json(res, 500, { error: 'server error' }); });
   if (pathname.startsWith('/api/support/')) return supportApi(req, res, pathname.slice(13), searchParams).catch(() => json(res, 500, { error: 'server error' }));
   if (pathname.startsWith('/api/admin/')) return adminApi(req, res, pathname.slice(11), searchParams).catch(e => { console.error(e); json(res, 500, { error: 'server error' }); });
