@@ -18,7 +18,10 @@ const tl2 = (bn, en) => (LANG === 'en' ? en : bn);
 const commonsLink = file => file ? `https://bn.wikipedia.org/wiki/File:${encodeURIComponent(file.replace(/ /g, '_'))}` : '';   // shows Commons files and the wiki's own
 const wikiLink = page => page ? `https://bn.wikipedia.org/wiki/${encodeURIComponent(page.replace(/ /g, '_'))}` : '';
 // A Wikimedia thumbnail at another of its standard widths (a card needs 500 px, not 1280); an original stays as it is.
-const sized = (url, w) => url ? url.replace(/\/(\d+)px-([^/?]+)(\?|$)/, (m, old, name, q) => `/${Math.min(+old, w)}px-${name}${q}`) : '';
+// Wikimedia serves thumbnails only at its standard widths (a 400 px or 640 px request is refused), so a wanted
+// width is rounded up to the next standard one, and never past the width the file was linked at.
+const THUMB_WIDTHS = [120, 250, 330, 500, 960, 1280, 1920];
+const sized = (url, w) => url ? url.replace(/\/(\d+)px-([^/?]+)(\?|$)/, (m, old, name, q) => `/${Math.min(+old, THUMB_WIDTHS.find(x => x >= w) || 1920)}px-${name}${q}`) : '';
 // A picture over its colour: the colour shows at once, the picture fades in only once it has all arrived.
 // Line drawings for a place without a photo, chosen by what its name says it is.
 const KIND_ART = [
@@ -168,7 +171,7 @@ const coverStyle = (img, division) => {
     try {
       const [txt, pics] = await Promise.all([
         fetch(W + 'action=query&prop=extracts&explaintext=1&exsectionformat=wiki&titles=' + encodeURIComponent(page)).then(r => r.json()),
-        fetch(W + 'action=query&generator=images&gimlimit=30&prop=imageinfo&iiprop=url|size&iiurlwidth=640&titles=' + encodeURIComponent(page)).then(r => r.json()).catch(() => ({}))
+        fetch(W + 'action=query&generator=images&gimlimit=30&prop=imageinfo&iiprop=url|size&iiurlwidth=500&titles=' + encodeURIComponent(page)).then(r => r.json()).catch(() => ({}))
       ]);
       const text = ((txt.query && txt.query.pages[0]) || {}).extract || '';
       wait.remove();
@@ -439,6 +442,109 @@ const coverStyle = (img, division) => {
     name.focus();
   }
   window.openGemForm = openGemForm;
+
+  // ---- মেঠোপথ, full screen: what locals share — places, everyone's photos, and the people who share most ----
+  async function openMethopath(tab = 'places') {
+    const box = el('div', 'dg-sheet mtp-sheet');
+    const scroller = el('div', 'dg-scroll');
+    const close = () => { box.classList.add('out'); setTimeout(() => box.remove(), 280); if (!document.querySelector('.dg-sheet:not(.out):not(.mp-sheet)')) document.body.classList.remove('reels-open'); };
+    const hero = el('header', 'mtp-hero');
+    hero.innerHTML = `<svg class="mtp-path" viewBox="0 0 400 220" preserveAspectRatio="none" aria-hidden="true"><path d="M-20 200 C 80 170, 60 120, 150 110 S 260 60, 300 70 S 380 30, 430 10" /><path d="M-20 214 C 90 186, 70 134, 160 124 S 270 74, 310 84 S 390 44, 440 24" /></svg>`;
+    const x = el('button', 'lv-icon dg-x'); x.innerHTML = svg('close'); x.setAttribute('aria-label', tl2('বন্ধ করুন', 'Close')); x.addEventListener('click', close);
+    const head = el('div', 'mtp-head');
+    const stats = el('div', 'mtp-stats');
+    head.append(el('span', 'mtp-kicker', tl2('🌿 মেঠোপথ', '🌿 Methopath')), el('h2', null, tl2('চেনা পথের বাইরের বাংলা', 'Bangladesh off the beaten path')),
+      el('p', null, tl2('স্থানীয়রা যেসব জায়গা চেনেন, আর ঘুরতে গিয়ে সবার তোলা ছবি — এক জায়গায়। আপনিও শেয়ার করুন; দেখে নিয়ে আপনার নামে প্রকাশ করা হয়।', 'Places locals know and photos everyone took on their trips — in one place. Share yours; once checked it goes up under your name.')), stats);
+    const ctas = el('div', 'mtp-ctas');
+    const sharePlace = el('button', 'mtp-cta main'); sharePlace.append(Object.assign(el('i'), { innerHTML: svg('pin') }), el('b', null, tl2('জায়গা শেয়ার করুন', 'Share a place')), el('small', null, tl2('অনুমোদন হলে ৫ পয়েন্ট', '5 points when approved')));
+    const sharePhoto = el('button', 'mtp-cta'); sharePhoto.append(Object.assign(el('i'), { innerHTML: svg('camera') }), el('b', null, tl2('ছবি শেয়ার করুন', 'Share a photo')), el('small', null, tl2('প্রতিটি ছবিতে ৩ পয়েন্ট', '3 points each')));
+    sharePlace.addEventListener('click', () => openGemForm());
+    sharePhoto.addEventListener('click', () => pickPlaceForPhoto());
+    ctas.append(sharePlace, sharePhoto);
+    head.appendChild(ctas);
+    hero.append(x, head);
+    const body = el('div', 'mtp-body');
+    const tabs = el('div', 'mtp-tabs');
+    const pane = el('div', 'mtp-pane');
+    const TABS = [['places', tl2('জায়গা', 'Places')], ['photos', tl2('সবার ছবি', 'Photos')], ['people', tl2('সেরা অবদানকারী', 'Top sharers')]];
+    for (const [k, label] of TABS) { const b = el('button', null, label); b.dataset.k = k; b.addEventListener('click', () => show(k)); tabs.appendChild(b); }
+    body.append(tabs, pane);
+    scroller.append(hero, body);
+    box.appendChild(scroller);
+    document.body.appendChild(box);
+    document.body.classList.add('reels-open');
+    let feed = { photos: [], top: [], counts: { photos: 0, gems: 0, people: 0 } }, kind = '';
+    try { [feed] = await Promise.all([placesGet('feed'), gemsAll.length ? null : renderGems()]); } catch { /* offline: empty states */ }
+    stats.replaceChildren(...[[feed.counts.gems || gemsAll.length, tl2('জায়গা', 'places')], [feed.counts.photos, tl2('ছবি', 'photos')], [feed.counts.people, tl2('অবদানকারী', 'sharers')]]
+      .map(([n, l]) => { const s = el('span'); s.append(el('b', null, num(n || 0)), document.createTextNode(' ' + l)); return s; }));
+    const emptyNote = (title, sub, cta) => { const e = el('div', 'mtp-empty'); e.append(el('span', 'ic', '🌿'), el('b', null, title), el('p', null, sub)); if (cta) e.appendChild(cta); return e; };
+    function show(k) {
+      for (const b of tabs.children) b.classList.toggle('on', b.dataset.k === k);
+      pane.replaceChildren();
+      if (k === 'places') {
+        const chips = el('div', 'mtp-chips');
+        for (const [key, bn, en] of [['', 'সব', 'All'], ...GEM_KINDS]) { const c = el('button', 'trip-chip' + (kind === key ? ' on' : ''), tl2(bn, en)); c.addEventListener('click', () => { kind = key; show('places'); }); chips.appendChild(c); }
+        pane.appendChild(chips);
+        const list = gemsAll.filter(g => !kind || g.kind === kind);
+        if (!list.length) { const b = el('button', 'btn', tl2('প্রথম জায়গাটি আপনিই দিন', 'Share the first one')); b.addEventListener('click', () => openGemForm()); pane.appendChild(emptyNote(tl2('এখনো কেউ এমন জায়গা দেননি', 'Nothing here yet'), tl2('আপনার এলাকার যে জায়গাটি সবার দেখা উচিত — সেটি দিয়েই শুরু হোক।', 'Start with the place near you that everyone should see.'), b)); return; }
+        const grid = el('div', 'mtp-grid');
+        for (const g of list) grid.appendChild(gemCard(g));
+        pane.appendChild(grid);
+      } else if (k === 'photos') {
+        if (!feed.photos.length) { const b = el('button', 'btn', tl2('ছবি শেয়ার করুন', 'Share a photo')); b.addEventListener('click', () => pickPlaceForPhoto()); pane.appendChild(emptyNote(tl2('সবার তোলা ছবি এখানে দেখা যাবে', 'Everyone’s photos will show here'), tl2('যেকোনো জায়গার নিজের তোলা ছবি পাঠান — অনুমোদন হলে এখানে আর জায়গার পাতায় দেখা যাবে।', 'Send a photo you took of any place — once approved it shows here and on the place.'), b)); return; }
+        const wall = el('div', 'mtp-wall');
+        for (const p of feed.photos) {
+          const d = districtById(p.district), c = el('button', 'mtp-shot');
+          const im = Object.assign(el('img'), { src: p.src, alt: p.name, loading: 'lazy', decoding: 'async' });
+          im.addEventListener('load', () => im.classList.add('in'));
+          const cap = el('span', 'cap'); cap.append(el('b', 'no-tr', p.name), el('small', null, `${d ? d.bn : ''} · ${p.by.name}`));
+          c.append(im, cap);
+          c.addEventListener('click', () => { const f = placeFromKey(p.key); if (f) openPlace(f.d, f.s); });
+          wall.appendChild(c);
+        }
+        pane.appendChild(wall);
+      } else {
+        if (!feed.top.length) { pane.appendChild(emptyNote(tl2('প্রথম অবদানকারী হোন', 'Be the first sharer'), tl2('যারা জায়গা আর ছবি শেয়ার করেন, তাদের নাম এখানে থাকবে।', 'People who share places and photos are listed here.'))); return; }
+        const list = el('ol', 'mtp-people');
+        feed.top.forEach((u, i) => {
+          const li = el('li');
+          const av = el('span', 'pl-av'); if (u.pic) av.style.backgroundImage = `url(api/avatar/${u.id}?v=${u.pic})`; else av.textContent = [...(u.name || '?')][0];
+          li.append(el('span', 'rank', i < 3 ? ['🥇', '🥈', '🥉'][i] : num(i + 1)), av, el('b', null, u.name), el('small', null, tl2(`${num(u.photos)} ছবি · ${num(u.gems)} জায়গা`, `${u.photos} photos · ${u.gems} places`)));
+          list.appendChild(li);
+        });
+        pane.appendChild(list);
+      }
+    }
+    show(tab);
+  }
+  window.openMethopath = openMethopath;
+  // "share a photo": choose the district and the place, then the place's own photo flow opens
+  function pickPlaceForPhoto() {
+    if (!ME) { openLogin(); return; }
+    const box = el('div', 'gm-sheet'), card = el('div', 'gm-form');
+    const close = () => { box.classList.add('out'); setTimeout(() => box.remove(), 260); };
+    box.addEventListener('click', e => { if (e.target === box) close(); });
+    const x = el('button', 'lv-icon gm-x'); x.innerHTML = svg('close'); x.addEventListener('click', close);
+    const dSel = el('select'), pSel = el('select');
+    for (const div of [...new Set(DISTRICTS.map(d => d.division))]) { const og = document.createElement('optgroup'); og.label = tl2(`${div} বিভাগ`, div); for (const d of DISTRICTS.filter(d => d.division === div)) og.appendChild(new Option(d.bn, d.id)); dSel.appendChild(og); }
+    const fill = () => { pSel.replaceChildren(...(((GUIDE || {})[dSel.value] || {}).sights || []).map((s, i) => new Option(s.name, String(i)))); };
+    dSel.addEventListener('change', fill); fill();
+    const go = el('button', 'btn gm-send', tl2('এগোন — ছবি বেছে নিন', 'Next — choose photos'));
+    go.addEventListener('click', async () => {
+      const d = districtById(dSel.value), s = ((GUIDE[d.id] || {}).sights || [])[Number(pSel.value)];
+      if (!s) return;
+      close();
+      await openPlace(d, s);
+      document.querySelector('.pl-sheet:last-of-type .pl-give')?.click();
+    });
+    const f1 = el('label', 'gm-field'), f2 = el('label', 'gm-field');
+    f1.append(el('span', null, tl2('জেলা', 'District')), dSel); f2.append(el('span', null, tl2('জায়গা', 'Place')), pSel);
+    card.append(x, el('h3', null, tl2('কোন জায়গার ছবি?', 'A photo of which place?')), el('p', 'gm-lead', tl2('জায়গাটি বেছে নিন, তারপর নিজের তোলা ছবি পাঠান — অনুমোদন হলে প্রতিটিতে ৩ পয়েন্ট।', 'Pick the place, then send photos you took — 3 points for each one approved.')), f1, f2, go);
+    box.appendChild(card);
+    document.body.appendChild(box);
+    requestAnimationFrame(() => box.classList.add('in'));
+  }
+
 
   async function openPlace(d, s) {
     await loadGuide();
@@ -895,5 +1001,6 @@ const coverStyle = (img, division) => {
     renderList();
     renderGems().then(syncWants);
   };
+  $('mtp-open')?.addEventListener('click', () => openMethopath());
   if (current === 'districts') enter.districts();
 })();

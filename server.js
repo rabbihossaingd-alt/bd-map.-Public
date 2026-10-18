@@ -2437,6 +2437,13 @@ async function gemsApi(req, res, action, query, me) {
       : db.prepare(`${GEM_SELECT} AND g.status = 'ok' ORDER BY g.decided DESC LIMIT 24`).all();
     return json(res, 200, { gems: rows.map(shownGem) });
   }
+  if (req.method === 'GET' && action === 'feed') {   // মেঠোপথ: the newest approved photos of places, and who shares most
+    const photos = db.prepare(`SELECT p.id, p.key, p.district, p.name, p.file, p.decided, u.id AS uid, u.name AS uname, u.pic_v AS upic FROM place_photos p JOIN users u ON u.id = p.user
+      WHERE p.status = 'ok' AND u.banned = 0 ORDER BY p.decided DESC LIMIT 60`).all().map(p => ({ id: p.id, key: p.key, district: p.district, name: p.name, src: '/media/' + p.file, at: p.decided, by: { id: p.uid, name: p.uname, pic: p.upic } }));
+    const top = db.prepare(`SELECT u.id, u.name, u.pic_v AS pic, (SELECT COUNT(*) FROM place_photos x WHERE x.user = u.id AND x.status = 'ok') AS photos,
+      (SELECT COUNT(*) FROM gems y WHERE y.user = u.id AND y.status = 'ok') AS gems FROM users u WHERE u.banned = 0 AND (photos > 0 OR gems > 0) ORDER BY photos + gems * 2 DESC LIMIT 10`).all();
+    return json(res, 200, { photos, top, counts: { photos: count("SELECT COUNT(*) AS n FROM place_photos WHERE status = 'ok'"), gems: count("SELECT COUNT(*) AS n FROM gems WHERE status = 'ok'"), people: count("SELECT COUNT(*) AS n FROM (SELECT user FROM place_photos WHERE status = 'ok' UNION SELECT user FROM gems WHERE status = 'ok')") } });
+  }
   if (req.method === 'GET' && action === 'wants') {
     if (!me) return json(res, 401, { error: 'login' });
     return json(res, 200, { keys: wantKeys(me.id) });
@@ -2479,7 +2486,7 @@ async function gemsApi(req, res, action, query, me) {
 
 async function placesApi(req, res, action, query) {
   const me = userOf(req), now = Date.now();
-  if (['gems', 'wants', 'want', 'wants-merge', 'gem'].includes(action)) { const done = await gemsApi(req, res, action, query, me); if (done !== null) return done; return json(res, 404, { error: 'not found' }); }
+  if (['gems', 'wants', 'want', 'wants-merge', 'gem', 'feed'].includes(action)) { const done = await gemsApi(req, res, action, query, me); if (done !== null) return done; return json(res, 404, { error: 'not found' }); }
   if (req.method === 'GET') {
     if (action === 'summary') {
       const d = cleanText(query.get('d'), 20);

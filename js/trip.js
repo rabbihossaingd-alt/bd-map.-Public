@@ -112,7 +112,26 @@
       cb.addEventListener('change', () => { T.back = cb.checked; save(); draw(true); });
       back.append(cb, el('span', null, tl2(`শেষে ${districtById(T.start).bn}-এ ফিরে আসবো`, `Come back to ${districtById(T.start).bn} at the end`)));
       c3.append(two, styles, back);
-      form.append(c1, c2, c3);
+      // 4 the crew: their photos and names, for the story and the poster
+      const c4 = el('section', 'tp-card');
+      c4.appendChild(step(4, tl2('দলের ছবি ও নাম', 'The crew'), tl2('গল্প আর পোস্টারে সবার মুখ থাকবে — ছবি আপনার ফোনেই থাকে, কোথাও যায় না', 'Everyone appears in the story and the poster — photos stay on your phone')));
+      const thumbs = el('div', 'tour-thumbs');
+      const pick = Object.assign(el('input'), { type: 'file', accept: 'image/*', multiple: true, hidden: true });
+      const drawCrew = () => {
+        const list = window.TourStory ? TourStory.photos() : [];
+        thumbs.replaceChildren(...list.map((img, i) => { const b = el('button', 'tour-thumb'); b.style.backgroundImage = `url(${img.src})`; b.innerHTML = svg('close'); b.addEventListener('click', () => { TourStory.remove(i); drawCrew(); }); return b; }));
+        if (list.length < 5) { const a = el('button', 'tour-thumb add'); a.innerHTML = svg('plus'); a.addEventListener('click', () => pick.click()); thumbs.appendChild(a); }
+      };
+      pick.addEventListener('change', async () => { await TourStory.addFiles(pick.files); pick.value = ''; drawCrew(); });
+      drawCrew();
+      const names = Object.assign(el('input'), { type: 'text', maxLength: 120, placeholder: tl2('সদস্যদের নাম, কমা দিয়ে — যেমন: রাতুল, সিয়াম, সাব্বির', 'Names, separated by commas'), value: (document.getElementById('tour-names') || {}).value || '' });
+      names.addEventListener('input', () => { const t = document.getElementById('tour-names'); if (t) t.value = names.value; });
+      const title = Object.assign(el('input'), { type: 'text', maxLength: 40, placeholder: tl2('ট্রিপের নাম — যেমন: সিলেট বিভাগ ঘোরা', 'Trip name'), value: T.title || '' });
+      title.addEventListener('input', () => { T.title = title.value; save(); });
+      const nameWrap = el('label', 'trip-select'), titleWrap = el('label', 'trip-select');
+      nameWrap.appendChild(names); titleWrap.appendChild(title);
+      c4.append(thumbs, pick, nameWrap, titleWrap);
+      form.append(c1, c2, c3, c4);
       const out = el('div', 'trip-out');
       box.append(form, out);
     }
@@ -154,8 +173,8 @@
   async function planTrip() {
     const s = districtById(T.start), route = order(T.start, T.stops, T.back);
     const ends = [s, ...route, ...(T.back ? [s] : [])];
-    let legs = null;
-    try { const r = await getRoute(ends); if (r.legs && r.legs.length === ends.length - 1) legs = r.legs.map(l => ({ km: l.distance / 1000, road: true })); } catch { /* the straight-line estimate below */ }
+    let legs = null, line = null;
+    try { const r = await getRoute(ends); if (r.legs && r.legs.length === ends.length - 1) { legs = r.legs.map(l => ({ km: l.distance / 1000, road: true })); line = r.geometry && r.geometry.coordinates; } } catch { /* the straight-line estimate below */ }
     if (!legs) legs = ends.slice(1).map((d, i) => ({ km: kmLine(ends[i], d), road: false }));
     const st = STYLES[T.style];
     const rooms = Math.ceil(T.people / 2);
@@ -179,7 +198,7 @@
     const totalDays = T.back ? day : day - 1;
     const food = st.food * T.people * totalDays, local = st.local * T.people * totalDays;
     const total = fare + hotel + food + local;
-    return { route, ends, legs, days, fare, hotel, food, local, total, perHead: total / T.people, km: legs.reduce((k, l) => k + l.km, 0), totalDays, road: legs.every(l => l.road), st };
+    return { route, ends, line, legs, days, fare, hotel, food, local, total, perHead: total / T.people, km: legs.reduce((k, l) => k + l.km, 0), totalDays, road: legs.every(l => l.road), st };
   }
 
   function renderPlan(p) {
@@ -249,7 +268,13 @@
     share.addEventListener('click', async () => { try { if (navigator.share) await navigator.share({ title: tl2('ট্রিপ প্ল্যান', 'Trip plan'), text: text() }); else { await navigator.clipboard.writeText(text()); share.querySelector('span').textContent = tl2('কপি হয়েছে ✓', 'Copied ✓'); } } catch { /* cancelled */ } });
     const print = el('button', 'btn quiet'); print.append(ic('copy'), el('span', null, tl2('প্রিন্ট / PDF', 'Print / PDF')));
     print.addEventListener('click', () => { document.body.classList.add('trip-print'); setTimeout(() => { window.print(); document.body.classList.remove('trip-print'); }, 50); });
-    acts.append(share, print);
+    const story = el('button', 'btn trip-story'); story.append(ic('star'), el('span', null, tl2('গল্প আর পোস্টার বানান', 'Make the story and poster')));
+    story.addEventListener('click', () => {
+      if (!window.TourStory) return;
+      const visit = p.route;
+      TourStory.play({ stops: p.ends, from: p.ends[0], to: visit.at(-1), line: p.line, km: p.km, hours: null, people: T.people, nights: T.nights * visit.length, days: p.totalDays, title: T.title || (new Set(visit.map(d => d.division)).size === 1 ? tl2(`${visit[0].division} বিভাগ ঘোরা`, `${visit[0].division} division trip`) : tl2(`${num(visit.length)} জেলার ট্রিপ`, `${visit.length}-district trip`)) });
+    });
+    acts.append(story, share, print);
     parts.push(acts);
     return parts;
   }
