@@ -457,64 +457,71 @@ const inBangladesh = (lat, lon) => lat >= BD_LNGLAT[0][1] && lat <= BD_LNGLAT[1]
 const TERRAIN_TILES = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png';
 
 // ---- Map look ----
-// Modelled on how Google and Apple Maps stay readable at street level:
-//   * one quiet neutral ground, buildings only a shade apart from it, no outlines fighting for attention
-//   * roads in a single blue-grey family (stronger = more important) with no casings, so the network reads as one shape
-//   * each label once, with a halo in the ground colour
-//   * colour reserved for what matters: water, green space, the national border, place badges, and our route lines
+// Modelled on Apple Maps:
+//   * a warm, quiet ground; parks, water and campuses in soft clear colours, so a district reads at a glance
+//     (green for parks, blue for water, sand for schools and colleges, rose for hospitals, peach for markets)
+//   * streets white with a hairline edge in the light map, highways warm yellow; in the dark map the roads are
+//     greys a step apart and the highways a muted gold
+//   * each label once, with a halo in the ground colour; colour kept for place badges and our own route lines
 // The same base style is recoloured for light and dark, so both modes show the same things.
 const PALETTES = {
   light: {
-    ground: '#f2f3f5', halo: '#ffffff', label: '#1f2937', roadLabel: '#3a4a66', waterLabel: '#3f7fc4', border: '#0a8f62',
-    roads: [[/motorway/, '#8fa3c7'], [/trunk_primary/, '#a0b1cd'], [/secondary_tertiary/, '#b2c0d6'], [/./, '#c4cedd']],
-    path: '#cfd6e1', reliefOpacity: 1,
+    ground: '#f6f4ef', halo: '#ffffff', label: '#1f2937', roadLabel: '#4b5563', waterLabel: '#2f7bbf', border: '#0a8f62',
+    // [layer id, fill, edge]
+    roads: [[/motorway/, '#f9cf6a', '#e3ab38'], [/trunk_primary/, '#fde6a3', '#e7c472'], [/secondary_tertiary/, '#ffffff', '#d9d3c7'], [/./, '#ffffff', '#e1dcd2']],
+    casing: true, path: '#e4ded2', reliefOpacity: 1, ferry: '#5aa0d8',
+    use: { commercial: '#fbe9dc', retail: '#fbe4d6', industrial: '#ebe7e2', university: '#f3ead0', college: '#f6efd9', kindergarten: '#f6efd9',
+           stadium: '#d6ecc9', military: '#ece6e2', bus_station: '#e9ecf3', railway: '#ece9e4' },
     paint: {
       landuse_residential: { 'fill-opacity': 0 },
-      park: { 'fill-color': '#cdeccb', 'fill-opacity': 1 },
-      park_outline: { 'line-color': '#b4deb1' },
-      landcover_wood: { 'fill-color': '#c2e3bd' },
-      landcover_grass: { 'fill-color': '#d9efd4' },
-      landcover_sand: { 'fill-color': '#f3e8c4' },
-      landuse_pitch: { 'fill-color': '#d3ecc9' },
-      landuse_school: { 'fill-color': '#ecebf5', 'fill-opacity': 0.7 },
-      landuse_hospital: { 'fill-color': '#f8e9ea', 'fill-opacity': 0.7 },
-      water: { 'fill-color': '#a8d6fb' },
-      waterway_river: { 'line-color': '#a8d6fb' },
-      waterway_other: { 'line-color': '#a8d6fb' },
-      building: { 'fill-color': '#e3e6eb', 'fill-outline-color': '#d5d9e0' },
-      'building-3d': { 'fill-extrusion-color': '#e7eaee' },
-      boundary_3: { 'line-color': '#c3c9d4' }
+      park: { 'fill-color': '#cfe9bf', 'fill-opacity': 1 },
+      park_outline: { 'line-color': '#b9dda6' },
+      landcover_wood: { 'fill-color': '#c6e4b4' },
+      landcover_grass: { 'fill-color': '#dbefcd' },
+      landcover_sand: { 'fill-color': '#f4ebcb' },
+      landuse_pitch: { 'fill-color': '#c9e7b8' },
+      landuse_school: { 'fill-color': '#f6efd9', 'fill-opacity': 1 },
+      landuse_hospital: { 'fill-color': '#fbe3e4', 'fill-opacity': 1 },
+      landuse_cemetery: { 'fill-color': '#dcebd3' },
+      water: { 'fill-color': '#9fd4f7' },
+      waterway_river: { 'line-color': '#9fd4f7' },
+      waterway_other: { 'line-color': '#9fd4f7' },
+      building: { 'fill-color': '#e8e3da', 'fill-outline-color': '#d8d1c4' },
+      'building-3d': { 'fill-extrusion-color': '#ede9e2' },
+      boundary_3: { 'line-color': '#c9c3b8' }
     }
   },
   dark: {
-    ground: '#1a1e26', halo: '#12151b', label: '#dfe3ea', roadLabel: '#a9b4c6', waterLabel: '#74aee8', border: '#2fbf8a',
-    roads: [[/motorway/, '#6f80a3'], [/trunk_primary/, '#5a6783'], [/secondary_tertiary/, '#4a556c'], [/./, '#3b4456']],
-    path: '#333b4a', reliefOpacity: 0,
+    ground: '#1d1f23', halo: '#141619', label: '#e5e7eb', roadLabel: '#b6bcc6', waterLabel: '#7cb6ea', border: '#2fbf8a',
+    roads: [[/motorway/, '#9c8550', '#9c8550'], [/trunk_primary/, '#686458', '#686458'], [/secondary_tertiary/, '#4d5158', '#4d5158'], [/./, '#3d4046', '#3d4046']],
+    casing: false, path: '#34373d', reliefOpacity: 0, ferry: '#4f8fc7',
+    use: { commercial: '#2b2626', retail: '#2d2627', industrial: '#26272a', university: '#2b2922', college: '#2a2822', kindergarten: '#2a2822',
+           stadium: '#1f3326', military: '#28262a', bus_station: '#24272e', railway: '#25262a' },
     paint: {
       landuse_residential: { 'fill-opacity': 0 },
-      park: { 'fill-color': '#1f3b2b', 'fill-opacity': 1 },
-      park_outline: { 'line-color': '#2a4d38' },
-      landcover_wood: { 'fill-color': '#1d3728' },
-      landcover_grass: { 'fill-color': '#22392b' },
-      landcover_sand: { 'fill-color': '#3a3524' },
+      park: { 'fill-color': '#1e3a29', 'fill-opacity': 1 },
+      park_outline: { 'line-color': '#26472f' },
+      landcover_wood: { 'fill-color': '#1c3626' },
+      landcover_grass: { 'fill-color': '#213829' },
+      landcover_sand: { 'fill-color': '#38331f' },
       landcover_wetland: { 'fill-opacity': 0.15 },
       landcover_ice: { 'fill-opacity': 0.1 },
-      landuse_pitch: { 'fill-color': '#23402e' },
+      landuse_pitch: { 'fill-color': '#21402c' },
       landuse_track: { 'fill-opacity': 0.15 },
       landuse_cemetery: { 'fill-color': '#22302a' },
-      landuse_school: { 'fill-color': '#262a3a', 'fill-opacity': 0.7 },
-      landuse_hospital: { 'fill-color': '#34262b', 'fill-opacity': 0.7 },
-      aeroway_fill: { 'fill-color': '#232833' },
-      aeroway_runway: { 'line-color': '#3b4456' },
-      aeroway_taxiway: { 'line-color': '#333b4a' },
+      landuse_school: { 'fill-color': '#2a2822', 'fill-opacity': 1 },
+      landuse_hospital: { 'fill-color': '#302326', 'fill-opacity': 1 },
+      aeroway_fill: { 'fill-color': '#25282e' },
+      aeroway_runway: { 'line-color': '#3d4046' },
+      aeroway_taxiway: { 'line-color': '#34373d' },
       road_area_pattern: { 'fill-opacity': 0.1 },
-      water: { 'fill-color': '#10293f' },
-      waterway_river: { 'line-color': '#163650' },
-      waterway_other: { 'line-color': '#163650' },
-      waterway_tunnel: { 'line-color': '#163650' },
-      building: { 'fill-color': '#262b35', 'fill-outline-color': '#303644' },
-      'building-3d': { 'fill-extrusion-color': '#343b48' },
-      boundary_3: { 'line-color': '#3b4456' }
+      water: { 'fill-color': '#12324c' },
+      waterway_river: { 'line-color': '#173a57' },
+      waterway_other: { 'line-color': '#173a57' },
+      waterway_tunnel: { 'line-color': '#173a57' },
+      building: { 'fill-color': '#2a2d33', 'fill-outline-color': '#33373e' },
+      'building-3d': { 'fill-extrusion-color': '#3a3e46' },
+      boundary_3: { 'line-color': '#3d4046' }
     }
   }
 };
@@ -594,16 +601,19 @@ function restyle(style, dark) {
     if (l.id === 'building') { delete l.maxzoom; paint['fill-opacity'] = ['interpolate', ['linear'], ['zoom'], 13, 0, 14.5, 1]; }
     if (l.type === 'fill-extrusion') {
       layout.visibility = 'none';
-      Object.assign(paint, { 'fill-extrusion-opacity': 0.95, 'fill-extrusion-vertical-gradient': true });
+      Object.assign(paint, { 'fill-extrusion-opacity': 0.95, 'fill-extrusion-vertical-gradient': true,
+        // taller buildings a shade lighter, so a skyline reads in depth (as Apple Maps shades its towers)
+        'fill-extrusion-color': ['interpolate', ['linear'], ['coalesce', ['get', 'render_height'], 6], ...(dark ? [0, '#33363d', 30, '#40444c', 90, '#4d525c'] : [0, '#e4dfd5', 30, '#eeeae3', 90, '#f7f5f1'])] });
     }
 
     if (l.type === 'line') {
       if (/^boundary(_2|_country)/.test(l.id)) Object.assign(paint, { 'line-color': P.border, 'line-opacity': 0.75 });
       else if (/path_pedestrian/.test(l.id)) { if (!l.id.endsWith('_casing')) paint['line-color'] = P.path; else paint['line-opacity'] = 0; }
       else if (/^(road|bridge|tunnel)_/.test(l.id) && !/rail|pattern/.test(l.id)) {
-        if (l.id.endsWith('_casing')) paint['line-opacity'] = 0;
+        const [, fill, edge] = P.roads.find(([re]) => re.test(l.id));
+        if (l.id.endsWith('_casing')) { if (P.casing) paint['line-color'] = edge; else paint['line-opacity'] = 0; }
         else {
-          paint['line-color'] = P.roads.find(([re]) => re.test(l.id))[1];
+          paint['line-color'] = fill;
           if (l.id.startsWith('tunnel_')) paint['line-opacity'] = 0.55;
         }
       } else if (/rail/.test(l.id) && dark) paint['line-color'] = '#4a556c';
@@ -621,6 +631,7 @@ function restyle(style, dark) {
       Object.assign(paint, { 'text-color': text, 'text-halo-color': P.halo, 'text-halo-width': 1.6 });
       // Places of interest: coloured badge, label beside it in the matching colour, free to switch sides.
       if (l['source-layer'] === 'poi') {
+        if (l.id === 'poi_r1') l.minzoom = 14; else if (l.id === 'poi_r7') l.minzoom = 15; else if (l.id === 'poi_r20') l.minzoom = 16;
         delete layout['text-anchor'];
         delete layout['text-offset'];
         Object.assign(layout, { 'icon-image': poiMatch(k => 'poi-' + k[0]), 'icon-size': 1, 'text-size': 12, 'text-optional': true,
@@ -677,6 +688,20 @@ async function buildStyle() {
                         paint: { 'fill-extrusion-color': dark ? '#2c2c2e' : '#e6e2da', 'fill-extrusion-opacity': 0.85,
                                  'fill-extrusion-height': ['coalesce', ['get', 'render_height'], 6],
                                  'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0] } });
+  }
+  // markets, campuses, stadiums and the like in their own soft colours; launch and ferry routes; house numbers
+  if (vector) {
+    const P = dark ? PALETTES.dark : PALETTES.light;
+    const at = id => style.layers.findIndex(l => l.id === id);
+    style.layers.splice(at('landuse_pitch'), 0, { id: 'landuse_more', type: 'fill', source: vector, 'source-layer': 'landuse', minzoom: 11,
+      filter: ['match', ['get', 'class'], Object.keys(P.use), true, false],
+      paint: { 'fill-color': ['match', ['get', 'class'], ...Object.entries(P.use).flat(), P.ground], 'fill-opacity': ['interpolate', ['linear'], ['zoom'], 11, 0, 13, 1] } });
+    style.layers.splice(at('water') + 1, 0, { id: 'ferry', type: 'line', source: vector, 'source-layer': 'transportation', minzoom: 7,
+      filter: ['==', ['get', 'class'], 'ferry'], layout: { 'line-join': 'round' },
+      paint: { 'line-color': P.ferry, 'line-width': ['interpolate', ['linear'], ['zoom'], 7, 0.8, 14, 2], 'line-dasharray': [2, 2], 'line-opacity': 0.85 } });
+    style.layers.push({ id: 'housenumber', type: 'symbol', source: vector, 'source-layer': 'housenumber', minzoom: 17.5,
+      layout: { 'text-field': ['get', 'housenumber'], 'text-font': ['Noto Sans Regular'], 'text-size': 10.5 },
+      paint: { 'text-color': dark ? '#8b9099' : '#8a8172', 'text-halo-color': P.halo, 'text-halo-width': 1.2 } });
   }
   NAME_LAYERS.length = 0;
   restyle(style, dark);
@@ -790,6 +815,8 @@ async function createMap() {
   await new Promise(resolve => map.once('load', resolve));
   $('map-loading').hidden = true;
   initBanglaLabels();
+  map.on('pitchend', standBuildings);
+  map.setLight({ anchor: 'viewport', color: '#ffffff', intensity: dark ? 0.28 : 0.4, position: [1.3, 200, 40] });   // a soft sun from the upper left
   // Start with the credits folded into their (i) button; they open on tap.
   const credits = document.querySelector('.maplibregl-ctrl-attrib');
   if (credits) { credits.classList.remove('maplibregl-compact-show'); credits.removeAttribute('open'); }
@@ -918,10 +945,17 @@ function set3D(on) {
   is3D = on;
   $('tool-3d').classList.toggle('on', on);
   map.setTerrain(on ? { source: 'relief', exaggeration: 1.4 } : null);
-  for (const l of map.getStyle().layers) if (l.type === 'fill-extrusion') map.setLayoutProperty(l.id, 'visibility', on ? 'visible' : 'none');
+  buildingsUp = !on; standBuildings();
   map.easeTo({ pitch: on ? 60 : 0, bearing: on ? -18 : 0, duration: 900 });
 }
 $('tool-3d').addEventListener('click', () => { if (map) set3D(!is3D); });
+let buildingsUp = false;
+function standBuildings() {
+  const up = is3D || map.getPitch() > 12;
+  if (up === buildingsUp) return;
+  buildingsUp = up;
+  for (const l of map.getStyle().layers) if (l.type === 'fill-extrusion') map.setLayoutProperty(l.id, 'visibility', up ? 'visible' : 'none');
+}
 $('tool-home').addEventListener('click', () => { if (map) fit(BD_LNGLAT); });
 $('tool-in').addEventListener('click', () => { if (map) map.zoomIn(); });
 $('tool-out').addEventListener('click', () => { if (map) map.zoomOut(); });
