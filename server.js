@@ -2548,6 +2548,35 @@ async function placesApi(req, res, action, query) {
   return json(res, 404, { error: 'not found' });
 }
 
+// ---- More places for the map: Overture's (data/places-bd.tsv.gz, from tools/overture-places.mjs), in cells of
+// 0.02° (about 2 km). The map asks for the cells on screen once it is close enough to show shops and schools.
+const POI_CELL = 50;                                    // cells per degree
+const poiCells = new Map();
+try {
+  const rows = require('node:zlib').gunzipSync(fs.readFileSync(path.join(ROOT, 'data', 'places-bd.tsv.gz'))).toString('utf8').split('\n');
+  rows.shift();
+  for (const r of rows) {
+    if (!r) continue;
+    const [la, lo, kind, name, bn, cat] = r.split('\t');
+    const key = Math.floor(+la * POI_CELL) + ':' + Math.floor(+lo * POI_CELL);
+    let cell = poiCells.get(key);
+    if (!cell) poiCells.set(key, cell = []);
+    cell.push([+la, +lo, kind, name, bn || '', cat || '']);
+  }
+  console.log(`Map places: ${[...poiCells.values()].reduce((n, c) => n + c.length, 0)} in ${poiCells.size} cells`);
+} catch { /* no file: the map shows OpenStreetMap's places only */ }
+const poiZipped = new Map();                            // a busy city cell is a few hundred kB as text, a fifth of that zipped
+function poisApi(req, res, searchParams) {
+  const m = /^(-?\d+):(-?\d+)$/.exec(searchParams.get('c') || '');
+  if (!m) return json(res, 400, { error: 'bad cell' });
+  const key = m[1] + ':' + m[2], body = JSON.stringify({ p: poiCells.get(key) || [] });
+  const head = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'public, max-age=86400', Vary: 'Accept-Encoding' };
+  if (!/gzip/.test(req.headers['accept-encoding'] || '')) { res.writeHead(200, head); return res.end(body); }
+  let z = poiZipped.get(key);
+  if (!z) { z = require('node:zlib').gzipSync(body); poiZipped.set(key, z); if (poiZipped.size > 400) poiZipped.delete(poiZipped.keys().next().value); }
+  res.writeHead(200, { ...head, 'Content-Encoding': 'gzip' });
+  res.end(z);
+}
 
 const server = http.createServer((req, res) => {
   const { pathname, searchParams } = new URL(req.url, 'http://localhost');
@@ -2569,6 +2598,7 @@ const server = http.createServer((req, res) => {
   if (pathname.startsWith('/api/community/')) return communityApi(req, res, pathname.slice(15), searchParams).catch(e => { console.error(e); json(res, 500, { error: 'server error' }); });
   if (pathname.startsWith('/api/support/')) return supportApi(req, res, pathname.slice(13), searchParams).catch(() => json(res, 500, { error: 'server error' }));
   if (pathname.startsWith('/api/admin/')) return adminApi(req, res, pathname.slice(11), searchParams).catch(e => { console.error(e); json(res, 500, { error: 'server error' }); });
+  if (pathname === '/api/pois') return poisApi(req, res, searchParams);
   if (pathname === '/api/notice') return json(res, 200, { text: (sq.setting.get('notice') || {}).value || '' });
   if (pathname.startsWith('/api/auth/')) return authApi(req, res, pathname.slice(10)).catch(() => json(res, 500, { error: 'server error' }));
   if (pathname.startsWith('/api/')) return json(res, 404, { error: 'not found' });

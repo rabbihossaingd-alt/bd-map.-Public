@@ -828,7 +828,8 @@ async function createMap() {
   await new Promise(resolve => map.once('load', resolve));
   $('map-loading').hidden = true;
   initBanglaLabels();
-  map.on('pitchend', standBuildings);
+  map.on('pitch', standBuildings);
+  map.on('moveend', standBuildings);
   map.setLight({ anchor: 'viewport', color: '#ffffff', intensity: dark ? 0.28 : 0.4, position: [1.3, 200, 40] });   // a soft sun from the upper left
   // Start with the credits folded into their (i) button; they open on tap.
   const credits = document.querySelector('.maplibregl-ctrl-attrib');
@@ -844,6 +845,35 @@ async function createMap() {
   map.addLayer({ id: 'bus-line', type: 'line', source: 'bus', layout: round, paint: { 'line-color': ['get', 'color'], 'line-width': 6 } }, firstLabel);
   map.addLayer({ id: 'stops', type: 'circle', source: 'stops',
                  paint: { 'circle-radius': 5.5, 'circle-color': '#ffffff', 'circle-stroke-width': 3, 'circle-stroke-color': ['get', 'color'] } });
+
+  // More places — Overture's shops, schools, clinics and mosques, which OpenStreetMap often lacks here. The server
+  // keeps them in 0.02° cells; the cells on screen are fetched once each. They sit under OpenStreetMap's own badges,
+  // so where both know a place the map's collision rule keeps one badge.
+  map.addSource('places2', { type: 'geojson', data: EMPTY, attribution: '<a href="https://overturemaps.org" target="_blank" rel="noopener">Overture Maps</a>' });
+  const firstPoi = (map.getStyle().layers.find(l => l['source-layer'] === 'poi') || {}).id;
+  map.addLayer({ id: 'places2', type: 'symbol', source: 'places2', minzoom: 15.5,
+                 layout: { 'icon-image': ['concat', 'poi-', ['get', 'kind']], 'icon-size': 1, 'text-field': ['get', 'name'], 'text-font': ['Noto Sans Regular'], 'text-size': 12,
+                           'text-optional': true, 'text-variable-anchor': ['left', 'right', 'top', 'bottom'], 'text-radial-offset': 1.05, 'text-justify': 'auto' },
+                 paint: { 'text-opacity': 0 } }, firstPoi);
+  NAME_LAYERS.push('places2');
+  const cells = new Map(), CELL = 50;
+  const classOf = kind => ((POI_KINDS.find(k => k[0] === kind) || [])[4] || [])[0] || '';
+  async function morePlaces() {
+    if (map.getZoom() < 15.5) return;
+    const b = map.getBounds(), c = map.getCenter(), all = [];
+    for (let y = Math.floor(b.getSouth() * CELL); y <= Math.floor(b.getNorth() * CELL); y++)
+      for (let x = Math.floor(b.getWest() * CELL); x <= Math.floor(b.getEast() * CELL); x++) all.push([y, x, Math.hypot(y + 0.5 - c.lat * CELL, x + 0.5 - c.lng * CELL)]);
+    // a tilted view reaches to the horizon; the cells nearest the middle are the ones close enough to read
+    const keys = all.sort((p, q) => p[2] - q[2]).slice(0, 20).map(([y, x]) => y + ':' + x);
+    await Promise.all(keys.filter(k => !cells.has(k)).map(k => { cells.set(k, []); return fetch('api/pois?c=' + k).then(r => r.json()).then(j => cells.set(k, j.p || [])).catch(() => cells.delete(k)); }));
+    const features = [];
+    const close = map.getZoom() >= 17.5;                           // offices and services only once the street is close
+    for (const k of keys) for (const [lat, lon, kind, name, bn, cat] of cells.get(k) || []) if (close || kind !== 'other')
+      features.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [lon, lat] }, properties: { kind, name, 'name:latin': name, ...(bn ? { 'name:bn': bn } : {}), class: classOf(kind), cat } });
+    const src = map.getSource('places2');
+    if (src) src.setData({ type: 'FeatureCollection', features });
+  }
+  map.on('moveend', morePlaces);
 
   // Live location: a blue dot with an accuracy ring that follows the device. MapLibre's own control does the
   // tracking; its button is hidden because ours (in .map-tools) triggers it.
