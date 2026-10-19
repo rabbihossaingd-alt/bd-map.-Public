@@ -374,13 +374,36 @@ const coverStyle = (img, division) => {
     try { gemsAll = (await placesGet('gems')).gems; } catch { gemsAll = []; }
     const rail = $('dg-gems');
     if (!rail) return;
-    const add = el('button', 'dg-place gm-add');
-    add.append(Object.assign(el('span', 'ph'), { innerHTML: '<span class="gm-plus">+</span>' }), Object.assign(el('span', 't'), { innerHTML: '' }));
-    add.querySelector('.t').append(el('b', null, tl2('জায়গার খোঁজ দিন', 'Share a place')), el('small', null, tl2('অনুমোদন হলে ৫ পয়েন্ট', '5 points once approved')));
-    add.addEventListener('click', () => openGemForm());
-    rail.replaceChildren(add, ...gemsAll.map(gemCard));
-    $('dg-gem-n').textContent = gemsAll.length ? tl2(`স্থানীয়দের চেনা ${num(gemsAll.length)}টি জায়গা — আমাদের টিম দেখে নিয়েছে`, `${gemsAll.length} places sent by locals, checked by our team`)
-      : tl2('আপনার গ্রাম বা উপজেলার কোনো জায়গা, যা গাইডবইয়ে নেই অথচ দেখার মতো? মেঠোপথে যোগ করুন — দেখে নিয়ে আপনার নামে প্রকাশ করব।', 'A place near you that no guidebook lists but everyone should see? Add it to Methopath — once checked it goes up under your name.');
+    // the banner: what মেঠোপথ is, how it works in three steps, and the two ways to take part
+    const banner = $('mtp-banner');
+    if (banner) {
+      const shots = [];
+      for (const d of DISTRICTS) for (const x of ((GUIDE || {})[d.id] || {}).sights || []) if (x.img && (x.views || 0) < 400 && x.views > 40) shots.push(x.img);   // quiet places, not the famous ones
+      const pick = [0, 1, 2].map(i => shots[(Math.floor(Date.now() / 864e5) * 7 + i * 13) % Math.max(1, shots.length)]).filter(Boolean);
+      banner.replaceChildren();
+      const art = el('div', 'mtp-polaroids');
+      pick.forEach((u, i) => { const f = el('span', 'mtp-pol p' + i); photo(f, u, '', 330); art.appendChild(f); });
+      const copy = el('div', 'mtp-bcopy');
+      copy.append(el('span', 'mtp-new', tl2('🌿 মেঠোপথ · সবার জন্য খোলা', '🌿 Methopath · open to all')),
+        el('h3', null, tl2('আপনার চেনা জায়গাটি সবাইকে দেখান', 'Show everyone the place you know')),
+        el('p', null, tl2('গাইডবইয়ে নেই এমন সুন্দর জায়গা, বা ঘুরতে গিয়ে তোলা ছবি — শেয়ার করুন। দেখে নিয়ে আপনার নামে প্রকাশ করা হয়, আর আপনি পান পয়েন্ট।', 'A beautiful place no guidebook lists, or a photo from your trip — share it. It is checked, published under your name, and you earn points.')));
+      const steps = el('ol', 'mtp-steps');
+      for (const [n, bn, en] of [['১', 'জায়গা বা ছবি দিন', 'Send a place or photo'], ['২', 'আমরা দেখে নিই', 'We check it'], ['৩', 'আপনার নামে প্রকাশ', 'It goes up as yours']]) { const li = el('li'); li.append(el('b', null, LANG === 'en' ? String('০১২৩'.indexOf(n)) : n), el('span', null, tl2(bn, en))); steps.appendChild(li); }
+      const acts = el('div', 'mtp-bacts');
+      const a1 = el('button', 'mtp-bbtn main'); a1.append(Object.assign(el('i'), { innerHTML: svg('pin') }), el('span', null, tl2('জায়গা শেয়ার করুন', 'Share a place')), el('em', null, tl2('+৫', '+5')));
+      const a2 = el('button', 'mtp-bbtn'); a2.append(Object.assign(el('i'), { innerHTML: svg('camera') }), el('span', null, tl2('ছবি শেয়ার করুন', 'Share a photo')), el('em', null, tl2('+৩', '+3')));
+      const a3 = el('button', 'mtp-blink', tl2(gemsAll.length ? `সব দেখুন · ${num(gemsAll.length)}টি জায়গা →` : 'মেঠোপথ ঘুরে দেখুন →', gemsAll.length ? `See all · ${gemsAll.length} places →` : 'Explore Methopath →'));
+      a1.addEventListener('click', () => openGemForm());
+      a2.addEventListener('click', () => pickPlaceForPhoto());
+      a3.addEventListener('click', () => openMethopath());
+      acts.append(a1, a2);
+      copy.append(steps, acts, a3);
+      banner.append(copy, art);
+    }
+    rail.replaceChildren(...gemsAll.map(gemCard));
+    rail.hidden = !gemsAll.length;
+    $('dg-gem-head').hidden = !gemsAll.length;
+    $('dg-gem-n').textContent = tl2(`স্থানীয়দের পাঠানো ${num(gemsAll.length)}টি জায়গা — আমাদের টিম দেখে নিয়েছে`, `${gemsAll.length} places sent by locals, checked by our team`);
     renderWants();
   }
 
