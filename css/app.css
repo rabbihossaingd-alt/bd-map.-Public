@@ -3908,3 +3908,118 @@ button.dg-wiki { background: none; border: 0; padding: 0; cursor: pointer; font:
 .mtp-start p { margin: 0 0 8px; max-width: 420px; font-size: 14px; line-height: 1.75; color: var(--muted); }
 .mtp-more { margin-top: 30px; }
 .mtp-more:empty { display: none; }
+
+/* ================= Brand v2: one palette for the whole app ================= */
+/* Emerald for the brand (the flag's green, brighter for screens), a cool teal beside it,
+   warm amber for points and highlights; Apple's neutrals. The older rules all read these tokens. */
+:root {
+  --bg: #f5f5f7; --surface: #ffffff; --raised: #efeff4;
+  --ink: #0a0d12; --ink-2: #3c434f; --muted: #7c8594; --line: rgba(10, 13, 18, .08);
+  --accent: #00875a; --accent-2: #0ea5a4; --accent-soft: #e3f6ee; --on-accent: #ffffff;
+  --brand-grad: linear-gradient(135deg, #10b981 0%, #059669 55%, #0f766e 100%);
+  --gold: #f5a524;
+  --shadow-1: 0 1px 2px rgba(10, 13, 18, .04), 0 8px 24px rgba(10, 13, 18, .06);
+  --shadow-2: 0 2px 8px rgba(10, 13, 18, .06), 0 24px 60px rgba(10, 13, 18, .14);
+}
+:root[data-theme=dark] {
+  --bg: #000000; --surface: #121214; --raised: #1f1f23;
+  --ink: #f5f5f7; --ink-2: #c2c5cc; --muted: #8b8f98; --line: rgba(255, 255, 255, .09);
+  --accent: #2ed39a; --accent-2: #2cc5d0; --accent-soft: rgba(46, 211, 154, .14); --on-accent: #03140d;
+  --brand-grad: linear-gradient(135deg, #34d399 0%, #10b981 50%, #0d9488 100%);
+  --glass: rgba(18, 18, 20, .72);
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, .5), 0 0 0 1px rgba(255, 255, 255, .04);
+  --shadow-2: 0 24px 60px rgba(0, 0, 0, .7);
+}
+.logo { background: var(--brand-grad); box-shadow: 0 6px 16px -6px #10b981; }
+/* app icons: one family, soft vertical gradients with a glassy light on top */
+.mi { position: relative; overflow: hidden; }
+.mi::before { content: ""; position: absolute; inset: 0 0 50% 0; background: linear-gradient(rgba(255, 255, 255, .26), rgba(255, 255, 255, 0)); pointer-events: none; }
+.mi.soft::before { display: none; }
+.c-green { background: linear-gradient(160deg, #34d399, #059669); } .c-teal { background: linear-gradient(160deg, #2dd4bf, #0f766e); }
+.c-blue { background: linear-gradient(160deg, #60a5fa, #2563eb); } .c-violet { background: linear-gradient(160deg, #a78bfa, #6d28d9); }
+.c-pink { background: linear-gradient(160deg, #fb7185, #e11d48); } .c-amber { background: linear-gradient(160deg, #fbbf24, #ea580c); }
+.c-ink { background: linear-gradient(160deg, #475569, #0f172a); } .c-gray { background: linear-gradient(160deg, #9ca3af, #4b5563); }
+.c-indigo { background: linear-gradient(160deg, #818cf8, #4338ca); }
+
+/* ================= Home v2 ================= */
+.hero { padding: 92px 24px 48px; }
+.hero::after { content: ""; position: absolute; inset: auto 0 0 0; height: 120px; background: linear-gradient(transparent, var(--bg)); pointer-events: none; z-index: 0; }
+.hero .eyebrow { font-size: 13.5px; padding: 6px 14px; border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent); }
+.hero h1 em { background: var(--brand-grad); -webkit-background-clip: text; background-clip: text; }
+.hero-search { border-radius: 26px; }
+/* recent and popular trips: one row that slides sideways on a phone, centred on a big screen */
+.hm-chips { position: relative; z-index: 1; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; max-width: 720px; margin: 20px auto 0; }
+.hm-chips .chips, .hm-chips .chips[hidden] { display: contents; }
+.hm-chips .chips[hidden] > * { display: none; }
+.hm-chips .chip { flex: none; height: 36px; display: inline-flex; align-items: center; gap: 6px; padding: 0 14px; font-size: 14px; font-weight: 600; white-space: nowrap;
+  background: color-mix(in srgb, var(--surface) 80%, transparent); border: 1px solid var(--line); box-shadow: none; -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+  transition: transform .2s var(--ease), background .2s, border-color .2s; }
+.hm-chips .chip:hover { border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+.hm-chips .chip:active { transform: scale(.95); }
+.hm-chips .chip svg { color: var(--accent); }
+
+.home { padding-top: 8px; }
+.apps { border-radius: 30px; padding: 12px; gap: 4px; }
+.apps .mi { box-shadow: 0 10px 22px -10px rgba(0, 0, 0, .45); }
+.apps span { color: var(--ink-2); }
+
+/* the day's place, full bleed: the photo slowly drifts, the words sit at its foot */
+.hm-feature { position: relative; display: block; width: 100%; margin-top: 22px; aspect-ratio: 16 / 9; max-height: 460px; border-radius: 32px; overflow: hidden; isolation: isolate; text-align: left; color: #fff;
+  background: radial-gradient(circle at 80% 10%, rgba(52, 211, 153, .35), transparent 50%), linear-gradient(150deg, #064e3b, #0b1220); box-shadow: var(--shadow-2); transition: transform .35s var(--ease); }
+.hm-feature:active { transform: scale(.985); }
+.hm-feature img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transform: scale(1.08); transition: opacity .8s var(--ease); }
+.hm-feature.in img { opacity: 1; animation: hmdrift 22s ease-in-out infinite alternate; }
+@keyframes hmdrift { from { transform: scale(1.08) translate(0, 0); } to { transform: scale(1.16) translate(-2%, -1.5%); } }
+.hm-fshade { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0, 0, 0, .35) 0%, transparent 28%, transparent 42%, rgba(0, 0, 0, .8) 100%); }
+.hm-ftag { position: absolute; left: 22px; top: 20px; padding: 6px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 700; letter-spacing: .02em;
+  background: rgba(255, 255, 255, .16); border: 1px solid rgba(255, 255, 255, .22); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
+.hm-fcopy { position: absolute; left: 26px; right: 26px; bottom: 26px; display: grid; gap: 4px; }
+.hm-fcopy b { font-size: clamp(28px, 5vw, 46px); font-weight: 800; letter-spacing: -.025em; line-height: 1.12; text-shadow: 0 2px 20px rgba(0, 0, 0, .35); }
+.hm-fcopy > span { font-size: 15px; opacity: .85; }
+.hm-fgo { position: absolute; right: 22px; top: 18px; display: inline-flex; align-items: center; gap: 8px; height: 38px; padding: 0 6px 0 14px; border-radius: 999px; font-size: 13.5px; font-weight: 700;
+  color: #052e16; background: rgba(255, 255, 255, .92); box-shadow: 0 8px 20px rgba(0, 0, 0, .25); }
+.hm-fgo i { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; color: #fff; background: #059669; font-size: 14px; transition: transform .3s var(--ease); }
+.hm-feature:hover .hm-fgo i { transform: translateX(3px); }
+
+/* the community card: one clean row with the faces */
+.hm-give { position: relative; display: flex; align-items: center; gap: 16px; margin-top: 40px; padding: 24px; border-radius: 30px; color: var(--ink); overflow: hidden;
+  background: radial-gradient(circle at 100% 0%, color-mix(in srgb, var(--gold) 22%, transparent), transparent 45%), var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow-1);
+  transition: transform .35s var(--ease), box-shadow .35s var(--ease); }
+.hm-give:hover { transform: translateY(-3px); box-shadow: var(--shadow-2); }
+.hm-gcopy { flex: 1; min-width: 0; display: grid; gap: 6px; }
+.hm-gtag { justify-self: start; padding: 4px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 700; color: #b45309; background: color-mix(in srgb, var(--gold) 18%, transparent); }
+:root[data-theme=dark] .hm-gtag { color: #fcd34d; }
+.hm-gcopy b { font-size: clamp(22px, 3vw, 28px); font-weight: 800; letter-spacing: -.02em; line-height: 1.2; }
+.hm-gcopy > span:not(.hm-gtag):not(.b-faces) { font-size: 15px; color: var(--ink-2); }
+.hm-gcopy .b-faces:empty { display: none; }
+.hm-garrow { flex: none; width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center; font-size: 20px; color: #fff; background: var(--brand-grad); box-shadow: 0 12px 24px -12px #059669; transition: transform .3s var(--ease); }
+.hm-give:hover .hm-garrow { transform: translateX(4px); }
+
+.stats-band { margin-top: 14px; background: var(--surface); box-shadow: var(--shadow-1); }
+.stats-band b { background: var(--brand-grad); -webkit-background-clip: text; background-clip: text; }
+
+/* emergency numbers: compact tiles, two to a row on a phone */
+#helplines.hm-help { margin-top: 0; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+.hm-help .help { gap: 12px; padding: 14px 16px; border-radius: 22px; border: 1px solid var(--line); }
+.hm-help .help .n { min-width: 0; padding: 8px 10px; border-radius: 14px; font-size: 18px; font-weight: 800; color: var(--accent); background: var(--accent-soft); }
+.hm-help .help:first-child .n { color: #fff; background: linear-gradient(160deg, #fb7185, #e11d48); }
+.hm-help .help b { font-size: 15px; }
+.hm-help .help span { font-size: 12.5px; }
+
+@media (max-width: 760px) {
+  .hero { padding: 54px 16px 30px; }
+  .lead { margin: 12px auto 24px; font-size: 17px; }
+  .hm-chips { flex-wrap: nowrap; justify-content: flex-start; overflow-x: auto; margin: 16px -16px 0; padding: 0 16px 4px; scrollbar-width: none;
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 16px, #000 calc(100% - 24px), transparent); mask-image: linear-gradient(90deg, transparent, #000 16px, #000 calc(100% - 24px), transparent); }
+  .hm-chips::-webkit-scrollbar { display: none; }
+  .apps { border-radius: 26px; padding: 8px 4px; }
+  .hm-feature { aspect-ratio: 4 / 5; max-height: 520px; border-radius: 28px; margin-top: 18px; }
+  .hm-ftag { left: 16px; top: 16px; }
+  .hm-fcopy { left: 20px; right: 20px; bottom: 76px; }
+  .hm-fgo { left: 20px; right: auto; top: auto; bottom: 20px; }
+  .hm-give { margin-top: 30px; padding: 20px; border-radius: 26px; }
+  .hm-garrow { width: 42px; height: 42px; }
+  #helplines.hm-help { grid-template-columns: 1fr 1fr; }
+  .hm-help .help { flex-direction: column; align-items: flex-start; gap: 10px; padding: 14px; }
+}
+@media (prefers-reduced-motion: reduce) { .hm-feature.in img { animation: none; } }

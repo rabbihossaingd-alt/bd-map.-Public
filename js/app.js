@@ -401,6 +401,29 @@ function renderRecent() {
     $('helplines').appendChild(a);
   }
 
+  // রূপসী বাংলা's door: one well-known place a day, its Wikimedia photo; a tap opens the place itself.
+  const FEATURED = [
+    ['satkhira', 'সুন্দরবন, মুন্সীগঞ্জ-কলাগাছিয়া', 'সুন্দরবন', '6/6b/Save_the_sundarbans_20.jpg'],
+    ['naogaon', 'পাহাড়পুর বৌদ্ধ বিহার', 'পাহাড়পুর বৌদ্ধ বিহার', 'a/a3/%E0%A6%AA%E0%A6%BE%E0%A6%B9%E0%A6%BE%E0%A6%A1%E0%A6%BC%E0%A6%AA%E0%A7%81%E0%A6%B0_%E0%A6%AC%E0%A7%8C%E0%A6%A6%E0%A7%8D%E0%A6%A7_%E0%A6%AC%E0%A6%BF%E0%A6%B9%E0%A6%BE%E0%A6%B0_22.jpg'],
+    ['munshiganj', 'পদ্মা সেতু ভিউ পয়েন্ট, মাওয়া', 'পদ্মা সেতু', '1/16/The_padma_bridge_02.jpg'],
+    ['bagerhat', 'ষাট গম্বুজ মসজিদ', 'ষাট গম্বুজ মসজিদ', '4/4f/Sixty_Dome_Mosque%2CBagerhat.jpg'],
+    ['dhaka', 'লালবাগের কেল্লা', 'লালবাগের কেল্লা', '1/1e/Dhaka_Lalbagh_Fort_5.JPG'],
+    ['bogura', 'মহাস্থানগড়', 'মহাস্থানগড়', '0/06/BD_Mahasthangarh1_without_people.jpg'],
+    ['dhaka', 'আহসান মঞ্জিল', 'আহসান মঞ্জিল', 'e/ea/DJI_0760_%28_Ahsan_Manzil%29.jpg']
+  ];
+  const [fId, fSight, fName, fFile] = FEATURED[Math.floor(Date.now() / 864e5) % FEATURED.length];
+  const fImg = $('hm-feature-img');
+  fImg.addEventListener('load', () => $('hm-feature').classList.add('in'));
+  fImg.src = `https://upload.wikimedia.org/wikipedia/commons/thumb/${fFile}/960px-${fFile.split('/').pop()}`;
+  fImg.alt = fName;
+  $('hm-feature-name').textContent = fName;
+  $('hm-feature-sub').textContent = `${districtById(fId).bn} জেলা · ${districtById(fId).division} বিভাগ`;
+  $('hm-feature').addEventListener('click', async () => {
+    const g = typeof loadGuide === 'function' ? await loadGuide().catch(() => null) : null;
+    const s = g && ((g[fId] || {}).sights || []).find(x => x.name === fSight);
+    if (s && window.openPlace) window.openPlace(districtById(fId), s); else location.hash = '#/districts';
+  });
+
   // Count the headline numbers up once, the first time Home is shown.
   let counted = false;
   enter.home = () => {

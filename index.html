@@ -43,8 +43,7 @@
       <h1>কোথায় <em>যাবেন?</em></h1>
       <p class="lead">কোন বাসে যাবেন, ভাড়া কত, কতক্ষণ লাগবে — এক নজরে।</p>
       <div class="card hero-search" id="home-search"></div>
-      <div class="chips popular" id="recent" hidden></div>
-      <div class="chips popular" id="popular"></div>
+      <div class="hm-chips" id="hm-chips"><div class="chips popular" id="recent" hidden></div><div class="chips popular" id="popular"></div></div>
     </div>
 
     <div class="wrap home">
@@ -53,48 +52,52 @@
         <a href="#/trip"><i class="mi c-green" data-ic="route"></i><span>ম্যাপ</span></a>
         <a href="#/buses"><i class="mi c-teal" data-ic="bus"></i><span>ঢাকার বাস</span></a>
         <a href="#/train"><i class="mi c-blue" data-ic="trainFront"></i><span>বাস · ট্রেন · লঞ্চ</span></a>
-        <a href="#/nearby"><i class="mi c-violet" data-ic="compass"></i><span>কাছাকাছি</span></a>
-        <a href="#/districts"><i class="mi c-ink" data-ic="compass"></i><span>রূপসী বাংলা</span></a>
+        <a href="#/nearby"><i class="mi c-violet" data-ic="locate"></i><span>কাছাকাছি</span></a>
+        <a href="#/districts"><i class="mi c-pink" data-ic="compass"></i><span>রূপসী বাংলা</span></a>
         <a href="#/community"><i class="mi c-amber" data-ic="star"></i><span>ভাড়া জানান</span></a>
-        <a href="#/tour"><i class="mi c-pink" data-ic="send"></i><span>ট্যুর প্ল্যান</span></a>
-        <a href="#/fares"><i class="mi c-gray" data-ic="tag"></i><span>ভাড়ার হিসাব</span></a>
+        <a href="#/fares"><i class="mi c-ink" data-ic="tag"></i><span>ভাড়ার হিসাব</span></a>
+        <a href="#/support"><i class="mi c-gray" data-ic="help"></i><span>সাহায্য</span></a>
       </div>
+
+      <!-- রূপসী বাংলা: one place, a different one each day -->
+      <button class="hm-feature" id="hm-feature" type="button">
+        <img id="hm-feature-img" alt="" decoding="async">
+        <span class="hm-fshade"></span>
+        <span class="hm-ftag">রূপসী বাংলা · আজকের গন্তব্য</span>
+        <span class="hm-fcopy">
+          <b id="hm-feature-name">সুন্দরবন</b>
+          <span id="hm-feature-sub">খুলনা</span>
+        </span>
+        <span class="hm-fgo"><span>৬৪ জেলা ঘুরে দেখুন</span><i data-ic="arrow"></i></span>
+      </button>
 
       <!-- What people have been posting -->
       <div class="home-head" id="home-posts-head" hidden><h3>বাংলাদেশ, সবার চোখে</h3><a href="#/explore">সব দেখুন <i data-ic="arrow"></i></a></div>
       <div class="home-posts" id="home-posts" hidden></div>
 
-      <!-- Two large doors and two small ones -->
-      <div class="bento">
-        <a class="card b-tour" href="#/tour">
-          <span class="tag">ট্যুর প্ল্যান</span>
-          <b>দল নিয়ে ঘুরতে যাচ্ছেন?</b>
-          <span>খরচ হিসাব করুন, সবার ছবি দিয়ে শেয়ার করার কার্ড বানান।</span>
-          <span class="btn">শুরু করুন <i data-ic="arrow"></i></span>
-        </a>
-        <a class="card b-give" href="#/community">
-          <span class="tag">সবাই মিলে</span>
+      <a class="hm-give" href="#/community">
+        <span class="hm-gcopy">
+          <span class="hm-gtag">সবাই মিলে</span>
           <b>ভাড়া জানান, পয়েন্ট জিতুন</b>
           <span>আপনার জানা ভাড়াটি একজন যাত্রীকে ঠকা থেকে বাঁচায়।</span>
-          <div class="b-faces" id="home-leaders"></div>
-        </a>
-        <a class="card b-small" href="#/fares"><i class="mi soft" data-ic="tag"></i><b>ভাড়ার হিসাব</b><span>কিমি প্রতি কত, মোট কত</span></a>
-        <a class="card b-small" href="#/support"><i class="mi soft" data-ic="help"></i><b>সাহায্য কেন্দ্র</b><span>প্রশ্নের উত্তর ও সাপোর্ট</span></a>
-      </div>
+          <span class="b-faces" id="home-leaders"></span>
+        </span>
+        <span class="hm-garrow"><i data-ic="arrow"></i></span>
+      </a>
 
-      <div class="card stats-band">
+      <div class="stats-band">
         <div class="stat"><b data-count="64">০</b><span>জেলা</span></div>
         <div class="stat"><b data-count="routes">০</b><span>ঢাকার বাস রুট</span></div>
         <div class="stat"><b data-count="places">০</b><span>চেনা জায়গা</span></div>
       </div>
 
       <div class="home-head"><h3>জরুরি নম্বর</h3><span>চাপ দিলে কল হবে</span></div>
-      <div class="grid" id="helplines" style="margin-top: 0"></div>
+      <div class="grid hm-help" id="helplines"></div>
 
       <footer class="site-foot">
         <div class="brand-line"><span class="logo-dot"></span><b>BD Map</b><span>বাংলাদেশের যাতায়াত, এক জায়গায়</span></div>
         <nav><a href="#/support">সাহায্য</a><a href="#/settings">সেটিংস</a><a href="#/community">লিডারবোর্ড</a><a href="#/explore">এক্সপ্লোর</a></nav>
-        <p>ভাড়া: বিআরটিএ · ম্যাপ: OpenStreetMap ও OpenFreeMap · ট্রেন ও লঞ্চ: খোলা তথ্যভান্ডার। তথ্য বদলাতে পারে — যাত্রার আগে মিলিয়ে নিন।</p>
+        <p>ভাড়া: বিআরটিএ · ম্যাপ: OpenStreetMap ও OpenFreeMap · ট্রেন ও লঞ্চ: খোলা তথ্যভান্ডার · ছবি: উইকিমিডিয়া কমন্স। তথ্য বদলাতে পারে — যাত্রার আগে মিলিয়ে নিন।</p>
       </footer>
     </div>
   </section>
@@ -446,9 +449,8 @@
 
       <div class="label">ঘোরাঘুরি</div>
       <div class="card menu">
-        <a href="#/districts"><i class="mi c-indigo" data-ic="compass"></i><span><b>রূপসী বাংলা</b><em>৬৪ জেলার জায়গা, বিখ্যাত খাবার, যেসব জেলায় গিয়েছেন</em></span><i class="chev" data-ic="chev"></i></a>
-        <a href="#/tour"><i class="mi c-pink" data-ic="star"></i><span><b>ট্যুর প্ল্যান</b><em>খরচের হিসাব আর শেয়ার করার কার্ড</em></span><i class="chev" data-ic="chev"></i></a>
-        <a href="#/nearby"><i class="mi c-violet" data-ic="compass"></i><span><b>কাছাকাছি</b><em>হাসপাতাল, থানা, এটিএম, পার্ক…</em></span><i class="chev" data-ic="chev"></i></a>
+        <a href="#/districts"><i class="mi c-indigo" data-ic="compass"></i><span><b>রূপসী বাংলা</b><em>৬৪ জেলার জায়গা, বিখ্যাত খাবার, ট্যুর প্ল্যান</em></span><i class="chev" data-ic="chev"></i></a>
+        <a href="#/nearby"><i class="mi c-violet" data-ic="locate"></i><span><b>কাছাকাছি</b><em>হাসপাতাল, থানা, এটিএম, পার্ক…</em></span><i class="chev" data-ic="chev"></i></a>
       </div>
 
       <div class="label">সাহায্য ও সেটিংস</div>
