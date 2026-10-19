@@ -3891,3 +3891,7 @@ button.dg-wiki { background: none; border: 0; padding: 0; cursor: pointer; font:
 .mtp-steps strong { display: block; font-size: 14px; font-weight: 800; line-height: 1.35; }
 .mtp-steps small { display: block; margin-top: 3px; font-size: 12px; font-weight: 500; line-height: 1.5; color: rgba(255, 255, 255, .72); }
 @media (max-width: 900px) { .mtp-steps { grid-template-columns: 1fr; } .mtp-steps li { align-items: center; } }
+.mtp-banner { cursor: pointer; }
+.mtp-go { margin-top: 20px; padding: 0 18px 0 22px; gap: 10px; }
+.mtp-go i svg { width: 18px; height: 18px; }
+@media (max-width: 640px) { .mtp-go { width: 100%; justify-content: center; } }

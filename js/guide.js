@@ -387,22 +387,12 @@ const coverStyle = (img, division) => {
       copy.append(el('span', 'mtp-new', tl2('🌿 বাংলাদেশের সৌন্দর্য, আপনার চোখে', '🌿 The beauty of Bangladesh, through your eyes')),
         el('h3', null, tl2('আপনার দেখা বাংলাদেশ, সবার সাথে ভাগ করে নিন', 'Share the Bangladesh you have seen')),
         el('p', null, tl2('ঘুরে দেখা প্রিয় জায়গার ছবি শেয়ার করুন। আপনার চোখে দেখা বাংলাদেশের সৌন্দর্য আবিষ্কার করুক আরও অনেকে।', 'Share photos of the places you loved. Let many more discover the beauty of Bangladesh through your eyes.')));
-      const steps = el('ol', 'mtp-steps');
-      for (const [n, bn, en, sbn, sen] of [['১', 'ছবি শেয়ার করুন', 'Share a photo', 'আপনার তোলা প্রিয় ছবিটি যোগ করুন।', 'Add the favourite photo you took.'],
-        ['২', 'জায়গার নাম লিখুন', 'Name the place', 'কোথায় ছবিটি তুলেছেন, তা জানান।', 'Tell us where you took it.'],
-        ['৩', 'সবার সঙ্গে ভাগ করুন', 'Share it with everyone', 'অন্যদেরও নতুন জায়গা খুঁজে পেতে সাহায্য করুন।', 'Help others find new places.']]) {
-        const li = el('li'), t = el('div'); t.append(el('strong', null, tl2(bn, en)), el('small', null, tl2(sbn, sen)));
-        li.append(el('b', null, LANG === 'en' ? String('০১২৩'.indexOf(n)) : n), t); steps.appendChild(li);
-      }
-      const acts = el('div', 'mtp-bacts');
-      const a1 = el('button', 'mtp-bbtn main'); a1.append(Object.assign(el('i'), { innerHTML: svg('pin') }), el('span', null, tl2('জায়গা শেয়ার করুন', 'Share a place')));
-      const a2 = el('button', 'mtp-bbtn'); a2.append(Object.assign(el('i'), { innerHTML: svg('camera') }), el('span', null, tl2('ছবি শেয়ার করুন', 'Share a photo')));
-      const a3 = el('button', 'mtp-blink', tl2(gemsAll.length ? `সব দেখুন · ${num(gemsAll.length)}টি জায়গা →` : 'মেঠোপথ ঘুরে দেখুন →', gemsAll.length ? `See all · ${gemsAll.length} places →` : 'Explore Methopath →'));
-      a1.addEventListener('click', () => openGemForm());
-      a2.addEventListener('click', () => pickPlaceForPhoto());
-      a3.addEventListener('click', () => openMethopath());
-      acts.append(a1, a2);
-      copy.append(steps, acts, a3);
+      // one clear way in: the sharing itself lives inside মেঠোপথ
+      const go = el('button', 'mtp-bbtn main mtp-go');
+      go.append(el('span', null, tl2(gemsAll.length ? `মেঠোপথ ঘুরে দেখুন · ${num(gemsAll.length)}টি জায়গা` : 'মেঠোপথ ঘুরে দেখুন', gemsAll.length ? `Explore Methopath · ${gemsAll.length} places` : 'Explore Methopath')), Object.assign(el('i'), { innerHTML: svg('next') }));
+      go.addEventListener('click', e => { e.stopPropagation(); openMethopath(); });
+      banner.onclick = () => openMethopath();
+      copy.append(go);
       banner.append(copy, art);
     }
     rail.replaceChildren(...gemsAll.map(gemCard));
