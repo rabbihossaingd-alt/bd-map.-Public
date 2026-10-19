@@ -44,7 +44,12 @@ function photo(box, url, division, w, icon) {
   if (!url) { art(); return; }
   const img = Object.assign(el('img', 'dg-img'), { alt: '', loading: 'lazy', decoding: 'async', src: sized(url, w) });
   img.addEventListener('load', () => img.classList.add('in'));
-  img.addEventListener('error', () => { img.remove(); art(); });
+  // Wikimedia answers a burst of requests with "too many" for a moment: try again twice, later, before giving up
+  let tries = 0;
+  img.addEventListener('error', () => {
+    if (tries < 2) { const src = img.src; setTimeout(() => { img.src = src + (src.includes('?') ? '&' : '?') + 'r=' + (++tries); }, tries ? 4500 : 1500); return; }
+    img.remove(); art();
+  });
   box.prepend(img);
 }
 // A district's own picture, unless its article shows a map; then its first place's.
