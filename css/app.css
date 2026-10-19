@@ -3696,7 +3696,7 @@ button.dg-wiki { background: none; border: 0; padding: 0; cursor: pointer; font:
 :root[data-theme="dark"] .trip-thumb { background: color-mix(in srgb, var(--ink) 16%, var(--bg)); }
 .trip { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 16px; align-items: start; animation: txin .45s cubic-bezier(.32, .72, 0, 1) both; }
 .trip[hidden] { display: none; }
-@media (max-width: 860px) { .trip { grid-template-columns: 1fr; } }
+@media (max-width: 860px) { .trip { grid-template-columns: minmax(0, 1fr); } }
 .trip-form { display: grid; gap: 14px; }
 .trip .tp-card { padding: 18px; border-radius: 24px; background: var(--tx-card, var(--surface)); border: 1px solid var(--tx-line, var(--line)); }
 .trip-step { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
@@ -4053,3 +4053,35 @@ button.dg-wiki { background: none; border: 0; padding: 0; cursor: pointer; font:
   .dg-gi.rail .dg-gi-card { width: 168px; }
   .rb-ring { background: radial-gradient(circle at 0% 50%, color-mix(in srgb, #10b981 18%, transparent), transparent 55%), var(--tx-card); }
 }
+
+/* ================= ট্যুর প্ল্যান v2 (several districts) ================= */
+/* chips wear the district's own photo */
+.tc-ph { position: relative; flex: none; width: 24px; height: 24px; margin-left: -4px; border-radius: 50%; overflow: hidden; background: color-mix(in srgb, var(--ink) 12%, transparent); box-shadow: 0 0 0 2px rgba(255, 255, 255, .25); }
+.tc-ph .dg-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.tc-ph .ph-art { transform: scale(.55); }
+.trip-chip { padding-left: 8px; transition: transform .2s var(--ease), background .2s, box-shadow .2s; }
+.trip-chip.on { padding-right: 10px; box-shadow: 0 8px 18px -10px #059669; }
+.trip-sug .trip-chip { background: var(--tx-card, var(--surface)); border: 1px solid var(--tx-line, var(--line)); }
+/* the summary: the route's photos behind glass numbers */
+.trip-head { isolation: isolate; padding: 22px; border-radius: 30px; min-height: 260px; display: flex; flex-direction: column; justify-content: flex-end; box-shadow: 0 24px 50px -26px rgba(0, 0, 0, .8); }
+.trip-bg { position: absolute; inset: 0; z-index: -1; display: grid; grid-template-columns: 1fr; gap: 2px; }
+.trip-bg[data-n="2"] { grid-template-columns: 1fr 1fr; } .trip-bg[data-n="3"] { grid-template-columns: 1fr 1fr 1fr; }
+.trip-bg > span { position: relative; overflow: hidden; background: linear-gradient(150deg, #0f766e, #0b1220); }
+.trip-bg .dg-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; animation: hmdrift 24s ease-in-out infinite alternate; }
+.trip-bg::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(4, 12, 10, .2) 0%, rgba(4, 12, 10, .55) 40%, rgba(4, 12, 10, .92) 100%); }
+.trip-kicker { align-self: flex-start; padding: 5px 11px; border-radius: 999px; background: rgba(255, 255, 255, .14); border: 1px solid rgba(255, 255, 255, .2); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); opacity: 1; }
+.trip-chain span { font-size: 21px; text-shadow: 0 2px 14px rgba(0, 0, 0, .4); }
+.trip-stats > div { background: rgba(255, 255, 255, .12); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
+/* the day's ride: the bus icon was drawn with no stroke */
+.trip-go i svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.trip-go i { background: var(--brand-grad, linear-gradient(150deg, #30d158, #0a9f6e)); box-shadow: 0 8px 18px -10px #059669; }
+.trip-float { display: inline-flex; }
+@media (max-width: 760px) {
+  .trip-stats { grid-template-columns: repeat(2, 1fr); }
+  .trip-head { min-height: 300px; }
+}
+@media (prefers-reduced-motion: reduce) { .trip-bg .dg-img { animation: none; } }
+.trip-sug { flex-wrap: nowrap; overflow-x: auto; align-items: center; margin: 0 -16px 10px; padding: 2px 16px 6px; scrollbar-width: none; }
+.trip-sug::-webkit-scrollbar { display: none; }
+.trip-sug > small { flex: none; font-weight: 700; }
+.trip-sug .trip-chip { flex: none; }

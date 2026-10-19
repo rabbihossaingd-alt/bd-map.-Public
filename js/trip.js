@@ -30,6 +30,7 @@
     modes.dataset.on = m;
     one.setAttribute('aria-pressed', String(m === 'one')); many.setAttribute('aria-pressed', String(m === 'many'));
     box.hidden = m !== 'many';
+    if (typeof paintFloat === 'function') setTimeout(paintFloat, 0);
     pane.dataset.mode = m;                               // CSS hides the one-district plan while this one shows
     try { localStorage.setItem('bdmap.tripmode', m); } catch { /* storage off */ }
     if (m === 'many') draw();
@@ -59,9 +60,23 @@
     paint(); w.append(minus, v, plus); return w;
   };
 
+  // a district's cover, as a small round face on a chip
+  const face = d => { const f = el('span', 'tc-ph'); const g = typeof GUIDE !== 'undefined' && GUIDE && GUIDE[d.id]; photo(f, g ? coverOf(g) : '', d.division, 120, 'pin'); return f; };
+  // the cost, floating at the foot of the screen until the plan's summary comes into view
+  const float = el('button', 'tp-float trip-float');
+  float.type = 'button';
+  float.append(el('span', null, tl2('জনপ্রতি', 'Per person')), el('b'), ic('chev'));
+  float.addEventListener('click', () => { const h = box.querySelector('.trip-head'); if (h) h.scrollIntoView({ behavior: 'smooth', block: 'start' }); });
+  document.body.appendChild(float);
+  let headSeen = false, headObs = null;
+  const paintFloat = () => float.classList.toggle('show', !box.hidden && !pane.hidden && !!box.querySelector('.trip-head') && !headSeen && document.body.dataset.page === 'districts');
+  window.addEventListener('hashchange', () => setTimeout(paintFloat, 50));
+  new MutationObserver(paintFloat).observe(pane, { attributes: true, attributeFilter: ['hidden'] });
+
   let seq = 0;
   async function draw(onlyPlan) {
     if (!onlyPlan) {
+      if (typeof loadGuide === 'function') await loadGuide().catch(() => {});
       box.replaceChildren();
       const form = el('div', 'trip-form');
       // 1 start
@@ -76,7 +91,7 @@
       const chips = el('div', 'trip-chips');
       for (const id of T.stops) {
         const d = districtById(id), c = el('button', 'trip-chip on');
-        c.append(el('span', null, d.bn), Object.assign(el('i'), { innerHTML: svg('close') }));
+        c.append(face(d), el('span', null, d.bn), Object.assign(el('i'), { innerHTML: svg('close') }));
         c.addEventListener('click', () => { T.stops = T.stops.filter(x => x !== id); save(); draw(); });
         chips.appendChild(c);
       }
@@ -90,7 +105,7 @@
       const near = DISTRICTS.filter(d => d.id !== T.start && !T.stops.includes(d.id)).map(d => ({ d, km: haversineKm(from, d) })).sort((a, b) => a.km - b.km).slice(0, 5);
       const sug = el('div', 'trip-sug');
       sug.appendChild(el('small', null, tl2(`${from.bn}-এর কাছের জেলা:`, `Near ${from.bn}:`)));
-      for (const { d, km } of near) { const b = el('button', 'trip-chip'); b.append(el('span', null, '+ ' + d.bn), el('small', null, tl2(`${num(Math.round(km))} কিমি`, `${Math.round(km)} km`))); b.addEventListener('click', () => { T.stops.push(d.id); save(); draw(); }); sug.appendChild(b); }
+      for (const { d, km } of near) { const b = el('button', 'trip-chip'); b.append(face(d), el('span', null, d.bn), el('small', null, tl2(`${num(Math.round(km))} কিমি`, `${Math.round(km)} km`))); b.addEventListener('click', () => { T.stops.push(d.id); save(); draw(); }); sug.appendChild(b); }
       c2.appendChild(sug);
       // 3 people, nights, style
       const c3 = el('section', 'tp-card');
@@ -138,6 +153,7 @@
     const out = box.querySelector('.trip-out');
     const mine = ++seq;
     if (!T.stops.length) {
+      float.classList.remove('show');
       out.replaceChildren(Object.assign(el('div', 'trip-empty'), { innerHTML: '' }));
       out.firstChild.append(el('b', null, tl2('কোথায় কোথায় যাবেন?', 'Where would you like to go?')),
         el('p', null, tl2('শুরুর জেলা আর যেসব জেলায় যেতে চান বেছে নিন — প্রতিদিন কোথায় যাবেন, কী দেখবেন, কোথায় থাকবেন আর মোট কত খরচ হতে পারে, সাজিয়ে দেওয়া হবে।', 'Choose where you start and the districts you want — the plan shows each day, what to see, where to stay and the rough cost.')));
@@ -151,6 +167,10 @@
     const plan = await planTrip();
     if (mine !== seq) return;
     out.replaceChildren(...renderPlan(plan));
+    float.querySelector('b').textContent = taka(plan.perHead);
+    if (headObs) headObs.disconnect();
+    if ('IntersectionObserver' in window) { headObs = new IntersectionObserver(([e]) => { headSeen = e.isIntersecting || e.boundingClientRect.top < 0; paintFloat(); }); headObs.observe(out.querySelector('.trip-head')); }
+    paintFloat();
   }
 
   // The order: nearest next stop first, then improved by swapping pairs while that shortens the trip (2-opt).
@@ -213,7 +233,10 @@
     stat(tl2('দিন', 'Days'), num(p.totalDays));
     stat(tl2('মোট পথ', 'Distance'), tl2(`${num(Math.round(p.km))} কিমি`, `${Math.round(p.km)} km`));
     stat(tl2('জনপ্রতি', 'Per person'), taka(p.perHead));
-    head.append(el('small', 'trip-kicker', tl2('আপনার ট্রিপ', 'Your trip')), chain, stats);
+    const bg = el('div', 'trip-bg');
+    for (const d of p.route.slice(0, 3)) { const t = el('span'); const g = typeof GUIDE !== 'undefined' && GUIDE && GUIDE[d.id]; photo(t, g ? coverOf(g) : '', d.division, 500, 'pin'); bg.appendChild(t); }
+    bg.dataset.n = Math.min(3, p.route.length);
+    head.append(bg, el('small', 'trip-kicker', tl2('আপনার ট্রিপ', 'Your trip')), chain, stats);
     parts.push(head);
     // day by day
     const list = el('ol', 'trip-days');
