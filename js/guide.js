@@ -384,14 +384,14 @@ const coverStyle = (img, division) => {
       const art = el('div', 'mtp-polaroids');
       pick.forEach((u, i) => { const f = el('span', 'mtp-pol p' + i); photo(f, u, '', 330); art.appendChild(f); });
       const copy = el('div', 'mtp-bcopy');
-      copy.append(el('span', 'mtp-new', tl2('🌿 মেঠোপথ · সবার জন্য খোলা', '🌿 Methopath · open to all')),
-        el('h3', null, tl2('আপনার চেনা জায়গাটি সবাইকে দেখান', 'Show everyone the place you know')),
-        el('p', null, tl2('গাইডবইয়ে নেই এমন সুন্দর জায়গা, বা ঘুরতে গিয়ে তোলা ছবি — শেয়ার করুন। দেখে নিয়ে আপনার নামে প্রকাশ করা হয়, আর আপনি পান পয়েন্ট।', 'A beautiful place no guidebook lists, or a photo from your trip — share it. It is checked, published under your name, and you earn points.')));
+      copy.append(el('span', 'mtp-new', tl2('🌿 মেঠোপথ — চেনা পথের বাইরের বাংলা', '🌿 Methopath — Bangladesh off the beaten path')),
+        el('h3', null, tl2('যে পথ শুধু আপনি চেনেন, সেটা সবাইকে দেখান', 'Show everyone the path only you know')),
+        el('p', null, tl2('বাড়ির পাশের নদীর ঘাট, গ্রামের পুরোনো মন্দির, কিংবা ঘুরতে গিয়ে তোলা প্রিয় ছবিটা — আপনার একটা ছবিতেই কেউ খুঁজে পাবে তার পরের ঘোরার জায়গা।', 'The river steps near home, an old village temple, the favourite photo from your trip — one picture of yours can be someone’s next journey.')));
       const steps = el('ol', 'mtp-steps');
-      for (const [n, bn, en] of [['১', 'জায়গা বা ছবি দিন', 'Send a place or photo'], ['২', 'আমরা দেখে নিই', 'We check it'], ['৩', 'আপনার নামে প্রকাশ', 'It goes up as yours']]) { const li = el('li'); li.append(el('b', null, LANG === 'en' ? String('০১২৩'.indexOf(n)) : n), el('span', null, tl2(bn, en))); steps.appendChild(li); }
+      for (const [n, bn, en] of [['১', 'ছবি বা জায়গা দিন', 'Share a photo or place'], ['২', 'আমরা দেখে নিই', 'We take a look'], ['৩', 'আপনার নামে সবাই দেখবে', 'Everyone sees it, with your name']]) { const li = el('li'); li.append(el('b', null, LANG === 'en' ? String('০১২৩'.indexOf(n)) : n), el('span', null, tl2(bn, en))); steps.appendChild(li); }
       const acts = el('div', 'mtp-bacts');
-      const a1 = el('button', 'mtp-bbtn main'); a1.append(Object.assign(el('i'), { innerHTML: svg('pin') }), el('span', null, tl2('জায়গা শেয়ার করুন', 'Share a place')), el('em', null, tl2('+৫', '+5')));
-      const a2 = el('button', 'mtp-bbtn'); a2.append(Object.assign(el('i'), { innerHTML: svg('camera') }), el('span', null, tl2('ছবি শেয়ার করুন', 'Share a photo')), el('em', null, tl2('+৩', '+3')));
+      const a1 = el('button', 'mtp-bbtn main'); a1.append(Object.assign(el('i'), { innerHTML: svg('pin') }), el('span', null, tl2('জায়গা শেয়ার করুন', 'Share a place')));
+      const a2 = el('button', 'mtp-bbtn'); a2.append(Object.assign(el('i'), { innerHTML: svg('camera') }), el('span', null, tl2('ছবি শেয়ার করুন', 'Share a photo')));
       const a3 = el('button', 'mtp-blink', tl2(gemsAll.length ? `সব দেখুন · ${num(gemsAll.length)}টি জায়গা →` : 'মেঠোপথ ঘুরে দেখুন →', gemsAll.length ? `See all · ${gemsAll.length} places →` : 'Explore Methopath →'));
       a1.addEventListener('click', () => openGemForm());
       a2.addEventListener('click', () => pickPlaceForPhoto());

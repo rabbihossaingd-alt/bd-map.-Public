@@ -3877,3 +3877,10 @@ button.dg-wiki { background: none; border: 0; padding: 0; cursor: pointer; font:
   .mtp-bbtn { justify-content: flex-start; } .mtp-bbtn em { margin-left: auto; }
 }
 @media (prefers-reduced-motion: reduce) { .mtp-pol { animation: none; } }
+/* phones: the photos get their own room above the words */
+@media (max-width: 640px) {
+  .mtp-polaroids { height: 196px; margin: -6px 0 14px; }
+  .mtp-pol { width: 34%; }
+  .mtp-pol.p0 { left: 9%; top: 14%; } .mtp-pol.p1 { left: 33%; top: 0; } .mtp-pol.p2 { right: 9%; top: 16%; }
+}
+.mtp-bbtn { padding: 0 20px 0 16px; }
