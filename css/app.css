@@ -3895,3 +3895,16 @@ button.dg-wiki { background: none; border: 0; padding: 0; cursor: pointer; font:
 .mtp-go { margin-top: 20px; padding: 0 18px 0 22px; gap: 10px; }
 .mtp-go i svg { width: 18px; height: 18px; }
 @media (max-width: 640px) { .mtp-go { width: 100%; justify-content: center; } }
+
+/* মেঠোপথ hub: one warm start when nothing is shared yet, and the guide's quieter places below */
+.mtp-tabs[hidden], .mtp-stats[hidden] { display: none; }
+.mtp-h { margin: 6px 2px 4px; font-size: 21px; font-weight: 800; letter-spacing: -.015em; }
+.mtp-sub { margin: 0 2px 14px; font-size: 13.5px; line-height: 1.6; color: var(--muted); }
+.mtp-pane > .mtp-h { margin-bottom: 12px; }
+.mtp-start { position: relative; overflow: hidden; display: grid; justify-items: center; gap: 8px; padding: 30px 20px 24px; text-align: center; border-radius: 28px;
+  background: radial-gradient(circle at 50% 0%, color-mix(in srgb, #22c55e 16%, transparent), transparent 70%), var(--tx-card, var(--surface)); border: 1px solid var(--tx-line, var(--line)); }
+.mtp-start .ic { width: 64px; height: 64px; display: grid; place-items: center; font-size: 32px; border-radius: 22px; background: color-mix(in srgb, #22c55e 14%, transparent); animation: mtpfloat 6s ease-in-out infinite; }
+.mtp-start b { font-size: 20px; font-weight: 800; letter-spacing: -.01em; }
+.mtp-start p { margin: 0 0 8px; max-width: 420px; font-size: 14px; line-height: 1.75; color: var(--muted); }
+.mtp-more { margin-top: 30px; }
+.mtp-more:empty { display: none; }

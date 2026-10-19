@@ -467,54 +467,68 @@ const coverStyle = (img, division) => {
   window.openGemForm = openGemForm;
 
   // ---- মেঠোপথ, full screen: what locals share — places, everyone's photos, and the people who share most ----
+  // Only the parts that have something in them are shown; under them, a few quiet places from the guide itself.
   async function openMethopath(tab = 'places') {
     const box = el('div', 'dg-sheet mtp-sheet');
     const scroller = el('div', 'dg-scroll');
-    const close = () => { box.classList.add('out'); setTimeout(() => box.remove(), 280); if (!document.querySelector('.dg-sheet:not(.out):not(.mp-sheet)')) document.body.classList.remove('reels-open'); };
+    const close = () => { box.classList.add('out'); setTimeout(() => box.remove(), 280); if (!document.querySelector('.dg-sheet:not(.out)')) document.body.classList.remove('reels-open'); };
     const hero = el('header', 'mtp-hero');
     hero.innerHTML = `<svg class="mtp-path" viewBox="0 0 400 220" preserveAspectRatio="none" aria-hidden="true"><path d="M-20 200 C 80 170, 60 120, 150 110 S 260 60, 300 70 S 380 30, 430 10" /><path d="M-20 214 C 90 186, 70 134, 160 124 S 270 74, 310 84 S 390 44, 440 24" /></svg>`;
     const x = el('button', 'lv-icon dg-x'); x.innerHTML = svg('close'); x.setAttribute('aria-label', tl2('বন্ধ করুন', 'Close')); x.addEventListener('click', close);
     const head = el('div', 'mtp-head');
-    const stats = el('div', 'mtp-stats');
-    head.append(el('span', 'mtp-kicker', tl2('🌿 মেঠোপথ', '🌿 Methopath')), el('h2', null, tl2('চেনা পথের বাইরের বাংলা', 'Bangladesh off the beaten path')),
-      el('p', null, tl2('স্থানীয়রা যেসব জায়গা চেনেন, আর ঘুরতে গিয়ে সবার তোলা ছবি — এক জায়গায়। আপনিও শেয়ার করুন; দেখে নিয়ে আপনার নামে প্রকাশ করা হয়।', 'Places locals know and photos everyone took on their trips — in one place. Share yours; once checked it goes up under your name.')), stats);
+    const stats = el('div', 'mtp-stats'); stats.hidden = true;
+    head.append(el('span', 'mtp-kicker', tl2('🌿 মেঠোপথ', '🌿 Methopath')), el('h2', null, tl2('চেনা পথের বাইরেও এক বাংলাদেশ', 'A Bangladesh beyond the familiar roads')),
+      el('p', null, tl2('বাংলাদেশের আনাচে-কানাচে ছড়িয়ে থাকা সুন্দর সব জায়গা, স্থানীয়দের চেনা প্রিয় গন্তব্য আর ভ্রমণপিপাসু মানুষের ক্যামেরায় ধরা মুহূর্ত—সব এক জায়গায়। আপনার তোলা ছবিও শেয়ার করুন, পৌঁছে দিন আপনার দেখা বাংলাদেশের গল্প সবার কাছে।', 'Beautiful places in every corner of Bangladesh, the spots locals love, and moments caught on travellers’ cameras — all in one place. Share your photos too, and take the Bangladesh you have seen to everyone.')), stats);
     const ctas = el('div', 'mtp-ctas');
-    const sharePlace = el('button', 'mtp-cta main'); sharePlace.append(Object.assign(el('i'), { innerHTML: svg('pin') }), el('b', null, tl2('জায়গা শেয়ার করুন', 'Share a place')), el('small', null, tl2('অনুমোদন হলে ৫ পয়েন্ট', '5 points when approved')));
-    const sharePhoto = el('button', 'mtp-cta'); sharePhoto.append(Object.assign(el('i'), { innerHTML: svg('camera') }), el('b', null, tl2('ছবি শেয়ার করুন', 'Share a photo')), el('small', null, tl2('প্রতিটি ছবিতে ৩ পয়েন্ট', '3 points each')));
+    const sharePlace = el('button', 'mtp-cta main'); sharePlace.append(Object.assign(el('i'), { innerHTML: svg('pin') }), el('b', null, tl2('জায়গা শেয়ার করুন', 'Share a place')), el('small', null, tl2('আপনার চেনা প্রিয় গন্তব্য', 'A spot you know and love')));
+    const sharePhoto = el('button', 'mtp-cta'); sharePhoto.append(Object.assign(el('i'), { innerHTML: svg('camera') }), el('b', null, tl2('ছবি শেয়ার করুন', 'Share a photo')), el('small', null, tl2('আপনার ক্যামেরায় ধরা মুহূর্ত', 'A moment from your camera')));
     sharePlace.addEventListener('click', () => openGemForm());
     sharePhoto.addEventListener('click', () => pickPlaceForPhoto());
     ctas.append(sharePlace, sharePhoto);
     head.appendChild(ctas);
     hero.append(x, head);
     const body = el('div', 'mtp-body');
-    const tabs = el('div', 'mtp-tabs');
+    const tabs = el('div', 'mtp-tabs'); tabs.hidden = true;
     const pane = el('div', 'mtp-pane');
-    const TABS = [['places', tl2('জায়গা', 'Places')], ['photos', tl2('সবার ছবি', 'Photos')], ['people', tl2('সেরা অবদানকারী', 'Top sharers')]];
-    for (const [k, label] of TABS) { const b = el('button', null, label); b.dataset.k = k; b.addEventListener('click', () => show(k)); tabs.appendChild(b); }
-    body.append(tabs, pane);
+    const more = el('section', 'mtp-more');
+    body.append(tabs, pane, more);
     scroller.append(hero, body);
     box.appendChild(scroller);
     document.body.appendChild(box);
     document.body.classList.add('reels-open');
     let feed = { photos: [], top: [], counts: { photos: 0, gems: 0, people: 0 } }, kind = '';
     try { [feed] = await Promise.all([placesGet('feed'), gemsAll.length ? null : renderGems()]); } catch { /* offline: empty states */ }
-    stats.replaceChildren(...[[feed.counts.gems || gemsAll.length, tl2('জায়গা', 'places')], [feed.counts.photos, tl2('ছবি', 'photos')], [feed.counts.people, tl2('অবদানকারী', 'sharers')]]
-      .map(([n, l]) => { const s = el('span'); s.append(el('b', null, num(n || 0)), document.createTextNode(' ' + l)); return s; }));
-    const emptyNote = (title, sub, cta) => { const e = el('div', 'mtp-empty'); e.append(el('span', 'ic', '🌿'), el('b', null, title), el('p', null, sub)); if (cta) e.appendChild(cta); return e; };
+    await loadGuide().catch(() => null);
+    // numbers only once there is something to count — a row of zeros says "empty", not "new"
+    const counts = [[feed.counts.gems || gemsAll.length, tl2('জায়গা', 'places')], [feed.counts.photos, tl2('ছবি', 'photos')], [feed.counts.people, tl2('অবদানকারী', 'sharers')]].filter(([n]) => n > 0);
+    stats.replaceChildren(...counts.map(([n, l]) => { const s = el('span'); s.append(el('b', null, num(n)), document.createTextNode(' ' + l)); return s; }));
+    stats.hidden = !counts.length;
+    // a tab only for what has something in it
+    const TABS = [['places', tl2('জায়গা', 'Places'), gemsAll.length], ['photos', tl2('সবার ছবি', 'Photos'), feed.photos.length], ['people', tl2('সেরা অবদানকারী', 'Top sharers'), feed.top.length]].filter(t => t[2]);
+    for (const [k, label] of TABS) { const b = el('button', null, label); b.dataset.k = k; b.addEventListener('click', () => show(k)); tabs.appendChild(b); }
+    tabs.style.gridTemplateColumns = `repeat(${TABS.length || 1}, 1fr)`;
+    tabs.hidden = TABS.length < 2;
     function show(k) {
       for (const b of tabs.children) b.classList.toggle('on', b.dataset.k === k);
       pane.replaceChildren();
+      if (!TABS.length) {                                        // nothing shared yet: one warm invitation, not three empty tabs
+        const e = el('div', 'mtp-start');
+        e.append(el('span', 'ic', '🌿'), el('b', null, tl2('শুরু হোক আপনার হাত ধরে', 'Let it start with you')), el('p', null, tl2('আপনার এলাকার যে জায়গাটি সবার দেখা উচিত, কিংবা ঘুরতে গিয়ে তোলা প্রিয় ছবিটি — প্রথমটি আপনিই দিন। দেখে নিয়ে আপনার নামে প্রকাশ করা হবে।', 'The place near you everyone should see, or a favourite photo from a trip — be the first. Once checked it goes up under your name.')));
+        pane.appendChild(e);
+        return;
+      }
+      if (TABS.length === 1) pane.appendChild(el('h3', 'mtp-h', TABS[0][1]));
       if (k === 'places') {
-        const chips = el('div', 'mtp-chips');
-        for (const [key, bn, en] of [['', 'সব', 'All'], ...GEM_KINDS]) { const c = el('button', 'trip-chip' + (kind === key ? ' on' : ''), tl2(bn, en)); c.addEventListener('click', () => { kind = key; show('places'); }); chips.appendChild(c); }
-        pane.appendChild(chips);
-        const list = gemsAll.filter(g => !kind || g.kind === kind);
-        if (!list.length) { const b = el('button', 'btn', tl2('প্রথম জায়গাটি আপনিই দিন', 'Share the first one')); b.addEventListener('click', () => openGemForm()); pane.appendChild(emptyNote(tl2('এখনো কেউ এমন জায়গা দেননি', 'Nothing here yet'), tl2('আপনার এলাকার যে জায়গাটি সবার দেখা উচিত — সেটি দিয়েই শুরু হোক।', 'Start with the place near you that everyone should see.'), b)); return; }
+        const kinds = GEM_KINDS.filter(([key]) => gemsAll.some(g => g.kind === key));
+        if (kinds.length > 1) {
+          const chips = el('div', 'mtp-chips');
+          for (const [key, bn, en] of [['', 'সব', 'All'], ...kinds]) { const c = el('button', 'trip-chip' + (kind === key ? ' on' : ''), tl2(bn, en)); c.addEventListener('click', () => { kind = key; show('places'); }); chips.appendChild(c); }
+          pane.appendChild(chips);
+        }
         const grid = el('div', 'mtp-grid');
-        for (const g of list) grid.appendChild(gemCard(g));
+        for (const g of gemsAll.filter(g => !kind || g.kind === kind)) grid.appendChild(gemCard(g));
         pane.appendChild(grid);
       } else if (k === 'photos') {
-        if (!feed.photos.length) { const b = el('button', 'btn', tl2('ছবি শেয়ার করুন', 'Share a photo')); b.addEventListener('click', () => pickPlaceForPhoto()); pane.appendChild(emptyNote(tl2('সবার তোলা ছবি এখানে দেখা যাবে', 'Everyone’s photos will show here'), tl2('যেকোনো জায়গার নিজের তোলা ছবি পাঠান — অনুমোদন হলে এখানে আর জায়গার পাতায় দেখা যাবে।', 'Send a photo you took of any place — once approved it shows here and on the place.'), b)); return; }
         const wall = el('div', 'mtp-wall');
         for (const p of feed.photos) {
           const d = districtById(p.district), c = el('button', 'mtp-shot');
@@ -527,7 +541,6 @@ const coverStyle = (img, division) => {
         }
         pane.appendChild(wall);
       } else {
-        if (!feed.top.length) { pane.appendChild(emptyNote(tl2('প্রথম অবদানকারী হোন', 'Be the first sharer'), tl2('যারা জায়গা আর ছবি শেয়ার করেন, তাদের নাম এখানে থাকবে।', 'People who share places and photos are listed here.'))); return; }
         const list = el('ol', 'mtp-people');
         feed.top.forEach((u, i) => {
           const li = el('li');
@@ -538,7 +551,23 @@ const coverStyle = (img, division) => {
         pane.appendChild(list);
       }
     }
-    show(tab);
+    show(TABS.some(t => t[0] === tab) ? tab : (TABS[0] || [''])[0]);
+    // the guide's own quieter places, with photos — a different few each day
+    const quiet = [];
+    for (const d of DISTRICTS) for (const s of ((GUIDE || {})[d.id] || {}).sights || []) if (s.img && s.views > 40 && s.views < 400 && !/বন্দর|স্টেশন|কার্যালয়|অফিস|বিশ্ববিদ্যালয়|কলেজ|স্কুল/.test(s.name)) quiet.push({ d, s });   // places to visit, not ports or offices
+    if (quiet.length) {
+      const day = Math.floor(Date.now() / 864e5), pick = [], seen = new Set();
+      for (let i = 0; pick.length < 8 && i < quiet.length; i++) { const j = (day * 37 + i * 101) % quiet.length; if (!seen.has(j)) { seen.add(j); pick.push(quiet[j]); } }
+      const grid = el('div', 'mtp-grid');
+      for (const { d, s } of pick) {
+        const c = el('button', 'dg-place'), ph = el('span', 'ph');
+        photo(ph, s.img, d.division, 500, kindArt(s.name) || 'pin');
+        const t = el('span', 't'); t.append(el('b', 'no-tr', s.name), el('small', null, d.bn));
+        c.append(ph, t); c.addEventListener('click', () => openPlace(d, s));
+        grid.appendChild(c);
+      }
+      more.append(el('h3', 'mtp-h', tl2('কম চেনা, তবু অপূর্ব', 'Less known, still lovely')), el('p', 'mtp-sub', tl2('আমাদের গাইড থেকে ভিড় কম এমন কিছু জায়গা — প্রতিদিন নতুন কয়েকটি।', 'Quieter places from our guide — a new few every day.')), grid);
+    }
   }
   window.openMethopath = openMethopath;
   // "share a photo": choose the district and the place, then the place's own photo flow opens
