@@ -513,7 +513,7 @@ const coverStyle = (img, division) => {
       pane.replaceChildren();
       if (!TABS.length) {                                        // nothing shared yet: one warm invitation, not three empty tabs
         const e = el('div', 'mtp-start');
-        e.append(el('span', 'ic', '🌿'), el('b', null, tl2('শুরু হোক আপনার হাত ধরে', 'Let it start with you')), el('p', null, tl2('আপনার এলাকার যে জায়গাটি সবার দেখা উচিত, কিংবা ঘুরতে গিয়ে তোলা প্রিয় ছবিটি — প্রথমটি আপনিই দিন। দেখে নিয়ে আপনার নামে প্রকাশ করা হবে।', 'The place near you everyone should see, or a favourite photo from a trip — be the first. Once checked it goes up under your name.')));
+        e.append(el('span', 'ic', '🌿'), el('b', null, tl2('প্রথম গল্পটি হোক আপনার', 'Let the first story be yours')), el('p', null, tl2('আপনার এলাকার সুন্দর কোনো জায়গা কিংবা ভ্রমণের প্রিয় ছবিটি শেয়ার করুন। যাচাইয়ের পর আপনার নামসহ প্রকাশিত হবে, আর আপনার হাত ধরেই অন্যরা খুঁজে পাবে নতুন কোনো গন্তব্য।', 'Share a lovely place near you or a favourite photo from a trip. Once checked it is published with your name, and through you others will find somewhere new.')));
         pane.appendChild(e);
         return;
       }
