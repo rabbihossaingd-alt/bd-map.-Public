@@ -471,13 +471,13 @@ const PALETTES = {
     roads: [[/motorway/, '#f9cf6a', '#e3ab38'], [/trunk_primary/, '#fde6a3', '#e7c472'], [/secondary_tertiary/, '#ffffff', '#d9d3c7'], [/./, '#ffffff', '#e1dcd2']],
     casing: true, path: '#e4ded2', reliefOpacity: 1, ferry: '#5aa0d8',
     use: { commercial: '#fbe9dc', retail: '#fbe4d6', industrial: '#ebe7e2', university: '#f3ead0', college: '#f6efd9', kindergarten: '#f6efd9',
-           stadium: '#d6ecc9', military: '#ece6e2', bus_station: '#e9ecf3', railway: '#ece9e4' },
+           stadium: '#d6ecc9', playground: '#d3ecc3', recreation_ground: '#d3ecc3', library: '#f6efd9', military: '#ece6e2', bus_station: '#e9ecf3', railway: '#ece9e4' },
     paint: {
       landuse_residential: { 'fill-opacity': 0 },
       park: { 'fill-color': '#cfe9bf', 'fill-opacity': 1 },
-      park_outline: { 'line-color': '#b9dda6' },
-      landcover_wood: { 'fill-color': '#c6e4b4' },
-      landcover_grass: { 'fill-color': '#dbefcd' },
+      park_outline: { 'line-opacity': 0 },
+      landcover_wood: { 'fill-color': '#c6e4b4', 'fill-opacity': 1 },
+      landcover_grass: { 'fill-color': '#d3ecc3', 'fill-opacity': 1 },
       landcover_sand: { 'fill-color': '#f4ebcb' },
       landuse_pitch: { 'fill-color': '#c9e7b8' },
       landuse_school: { 'fill-color': '#f6efd9', 'fill-opacity': 1 },
@@ -486,7 +486,7 @@ const PALETTES = {
       water: { 'fill-color': '#9fd4f7' },
       waterway_river: { 'line-color': '#9fd4f7' },
       waterway_other: { 'line-color': '#9fd4f7' },
-      building: { 'fill-color': '#e8e3da', 'fill-outline-color': '#d8d1c4' },
+      building: { 'fill-color': '#ebe8e2', 'fill-outline-color': '#dcd7ce' },
       'building-3d': { 'fill-extrusion-color': '#ede9e2' },
       boundary_3: { 'line-color': '#c9c3b8' }
     }
@@ -496,13 +496,13 @@ const PALETTES = {
     roads: [[/motorway/, '#9c8550', '#9c8550'], [/trunk_primary/, '#686458', '#686458'], [/secondary_tertiary/, '#4d5158', '#4d5158'], [/./, '#3d4046', '#3d4046']],
     casing: false, path: '#34373d', reliefOpacity: 0, ferry: '#4f8fc7',
     use: { commercial: '#2b2626', retail: '#2d2627', industrial: '#26272a', university: '#2b2922', college: '#2a2822', kindergarten: '#2a2822',
-           stadium: '#1f3326', military: '#28262a', bus_station: '#24272e', railway: '#25262a' },
+           stadium: '#1f3326', playground: '#1f3a29', recreation_ground: '#1f3a29', library: '#2a2822', military: '#28262a', bus_station: '#24272e', railway: '#25262a' },
     paint: {
       landuse_residential: { 'fill-opacity': 0 },
       park: { 'fill-color': '#1e3a29', 'fill-opacity': 1 },
-      park_outline: { 'line-color': '#26472f' },
-      landcover_wood: { 'fill-color': '#1c3626' },
-      landcover_grass: { 'fill-color': '#213829' },
+      park_outline: { 'line-opacity': 0 },
+      landcover_wood: { 'fill-color': '#1c3626', 'fill-opacity': 1 },
+      landcover_grass: { 'fill-color': '#1f3a29', 'fill-opacity': 1 },
       landcover_sand: { 'fill-color': '#38331f' },
       landcover_wetland: { 'fill-opacity': 0.15 },
       landcover_ice: { 'fill-opacity': 0.1 },
@@ -629,8 +629,18 @@ function restyle(style, dark) {
       }
       const text = /^highway-name/.test(l.id) ? P.roadLabel : /^water/.test(l.id) ? P.waterLabel : P.label;
       Object.assign(paint, { 'text-color': text, 'text-halo-color': P.halo, 'text-halo-width': 1.6 });
+      // Street names as Google prints them: small, close together, on every lane long enough to hold one.
+      // (A big name fits only the long roads, so most lanes of a neighbourhood went without.)
+      if (/^highway-name/.test(l.id)) {
+        Object.assign(layout, { 'text-size': ['interpolate', ['linear'], ['zoom'], 13, 10, 16, 11, 18, 13], 'symbol-spacing': 160, 'text-max-angle': 60, 'text-padding': 1 });
+        if (l.id === 'highway-name-minor') l.minzoom = 14.5;
+        if (l.id === 'highway-name-path') l.minzoom = 16;
+      }
+      // lakes and rivers named along the water from the neighbourhood zooms
+      if (/^water_name/.test(l.id)) layout['text-size'] = ['interpolate', ['linear'], ['zoom'], 8, 11, 15, 13];
       // Places of interest: coloured badge, label beside it in the matching colour, free to switch sides.
       if (l['source-layer'] === 'poi') {
+        if (l.id !== 'poi_transit') l.filter = ['all', l.filter, ['has', 'name']];
         if (l.id === 'poi_r1') l.minzoom = 14; else if (l.id === 'poi_r7') l.minzoom = 15; else if (l.id === 'poi_r20') l.minzoom = 16;
         delete layout['text-anchor'];
         delete layout['text-offset'];
@@ -752,18 +762,21 @@ function drawBanglaLabels() {
       }
     } else {
       // A road or river name: use the stretch of the line that is on screen, at its middle, turned to follow it.
-      const line = f.geometry.type === 'LineString' ? f.geometry.coordinates : f.geometry.coordinates[0];
+      const raw = f.geometry.type === 'LineString' ? f.geometry.coordinates : f.geometry.coordinates[0];
+      // a lane is often two or three points, one of them off screen: walk it in small steps so its name still finds room
+      const line = [];
+      raw.forEach((c, i) => { if (i) for (let k = 1; k < 8; k++) line.push([raw[i - 1][0] + (c[0] - raw[i - 1][0]) * k / 8, raw[i - 1][1] + (c[1] - raw[i - 1][1]) * k / 8]); line.push(c); });
       const visible = line.map((c, i) => i).filter(i => onScreen(map.project(line[i])));
       if (visible.length < 2) continue;
       const mid = visible[Math.floor(visible.length / 2)];
       const p = map.project(line[mid]);
-      if (roads.some(r => r.text === text && Math.hypot(r.x - p.x, r.y - p.y) < 260)) continue;   // one name per stretch
+      if (roads.some(r => r.text === text && Math.hypot(r.x - p.x, r.y - p.y) < 200)) continue;   // one name per stretch
       roads.push({ text, x: p.x, y: p.y });
       item.at = line[mid];
       item.next = line[mid + 1] || line[mid - 1];
     }
     items.push(item);
-    if (items.length >= 180) break;
+    if (items.length >= 260) break;
   }
   bnLabels.box.replaceChildren(...items.map(it => {
     it.node = el('span', 'k-' + it.kind, it.text);
