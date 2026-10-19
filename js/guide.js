@@ -62,7 +62,7 @@ const coverStyle = (img, division) => {
 
 (function initGuide() {
   const list = $('district-list'), filter = $('district-filter');
-  let division = '', giKind = 'f', giAll = false;
+  let division = '', giKind = 'f';
 
   function card(d) {
     const g = (GUIDE || {})[d.id] || {}, gi = giOf(d.id), sights = (g.sights || []).length;
@@ -89,7 +89,10 @@ const coverStyle = (img, division) => {
       const dot = el('i');
       dot.style.background = `linear-gradient(145deg, ${(DIVISION_TINT[div] || [])[0]}, ${(DIVISION_TINT[div] || [])[1]})`;
       head.append(dot, el('b', null, tl2(`${div} বিভাগ`, div)), el('small', null, tl2(`${num(ds.length)} জেলা`, `${ds.length} districts`)));
-      const grid = el('div', 'dg-grid');
+      // the whole country at once: one sliding row per division; one division, a search or 'been': a grid
+      const rail = !division && !q;
+      if (rail) { const all = el('button', 'dg-dall', tl2('সব দেখুন', 'See all')); all.addEventListener('click', () => { division = div; renderDivisions(); renderList(); $('dg-divs').scrollIntoView({ behavior: 'smooth', block: 'start' }); }); head.appendChild(all); }
+      const grid = el('div', 'dg-grid' + (rail ? ' rail' : ''));
       grid.append(...ds.map(card));
       sec.append(head, grid);
       list.appendChild(sec);
@@ -124,11 +127,12 @@ const coverStyle = (img, division) => {
   // what each district is famous for (GI)
   function renderGI() {
     const tabs = $('dg-gi-tabs');
-    const tab = (k, label, n) => { const b = el('button', 'dg-chip' + (giKind === k ? ' on' : '')); b.append(el('span', null, label), el('small', null, num(n))); b.addEventListener('click', () => { giKind = k; giAll = false; renderGI(); }); return b; };
+    const tab = (k, label, n) => { const b = el('button', 'dg-chip' + (giKind === k ? ' on' : '')); b.append(el('span', null, label), el('small', null, num(n))); b.addEventListener('click', () => { giKind = k; renderGI(); $('dg-gi').scrollLeft = 0; }); return b; };
     tabs.replaceChildren(tab('f', tl2('খাবার', 'Food'), GI_PRODUCTS.filter(g => g[3] === 'f').length), tab('p', tl2('পণ্য', 'Crafts & goods'), GI_PRODUCTS.filter(g => g[3] === 'p').length));
     const grid = $('dg-gi');
     const items = GI_PRODUCTS.filter(g => g[3] === giKind);
-    grid.replaceChildren(...items.slice(0, giAll ? items.length : 12).map(([id, bn, en, kind, no]) => {
+    grid.classList.add('rail');
+    grid.replaceChildren(...items.map(([id, bn, en, kind, no]) => {
       const d = districtById(id), story = GI_STORY[bn];
       const c = el('button', 'dg-gi-card' + (story && story.img ? ' has-ph' : ''));
       const ph = el('span', 'gi-ph');
@@ -139,11 +143,6 @@ const coverStyle = (img, division) => {
       c.addEventListener('click', () => openStory({ id, bn, en, kind, no }));
       return c;
     }));
-    if (!giAll && items.length > 12) {
-      const more = el('button', 'dg-more', tl2(`সব ${num(items.length)}টি দেখুন`, `See all ${items.length}`));
-      more.addEventListener('click', () => { giAll = true; renderGI(); });
-      grid.appendChild(more);
-    }
   }
 
   // ---- the reader: a whole Wikipedia article, here, in the app's type — headings, paragraphs, its pictures ----
