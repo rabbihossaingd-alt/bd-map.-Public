@@ -30,6 +30,42 @@ const KINDS = [
 ];
 const kindOf = cat => (KINDS.find(([, re]) => re.test(cat || '')) || ['other'])[0];
 
+// ---- Bangla names, learnt from OpenStreetMap (tools/.cache/osm-bn.tsv: type, name, name:bn, name:en from Overpass) ----
+// A place gets a Bangla name only from evidence: the same name in OSM with its name:bn, or, word by word, from
+// words OSM's own name pairs agree on (seen at least 3 times, one Bangla word ≥ 70% of the time). Numbers become
+// Bangla digits. A name with any word not learnt this way stays in English — nothing is guessed.
+const BN_DIGITS = '০১২৩৪৫৬৭৮৯';
+const norm = s => s.toLowerCase().replace(/[’'`.,()]/g, '').replace(/\s+/g, ' ').trim();
+const latin = s => /^[\x20-\x7e]+$/.test(s);
+const exact = new Map(), words = new Map();
+if (existsSync('tools/.cache/osm-bn.tsv')) {
+  const tally = (m, k, v) => { let c = m.get(k); if (!c) m.set(k, c = new Map()); c.set(v, (c.get(v) || 0) + 1); };
+  for (const row of readFileSync('tools/.cache/osm-bn.tsv', 'utf8').split('\n').slice(1)) {
+    const [, name, bn, en] = row.split('\t');
+    const eng = latin(en || '') && en ? en : latin(name || '') ? name : '';
+    if (!eng || !bn || !/[ঀ-৿]/.test(bn)) continue;
+    tally(exact, norm(eng), bn.trim());
+    const ew = norm(eng).split(' '), bw = bn.trim().replace(/[,()]/g, '').split(/\s+/);
+    if (ew.length === bw.length) ew.forEach((w, i) => { if (/[a-z]/.test(w)) tally(words, w, bw[i]); });
+  }
+  const best = (c, min, share) => { const [[v, n]] = [...c].sort((a, b) => b[1] - a[1]); const all = [...c.values()].reduce((a, b) => a + b, 0); return n >= min && n / all >= share ? v : ''; };
+  for (const [k, c] of exact) { const v = best(c, 1, 0.6); if (v) exact.set(k, v); else exact.delete(k); }
+  for (const [k, c] of words) { const v = best(c, 3, 0.7); if (v) words.set(k, v); else words.delete(k); }
+  console.log('learnt from OSM:', exact.size, 'names,', words.size, 'words');
+}
+function banglaName(name) {
+  if (!latin(name)) return '';
+  const n = norm(name);
+  if (exact.has(n) && n.length >= 6 && n.includes(' ')) return exact.get(n);   // a short code like 'NFC' names many different places
+  const out = [];
+  for (const w of n.split(' ')) {
+    if (/^\d+$/.test(w)) out.push(w.replace(/\d/g, d => BN_DIGITS[d]));
+    else if (words.has(w)) out.push(words.get(w));
+    else return '';
+  }
+  return out.join(' ');
+}
+
 const lines = readFileSync(csv, 'utf8').split('\n');
 const head = lines.shift().split('\t'), col = n => head.indexOf(n);
 const [iLat, iLon, iCat, iBasic, iConf, iCountry, iName, iBn] = ['lat', 'lon', 'cat', 'basic', 'confidence', 'country', 'name', 'bn'].map(col);
@@ -47,7 +83,9 @@ for (const line of lines) {
   seen.add(key);
   const kind = kindOf((f[iCat] || '') + ' ' + (f[iBasic] || ''));
   tally[kind] = (tally[kind] || 0) + 1;
-  out.push([lat.toFixed(5), lon.toFixed(5), kind, name.slice(0, 80), clean(f[iBn]).slice(0, 80), clean(f[iCat])].join('\t'));
+  const bn = clean(f[iBn]) || banglaName(name);
+  if (bn) tally.bangla = (tally.bangla || 0) + 1;
+  out.push([lat.toFixed(5), lon.toFixed(5), kind, name.slice(0, 80), bn.slice(0, 80), clean(f[iCat])].join('\t'));
 }
 out.sort();                                                                   // by latitude, so the server can bucket quickly
 const body = 'lat\tlon\tkind\tname\tbn\tcat\n' + out.join('\n') + '\n';
