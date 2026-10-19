@@ -3884,3 +3884,10 @@ button.dg-wiki { background: none; border: 0; padding: 0; cursor: pointer; font:
   .mtp-pol.p0 { left: 9%; top: 14%; } .mtp-pol.p1 { left: 33%; top: 0; } .mtp-pol.p2 { right: 9%; top: 16%; }
 }
 .mtp-bbtn { padding: 0 20px 0 16px; }
+/* the three steps, each with its line of help */
+.mtp-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.mtp-steps li { display: grid; grid-template-columns: 28px 1fr; align-items: start; gap: 10px; padding: 12px; border-radius: 16px; }
+.mtp-steps b { width: 28px; height: 28px; font-size: 13px; }
+.mtp-steps strong { display: block; font-size: 14px; font-weight: 800; line-height: 1.35; }
+.mtp-steps small { display: block; margin-top: 3px; font-size: 12px; font-weight: 500; line-height: 1.5; color: rgba(255, 255, 255, .72); }
+@media (max-width: 900px) { .mtp-steps { grid-template-columns: 1fr; } .mtp-steps li { align-items: center; } }

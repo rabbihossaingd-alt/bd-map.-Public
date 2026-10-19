@@ -384,11 +384,16 @@ const coverStyle = (img, division) => {
       const art = el('div', 'mtp-polaroids');
       pick.forEach((u, i) => { const f = el('span', 'mtp-pol p' + i); photo(f, u, '', 330); art.appendChild(f); });
       const copy = el('div', 'mtp-bcopy');
-      copy.append(el('span', 'mtp-new', tl2('🌿 মেঠোপথ — চেনা পথের বাইরের বাংলা', '🌿 Methopath — Bangladesh off the beaten path')),
-        el('h3', null, tl2('যে পথ শুধু আপনি চেনেন, সেটা সবাইকে দেখান', 'Show everyone the path only you know')),
-        el('p', null, tl2('বাড়ির পাশের নদীর ঘাট, গ্রামের পুরোনো মন্দির, কিংবা ঘুরতে গিয়ে তোলা প্রিয় ছবিটা — আপনার একটা ছবিতেই কেউ খুঁজে পাবে তার পরের ঘোরার জায়গা।', 'The river steps near home, an old village temple, the favourite photo from your trip — one picture of yours can be someone’s next journey.')));
+      copy.append(el('span', 'mtp-new', tl2('🌿 বাংলাদেশের সৌন্দর্য, আপনার চোখে', '🌿 The beauty of Bangladesh, through your eyes')),
+        el('h3', null, tl2('আপনার দেখা বাংলাদেশ, সবার সাথে ভাগ করে নিন', 'Share the Bangladesh you have seen')),
+        el('p', null, tl2('ঘুরে দেখা প্রিয় জায়গার ছবি শেয়ার করুন। আপনার চোখে দেখা বাংলাদেশের সৌন্দর্য আবিষ্কার করুক আরও অনেকে।', 'Share photos of the places you loved. Let many more discover the beauty of Bangladesh through your eyes.')));
       const steps = el('ol', 'mtp-steps');
-      for (const [n, bn, en] of [['১', 'ছবি বা জায়গা দিন', 'Share a photo or place'], ['২', 'আমরা দেখে নিই', 'We take a look'], ['৩', 'আপনার নামে সবাই দেখবে', 'Everyone sees it, with your name']]) { const li = el('li'); li.append(el('b', null, LANG === 'en' ? String('০১২৩'.indexOf(n)) : n), el('span', null, tl2(bn, en))); steps.appendChild(li); }
+      for (const [n, bn, en, sbn, sen] of [['১', 'ছবি শেয়ার করুন', 'Share a photo', 'আপনার তোলা প্রিয় ছবিটি যোগ করুন।', 'Add the favourite photo you took.'],
+        ['২', 'জায়গার নাম লিখুন', 'Name the place', 'কোথায় ছবিটি তুলেছেন, তা জানান।', 'Tell us where you took it.'],
+        ['৩', 'সবার সঙ্গে ভাগ করুন', 'Share it with everyone', 'অন্যদেরও নতুন জায়গা খুঁজে পেতে সাহায্য করুন।', 'Help others find new places.']]) {
+        const li = el('li'), t = el('div'); t.append(el('strong', null, tl2(bn, en)), el('small', null, tl2(sbn, sen)));
+        li.append(el('b', null, LANG === 'en' ? String('০১২৩'.indexOf(n)) : n), t); steps.appendChild(li);
+      }
       const acts = el('div', 'mtp-bacts');
       const a1 = el('button', 'mtp-bbtn main'); a1.append(Object.assign(el('i'), { innerHTML: svg('pin') }), el('span', null, tl2('জায়গা শেয়ার করুন', 'Share a place')));
       const a2 = el('button', 'mtp-bbtn'); a2.append(Object.assign(el('i'), { innerHTML: svg('camera') }), el('span', null, tl2('ছবি শেয়ার করুন', 'Share a photo')));
