@@ -792,10 +792,13 @@ function addAdmin(style, vector, dark) {
 }
 
 // ---- Standard, satellite and hybrid, as Apple and Google offer them ----
-// Imagery: Esri World Imagery (Esri, Vantor, Earthstar Geographics). Esri asks public apps to use it with an
-// ArcGIS key; one can be added to SAT_KEY without other changes.
-const SAT_KEY = '';
-const SAT_TILES = 'esri://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}' + (SAT_KEY ? '?token=' + SAT_KEY : '');
+// Imagery: Esri World Imagery (Esri, Vantor, Earthstar Geographics), through ArcGIS Location Platform with our key
+// (from the server, /api/map-config) so the use counts against our free allowance; without a key, the public copy.
+const SAT_PUBLIC = 'esri://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+let SAT_TILES = SAT_PUBLIC;
+const satKey = fetch('api/map-config').then(r => r.json()).then(j => {
+  if (j.esriKey) SAT_TILES = 'esri://ibasemaps-api.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}?token=' + encodeURIComponent(j.esriKey);
+}).catch(() => {});
 let esriOn = false;
 const satShallow = new Map();
 // Where Esri's photos stop early (a village at 18, not 19), allow one step past the last real photo, no more —
@@ -825,10 +828,11 @@ async function esriTile(url, signal, depth = 0) {
 }
 let mapMode = (() => { try { return localStorage.getItem('bdmap.mapmode') || 'standard'; } catch { return 'standard'; } })();
 const OUR_LAYERS = /^(route|bus|stops|places2|sat)/;
-function setMapMode(mode) {
+async function setMapMode(mode) {
   mapMode = mode;
   try { localStorage.setItem('bdmap.mapmode', mode); } catch { /* storage off */ }
   if (!map || !map.getStyle()) return;
+  if (mode !== 'standard') await satKey;
   if (!map.getSource('sat')) {
     // Past its last zoom Esri answers with a grey 'Map data not yet available' picture (always the same 2,521
     // bytes) instead of an error. Treat it as missing, so the map stretches the last real photo, as Apple does.

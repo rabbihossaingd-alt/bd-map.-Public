@@ -2599,6 +2599,9 @@ const server = http.createServer((req, res) => {
   if (pathname.startsWith('/api/support/')) return supportApi(req, res, pathname.slice(13), searchParams).catch(() => json(res, 500, { error: 'server error' }));
   if (pathname.startsWith('/api/admin/')) return adminApi(req, res, pathname.slice(11), searchParams).catch(e => { console.error(e); json(res, 500, { error: 'server error' }); });
   if (pathname === '/api/pois') return poisApi(req, res, searchParams);
+  // The map's imagery key (ArcGIS Location Platform, Basemaps only). It travels to every browser anyway — tiles are
+  // fetched there — so it is limited to basemaps; it lives in the environment (ESRI_KEY), not in the code.
+  if (pathname === '/api/map-config') return json(res, 200, { esriKey: process.env.ESRI_KEY || '' });
   if (pathname === '/api/notice') return json(res, 200, { text: (sq.setting.get('notice') || {}).value || '' });
   if (pathname.startsWith('/api/auth/')) return authApi(req, res, pathname.slice(10)).catch(() => json(res, 500, { error: 'server error' }));
   if (pathname.startsWith('/api/')) return json(res, 404, { error: 'not found' });
