@@ -502,7 +502,7 @@ async function openSessions() {
   $('set-edit').addEventListener('click', () => (ME ? openProfile() : openLogin()));
   // Theme: dark unless the person chose otherwise. The choice is read before the page draws, so changing it reloads.
   let theme = 'dark';
-  try { theme = localStorage.getItem('bdmap.theme') || 'dark'; } catch { /* storage unavailable */ }
+  try { theme = localStorage.getItem('bdmap.theme') || 'light'; } catch { /* storage unavailable */ }
   for (const b of $('theme-pick').children) {
     b.classList.toggle('on', b.dataset.themeSet === theme);
     b.addEventListener('click', () => { try { localStorage.setItem('bdmap.theme', b.dataset.themeSet); } catch { /* storage unavailable */ } location.reload(); });

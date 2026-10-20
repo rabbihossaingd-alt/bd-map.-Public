@@ -86,6 +86,13 @@ function renderAccount() {
   const btn = $('acct-btn');
   btn.replaceChildren(ME ? avatar(ME, 'xs') : Object.assign(el('i'), { innerHTML: svg('user') }), Object.assign(el('span', ME ? 'no-tr' : ''), { textContent: ME ? ME.name : 'লগইন' }));
   for (const a of document.querySelectorAll('[data-admin-link]')) a.hidden = !ME || ME.role === 'user';
+  // Home's own button (phones): a glass 'login' pill, or the person's photo once signed in
+  const home = document.getElementById('hm-acct');
+  if (home) {
+    home.classList.toggle('me', !!ME);
+    home.setAttribute('aria-label', ME ? ME.name : 'লগইন');
+    home.replaceChildren(...(ME ? [avatar(ME, 'sm')] : [Object.assign(el('i'), { innerHTML: svg('user') }), el('span', null, 'লগইন')]));
+  }
 }
 
 // Recent trips: on login the device's list and the account's are merged; after that every change is sent up.
@@ -473,6 +480,7 @@ const showProfile = person => openProfilePage(person.id);
 
 $('acct-card').addEventListener('click', () => (ME ? openProfilePage(ME.id) : openLogin()));
 $('acct-btn').addEventListener('click', () => (ME ? openProfilePage(ME.id) : openLogin()));
+if (document.getElementById('hm-acct')) document.getElementById('hm-acct').addEventListener('click', () => (ME ? openProfilePage(ME.id) : openLogin()));
 renderAccount();
 acctApi('me').then(reply => { if (reply.user) signedIn(reply); }).catch(() => {
   // No server behind this copy of the app (opened as plain files): accounts are not available.
