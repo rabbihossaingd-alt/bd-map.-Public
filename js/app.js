@@ -652,33 +652,39 @@ function restyle(style, dark) {
   }
 }
 
-// The tile index (TileJSON) is the slow request — it can take ten seconds. Keep the last copy on the device
-// and use it straight away, refreshing it in the background for next time.
-const TILEJSON_URL = 'https://tiles.openfreemap.org/planet', TILEJSON_KEY = 'bdmap.tilejson';
-async function tileJson() {
-  const refresh = fetch(TILEJSON_URL).then(r => r.json()).then(data => {
-    try { localStorage.setItem(TILEJSON_KEY, JSON.stringify({ at: Date.now(), data })); } catch { /* storage unavailable */ }
+// The style and the tile index come from OpenFreeMap; the index can take ten seconds. Keep the last copy of each
+// on the device and use it at once, refreshing it in the background for next time.
+const TILEJSON_URL = 'https://tiles.openfreemap.org/planet', STYLE_URL = 'https://tiles.openfreemap.org/styles/liberty';
+async function cachedJson(url, key) {
+  const refresh = fetch(url).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }).then(data => {
+    try { localStorage.setItem(key, JSON.stringify({ at: Date.now(), data })); } catch { /* storage unavailable */ }
     return data;
   });
-  try {
-    const saved = JSON.parse(localStorage.getItem(TILEJSON_KEY));
-    if (saved && Date.now() - saved.at < 24 * 3600 * 1000) { refresh.catch(() => {}); return saved.data; }
-  } catch { /* fall through to the network */ }
-  return refresh;
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(key)); } catch { /* fall through to the network */ }
+  if (saved && Date.now() - saved.at < 24 * 3600 * 1000) { refresh.catch(() => {}); return saved.data; }
+  // an old copy still beats no map when OpenFreeMap does not answer
+  return saved ? refresh.catch(() => saved.data) : refresh;
 }
+const tileJson = () => cachedJson(TILEJSON_URL, 'bdmap.tilejson');
+// Our own copy of Bangladesh's tiles on R2 (tools/build-tiles.mjs, same OpenMapTiles layers): used only when
+// OpenFreeMap's tile index cannot be had at all, so the country's map still opens.
+const BD_TILES = 'https://pub-d68dd5fec84b4bbfa461621fce349435.r2.dev/tiles/bd.pmtiles';
+// Hill shading waits until the map is up: its elevation tiles come from AWS in the US and take two seconds or
+// more each, and the map's first view should not wait for shading.
+let pendingHills = null;
 
 async function buildStyle() {
   const dark = isDark();
   const [style, tiles] = await Promise.all([
-    fetch('https://tiles.openfreemap.org/styles/liberty').then(r => r.json()),
+    cachedJson(STYLE_URL, 'bdmap.style'),
     tileJson().catch(() => null)
   ]);
   // Hand the map the tile index directly so it does not fetch it again.
   for (const src of Object.values(style.sources)) {
-    if (tiles && src.url === TILEJSON_URL) {
-      delete src.url;
-      Object.assign(src, { tiles: tiles.tiles, minzoom: tiles.minzoom, maxzoom: tiles.maxzoom, attribution: tiles.attribution });
-    }
+    if (src.url !== TILEJSON_URL) continue;
+    if (tiles) { delete src.url; Object.assign(src, { tiles: tiles.tiles, minzoom: tiles.minzoom, maxzoom: tiles.maxzoom, attribution: tiles.attribution }); }
+    else if (window.pmtiles) { if (!pmtilesOn) { maplibregl.addProtocol('pmtiles', new pmtiles.Protocol().tile); pmtilesOn = true; } src.url = 'pmtiles://' + BD_TILES; }
   }
 
   // Elevation: soft hill shading in every view, real relief when the map is tilted (separate source for each use).
@@ -688,8 +694,8 @@ async function buildStyle() {
   const hills = { id: 'hills', type: 'hillshade', source: 'hills',
                   paint: { 'hillshade-exaggeration': ['interpolate', ['linear'], ['zoom'], 7, dark ? 0.3 : 0.4, 13, 0.08], 'hillshade-shadow-color': dark ? '#000000' : '#4f6352',
                            'hillshade-highlight-color': dark ? '#3a3a3c' : '#ffffff', 'hillshade-accent-color': dark ? '#000000' : '#6f7f6a' } };
-  const beforeWater = style.layers.findIndex(l => l.id.startsWith('waterway') || l.id === 'water');
-  style.layers.splice(beforeWater < 0 ? 1 : beforeWater, 0, hills);
+  delete style.sources.hills;
+  pendingHills = { source: dem, layer: hills };
 
   // 3D buildings for styles that do not ship them (the dark one).
   const vector = Object.keys(style.sources).find(k => style.sources[k].type === 'vector');
@@ -715,27 +721,32 @@ async function buildStyle() {
   }
   NAME_LAYERS.length = 0;
   restyle(style, dark);
-  addBdBuildings(style);
   return style;
 }
 
 // Bangladesh's buildings, from our own PMTiles file on R2 (tools/build-tiles.mjs), read a piece at a time.
+// Added once the map is up, never in the first style: MapLibre's 'load' waits for every source in the style, so a
+// slow or refused R2 (its public r2.dev address is rate-limited) would keep the whole map from opening.
 const BD_BUILDINGS = 'https://pub-d68dd5fec84b4bbfa461621fce349435.r2.dev/tiles/buildings-bd.pmtiles';
 let pmtilesOn = false;
-function addBdBuildings(style) {
-  if (!window.pmtiles) return;                                 // the library did not load: the base map's buildings stay
+function addBdBuildings() {
+  if (!window.pmtiles || map.getSource('bdb')) return;          // no library: the base map's buildings stay
   if (!pmtilesOn) { maplibregl.addProtocol('pmtiles', new pmtiles.Protocol().tile); pmtilesOn = true; }
-  style.sources.bdb = { type: 'vector', url: 'pmtiles://' + BD_BUILDINGS, attribution: '<a href="https://overturemaps.org" target="_blank" rel="noopener">Overture Maps</a> buildings' };
-  const flat = style.layers.find(l => l.id === 'building'), tall = style.layers.find(l => l.id === 'building-3d');
+  const layers = map.getStyle().layers, flat = layers.find(l => l.id === 'building'), tall = layers.find(l => l.id === 'building-3d');
   if (!flat || !tall) return;
+  map.addSource('bdb', { type: 'vector', url: 'pmtiles://' + BD_BUILDINGS, attribution: '<a href="https://overturemaps.org" target="_blank" rel="noopener">Overture Maps</a> buildings' });
   const copy = (l, id) => ({ ...JSON.parse(JSON.stringify(l)), id, source: 'bdb', 'source-layer': 'building', minzoom: 13, layout: { ...(l.layout || {}), visibility: 'none' } });
   const f = copy(flat, 'bd-building'), t = copy(tall, 'bd-building-3d');
+  delete f.maxzoom; delete t.maxzoom;
   const h = ['coalesce', ['get', 'height'], 5];                     // most footprints carry no height: a low house
   Object.assign(t.paint, { 'fill-extrusion-height': h, 'fill-extrusion-base': 0 });
   const colour = t.paint['fill-extrusion-color'];
   if (Array.isArray(colour) && colour[0] === 'interpolate') colour[2] = h;
-  style.layers.splice(style.layers.indexOf(flat) + 1, 0, f);
-  style.layers.splice(style.layers.indexOf(tall) + 1, 0, t);
+  const after = l => (layers[layers.indexOf(l) + 1] || {}).id;
+  map.addLayer(f, after(flat));
+  map.addLayer(t, after(tall));
+  buildingsHere = '';                                               // decide again which set shows here
+  standBuildings();
 }
 
 // ---- Names on the map ----
@@ -845,12 +856,20 @@ async function createMap() {
                              minZoom: 1.6, maxPitch: 70, attributionControl: { compact: true } });
   // Badges are registered as soon as the style is in, before the first tiles ask for them.
   map.once('styledata', () => { for (const b of badges) if (!map.hasImage(b.name)) map.addImage(b.name, b.img, { pixelRatio: 2 }); });
+  // The "loading" note goes as soon as the first frame is drawn; tiles then fill in as they come, as in Google Maps.
+  map.once('render', () => { $('map-loading').hidden = true; });
   await new Promise(resolve => map.once('load', resolve));
   $('map-loading').hidden = true;
+  if (pendingHills && !map.getSource('hills')) {
+    map.addSource('hills', pendingHills.source);
+    const before = map.getStyle().layers.find(l => l.id.startsWith('waterway') || l.id === 'water');
+    map.addLayer(pendingHills.layer, before && before.id);
+  }
   initBanglaLabels();
   map.on('pitch', standBuildings);
   map.on('moveend', standBuildings);
   standBuildings();
+  try { addBdBuildings(); } catch (e) { console.warn('buildings', e); }
   map.setLight({ anchor: 'viewport', color: '#ffffff', intensity: dark ? 0.28 : 0.4, position: [1.3, 200, 40] });   // a soft sun from the upper left
   // Start with the credits folded into their (i) button; they open on tap.
   const credits = document.querySelector('.maplibregl-ctrl-attrib');
