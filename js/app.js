@@ -715,7 +715,27 @@ async function buildStyle() {
   }
   NAME_LAYERS.length = 0;
   restyle(style, dark);
+  addBdBuildings(style);
   return style;
+}
+
+// Bangladesh's buildings, from our own PMTiles file on R2 (tools/build-tiles.mjs), read a piece at a time.
+const BD_BUILDINGS = 'https://pub-d68dd5fec84b4bbfa461621fce349435.r2.dev/tiles/buildings-bd.pmtiles';
+let pmtilesOn = false;
+function addBdBuildings(style) {
+  if (!window.pmtiles) return;                                 // the library did not load: the base map's buildings stay
+  if (!pmtilesOn) { maplibregl.addProtocol('pmtiles', new pmtiles.Protocol().tile); pmtilesOn = true; }
+  style.sources.bdb = { type: 'vector', url: 'pmtiles://' + BD_BUILDINGS, attribution: '<a href="https://overturemaps.org" target="_blank" rel="noopener">Overture Maps</a> buildings' };
+  const flat = style.layers.find(l => l.id === 'building'), tall = style.layers.find(l => l.id === 'building-3d');
+  if (!flat || !tall) return;
+  const copy = (l, id) => ({ ...JSON.parse(JSON.stringify(l)), id, source: 'bdb', 'source-layer': 'building', minzoom: 13, layout: { ...(l.layout || {}), visibility: 'none' } });
+  const f = copy(flat, 'bd-building'), t = copy(tall, 'bd-building-3d');
+  const h = ['coalesce', ['get', 'height'], 5];                     // most footprints carry no height: a low house
+  Object.assign(t.paint, { 'fill-extrusion-height': h, 'fill-extrusion-base': 0 });
+  const colour = t.paint['fill-extrusion-color'];
+  if (Array.isArray(colour) && colour[0] === 'interpolate') colour[2] = h;
+  style.layers.splice(style.layers.indexOf(flat) + 1, 0, f);
+  style.layers.splice(style.layers.indexOf(tall) + 1, 0, t);
 }
 
 // ---- Names on the map ----
@@ -830,6 +850,7 @@ async function createMap() {
   initBanglaLabels();
   map.on('pitch', standBuildings);
   map.on('moveend', standBuildings);
+  standBuildings();
   map.setLight({ anchor: 'viewport', color: '#ffffff', intensity: dark ? 0.28 : 0.4, position: [1.3, 200, 40] });   // a soft sun from the upper left
   // Start with the credits folded into their (i) button; they open on tap.
   const credits = document.querySelector('.maplibregl-ctrl-attrib');
@@ -992,12 +1013,26 @@ function set3D(on) {
   map.easeTo({ pitch: on ? 60 : 0, bearing: on ? -18 : 0, duration: 900 });
 }
 $('tool-3d').addEventListener('click', () => { if (map) set3D(!is3D); });
-let buildingsUp = false;
+// Buildings: inside Bangladesh our own tiles (Overture's footprints, 3.9 crore of them, OSM's among them) take over
+// from the base map's, which has only what OSM mappers drew; outside, the base map's as before. Flat footprints
+// show at street zooms; the extruded ones stand up when the map is tilted (or 3D is on).
+let buildingsUp = false, buildingsHere = '';
+// The border itself (data/bd-outline.js), not the box around it — Kolkata and Agartala sit inside the box.
+const insideBorder = (x, y) => typeof BD_OUTLINE === 'undefined' ? inBangladesh(y, x) : BD_OUTLINE.some(r => {
+  let c = false;
+  for (let i = 0, j = r.length - 1; i < r.length; j = i++) { const [xi, yi] = r[i], [xj, yj] = r[j]; if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c; }
+  return c;
+});
 function standBuildings() {
-  const up = is3D || map.getPitch() > 12;
-  if (up === buildingsUp) return;
-  buildingsUp = up;
-  for (const l of map.getStyle().layers) if (l.type === 'fill-extrusion') map.setLayoutProperty(l.id, 'visibility', up ? 'visible' : 'none');
+  const up = is3D || map.getPitch() > 12, c = map.getCenter();
+  const here = map.getLayer('bd-building') && insideBorder(c.lng, c.lat) ? 'bd' : 'base';
+  if (up === buildingsUp && here === buildingsHere) return;
+  buildingsUp = up; buildingsHere = here;
+  for (const l of map.getStyle().layers) {
+    if (l['source-layer'] !== 'building') continue;
+    const ours = l.id.startsWith('bd-'), mine = (here === 'bd') === ours;
+    map.setLayoutProperty(l.id, 'visibility', mine && (l.type !== 'fill-extrusion' || up) ? 'visible' : 'none');
+  }
 }
 $('tool-home').addEventListener('click', () => { if (map) fit(BD_LNGLAT); });
 $('tool-in').addEventListener('click', () => { if (map) map.zoomIn(); });

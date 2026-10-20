@@ -13,5 +13,14 @@ const java = jdk ? `tools/.cache/jdk/${jdk}/bin/java` : 'java';
 mkdirSync('C:/jtmp', { recursive: true });
 execFileSync(java, ['-Xmx6g', '-Djdk.net.unixdomain.tmpdir=C:/jtmp', '-jar', 'planetiler.jar', '--download', '--area=bangladesh',
   '--languages=bn,en', '--output=bd.pmtiles', '--force'], { cwd: dir, stdio: 'inherit' });
-if (!process.argv.includes('--no-upload'))
+// Buildings: Overture's footprints for Bangladesh (python tools/overture-buildings.py writes them, ~20 min, 2.2 GB),
+// laid out where Planetiler's Overture reader looks for them, then tiled at z13–14 (~3 min, 418 MB). The column
+// must be called `height`: the reader keeps Overture's own attribute names only.
+const parquet = `${dir}/data/overture/theme=buildings/type=building/part-0.parquet`;
+if (existsSync(parquet)) execFileSync(java, ['-Xmx8g', '-Djdk.net.unixdomain.tmpdir=C:/jtmp', '-cp', 'planetiler.jar',
+  'com.onthegomap.planetiler.examples.overture.OvertureBasemap', '--base=data/overture', '--minzoom=13', '--maxzoom=14',
+  '--bounds=88.0,20.7,92.7,26.6', '--output=buildings-bd.pmtiles', '--exclude_ids=true', '--force'], { cwd: dir, stdio: 'inherit' });
+if (!process.argv.includes('--no-upload')) {
   execFileSync('node', ['tools/r2.mjs', 'put', `${dir}/bd.pmtiles`, 'tiles/bd.pmtiles', 'application/vnd.pmtiles'], { stdio: 'inherit' });
+  if (existsSync(`${dir}/buildings-bd.pmtiles`)) execFileSync('node', ['tools/r2.mjs', 'put', `${dir}/buildings-bd.pmtiles`, 'tiles/buildings-bd.pmtiles', 'application/vnd.pmtiles'], { stdio: 'inherit' });
+}
