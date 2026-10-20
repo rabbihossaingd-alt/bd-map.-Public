@@ -56,7 +56,7 @@ if (process.env.EVAL) {
 // SHOT=file.png saves what the phone shows at the end, zoomed into Dhaka
 if (process.env.SHOT) {
   const [vx, vy, vz] = (process.env.SHOTVIEW || '90.4125,23.7275,15.5').split(',').map(Number);   // where to look
-  await evalJs(`new Promise(r => { map.jumpTo({ center: [${vx}, ${vy}], zoom: ${vz} }); setTimeout(r, 7000); })`);
+  if (!process.env.NOJUMP) await evalJs(`new Promise(r => { map.jumpTo({ center: [${vx}, ${vy}], zoom: ${vz} }); setTimeout(r, 7000); })`);
   const { result } = await cdp('Page.captureScreenshot', { format: 'png' });
   (await import('node:fs')).writeFileSync(process.env.SHOT, Buffer.from(result.data, 'base64'));
 }

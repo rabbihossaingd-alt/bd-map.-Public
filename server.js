@@ -2565,6 +2565,40 @@ try {
   }
   console.log(`Map places: ${[...poiCells.values()].reduce((n, c) => n + c.length, 0)} in ${poiCells.size} cells`);
 } catch { /* no file: the map shows OpenStreetMap's places only */ }
+// The same places for search: every name in lower case, Bangla and English, with its cell's place in the list.
+const poiAll = [...poiCells.values()].flat();
+const poiNames = poiAll.map(p => (p[3] + ' ' + p[4]).toLowerCase());
+const poiKm = (a, b, c, d) => { const r = Math.PI / 180, x = (d - b) * r * Math.cos((a + c) / 2 * r), y = (c - a) * r; return Math.hypot(x, y) * 6371; };
+const poiOut = (p, km) => ({ lat: p[0], lon: p[1], kind: p[2], name: p[3], bn: p[4], cat: p[5], km: km == null ? undefined : Math.round(km * 100) / 100 });
+// ?q=text[&lat=&lon=]: names holding every word typed; whole-word and start-of-name matches first, then the nearest
+function poisSearch(res, q, lat, lon) {
+  const words = q.toLowerCase().split(/\s+/).filter(w => w.length > 1).slice(0, 5);
+  if (!words.length) return json(res, 200, { results: [] });
+  const near = Number.isFinite(lat) && Number.isFinite(lon);
+  const hits = [];
+  for (let i = 0; i < poiAll.length && hits.length < 4000; i++) {
+    const n = poiNames[i];
+    if (!words.every(w => n.includes(w))) continue;
+    const p = poiAll[i], km = near ? poiKm(lat, lon, p[0], p[1]) : null;
+    const score = (n.startsWith(words[0]) ? 0 : n.includes(' ' + words[0]) ? 1 : 2) * 50 + (near ? Math.min(km, 400) / 8 : 0);
+    hits.push([score, p, km]);
+  }
+  hits.sort((a, b) => a[0] - b[0]);
+  json(res, 200, { results: hits.slice(0, 8).map(([, p, km]) => poiOut(p, km)) });
+}
+// ?kind=food&lat=&lon=: the nearest places of one kind, from the cells around the point outwards
+function poisNear(res, kind, lat, lon) {
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return json(res, 400, { error: 'where?' });
+  const cy = Math.floor(lat * POI_CELL), cx = Math.floor(lon * POI_CELL), found = [];
+  for (let ring = 0; ring <= 12 && found.length < 20; ring++) {
+    for (let y = cy - ring; y <= cy + ring; y++) for (let x = cx - ring; x <= cx + ring; x++) {
+      if (Math.max(Math.abs(y - cy), Math.abs(x - cx)) !== ring) continue;
+      for (const p of poiCells.get(y + ':' + x) || []) if (p[2] === kind) found.push([poiKm(lat, lon, p[0], p[1]), p]);
+    }
+  }
+  found.sort((a, b) => a[0] - b[0]);
+  json(res, 200, { results: found.slice(0, 20).map(([km, p]) => poiOut(p, km)) });
+}
 const poiZipped = new Map();                            // a busy city cell is a few hundred kB as text, a fifth of that zipped
 function poisApi(req, res, searchParams) {
   const m = /^(-?\d+):(-?\d+)$/.exec(searchParams.get('c') || '');
@@ -2599,6 +2633,8 @@ const server = http.createServer((req, res) => {
   if (pathname.startsWith('/api/support/')) return supportApi(req, res, pathname.slice(13), searchParams).catch(() => json(res, 500, { error: 'server error' }));
   if (pathname.startsWith('/api/admin/')) return adminApi(req, res, pathname.slice(11), searchParams).catch(e => { console.error(e); json(res, 500, { error: 'server error' }); });
   if (pathname === '/api/pois') return poisApi(req, res, searchParams);
+  if (pathname === '/api/pois/search') return poisSearch(res, (searchParams.get('q') || '').slice(0, 80), parseFloat(searchParams.get('lat')), parseFloat(searchParams.get('lon')));
+  if (pathname === '/api/pois/near') return poisNear(res, (searchParams.get('kind') || '').slice(0, 12), parseFloat(searchParams.get('lat')), parseFloat(searchParams.get('lon')));
   // The map's imagery key (ArcGIS Location Platform, Basemaps only). It travels to every browser anyway — tiles are
   // fetched there — so it is limited to basemaps; it lives in the environment (ESRI_KEY), not in the code.
   if (pathname === '/api/map-config') { const k = (process.env.ESRI_KEY || '').trim(); return json(res, 200, { esriKey: k.length >= 40 ? k : '' }); }   // a placeholder like '.env' is not a key

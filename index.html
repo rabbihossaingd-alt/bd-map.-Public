@@ -115,6 +115,12 @@
       <button id="tool-out" class="desk-only" title="ছোট করুন" aria-label="ছোট করুন"><i data-ic="minus"></i></button>
     </div>
     <div class="side">
+      <!-- One search box, as in Google Maps; the from/to pair opens from its directions button -->
+      <div class="ms" id="map-search">
+        <div class="card ms-bar"><i data-ic="search"></i><input id="ms-input" autocomplete="off" placeholder="এখানে খুঁজুন" aria-label="এখানে খুঁজুন"><button class="ms-clear" id="ms-clear" hidden aria-label="মুছুন"><i data-ic="close"></i></button><button class="ms-dir" id="ms-dir" title="দিকনির্দেশ" aria-label="দিকনির্দেশ"><i data-ic="route"></i></button></div>
+        <div class="card suggest ms-sug" id="ms-sug" hidden></div>
+        <div class="ms-chips" id="ms-chips"></div>
+      </div>
       <div class="card" id="trip-search"></div>
       <div class="card sheet" id="sheet" hidden>
         <div class="sheet-grip" id="sheet-grip" aria-hidden="true"></div>
@@ -133,6 +139,7 @@
         <div id="pane-train" hidden></div>
         <div class="foot">ভাড়া আনুমানিক — সরকারি তালিকার সাথে কিছু কমবেশি হতে পারে · <a href="#/fares">কীভাবে হিসাব হয়</a></div>
       </div>
+      <div class="card pc" id="place-card" hidden></div>
     </div>
   </section>
 

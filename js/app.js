@@ -817,7 +817,12 @@ function satZoomLimit() {
   map.setMaxZoom(real != null ? Math.min(19, real + 1) : 19);
 }
 // A tile Esri has no photo for is drawn from its parent: the parent's quarter, enlarged (up to three levels up).
+// Esri's "Clarity" copy of World Imagery is tried first: one clear, recent photo per place, so the seams between
+// photos of different dates (a river in squares of three colours) mostly go. Where it has none it says 404.
+const CLARITY = 'https://clarity.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/';
 async function esriTile(url, signal, depth = 0) {
+  const zyx = /\/tile\/(\d+\/\d+\/\d+)/.exec(url);
+  if (zyx) { try { const c = await fetch(CLARITY + zyx[1], { signal }); if (c.ok && (c.headers.get('content-type') || '').startsWith('image')) return await c.arrayBuffer(); } catch (e) { if (signal.aborted) throw e; } }
   const r = await fetch(url, { signal });
   const data = await r.arrayBuffer();
   if (r.ok && data.byteLength !== 2521) return data;
@@ -1000,7 +1005,7 @@ function mapPadding() {
   // On wide screens the results sheet fills the left side; without it only the small search card is there.
   return innerWidth > 760
     ? { top: 40, bottom: 40, left: $('sheet').hidden ? 40 : 430, right: 70 }
-    : { top: $('trip-search').offsetHeight + 34, bottom: $('sheet').offsetHeight + 24, left: 24, right: 24 };
+    : { top: Math.max($('trip-search').offsetHeight, $('map-search').offsetHeight) + 34, bottom: Math.max($('sheet').offsetHeight, $('place-card').offsetHeight) + 24, left: 24, right: 24 };
 }
 
 // Built once and shared; started early from the bottom of this file so the map opens faster.
@@ -1050,7 +1055,7 @@ async function createMap() {
   // so where both know a place the map's collision rule keeps one badge.
   map.addSource('places2', { type: 'geojson', data: EMPTY, attribution: '<a href="https://overturemaps.org" target="_blank" rel="noopener">Overture Maps</a>' });
   const firstPoi = (map.getStyle().layers.find(l => l['source-layer'] === 'poi') || {}).id;
-  map.addLayer({ id: 'places2', type: 'symbol', source: 'places2', minzoom: 15.5,
+  map.addLayer({ id: 'places2', type: 'symbol', source: 'places2', minzoom: 15,
                  layout: { 'icon-image': ['concat', 'poi-', ['get', 'kind']], 'icon-size': 1, 'text-field': ['get', 'name'], 'text-font': ['Noto Sans Regular'], 'text-size': 12,
                            'text-optional': true, 'text-variable-anchor': ['left', 'right', 'top', 'bottom'], 'text-radial-offset': 1.05, 'text-justify': 'auto' },
                  paint: { 'text-opacity': 0 } }, firstPoi);
@@ -1058,7 +1063,7 @@ async function createMap() {
   const cells = new Map(), CELL = 50;
   const classOf = kind => ((POI_KINDS.find(k => k[0] === kind) || [])[4] || [])[0] || '';
   async function morePlaces() {
-    if (map.getZoom() < 15.5) return;
+    if (map.getZoom() < 15) return;
     const b = map.getBounds(), c = map.getCenter(), all = [];
     for (let y = Math.floor(b.getSouth() * CELL); y <= Math.floor(b.getNorth() * CELL); y++)
       for (let x = Math.floor(b.getWest() * CELL); x <= Math.floor(b.getEast() * CELL); x++) all.push([y, x, Math.hypot(y + 0.5 - c.lat * CELL, x + 0.5 - c.lng * CELL)]);
@@ -1095,7 +1100,7 @@ async function createMap() {
   geo.on('error', () => { $('tool-me').classList.remove('on'); const quiet = quietLocate; quietLocate = false; approxLocate(quiet); });
   $('tool-me').addEventListener('click', () => { setStatus(''); geo.trigger(); });
   locateMe = () => { quietLocate = true; geo.trigger(); };       // on opening: no complaint if location is refused
-  geo.on('geolocate', () => { quietLocate = false; });
+  geo.on('geolocate', e => { quietLocate = false; myLoc = { lat: e.coords.latitude, lon: e.coords.longitude }; });
 
   // Stop names: on hover with a mouse, on tap with a finger.
   stopPopup = new maplibregl.Popup({ closeButton: false, offset: 12, className: 'stop-popup' });
@@ -1107,6 +1112,16 @@ async function createMap() {
   // A tap on the map fills whichever end of the trip is still empty.
   map.on('click', async e => {
     if (map.queryRenderedFeatures(e.point, { layers: ['stops'] }).length) return;
+    if (!dirOpen()) {
+      const box = [[e.point.x - 10, e.point.y - 10], [e.point.x + 10, e.point.y + 10]];
+      const f = map.queryRenderedFeatures(box, { layers: NAME_LAYERS.filter(id => id === 'places2' || /^poi_/.test(id)).filter(id => map.getLayer(id)) })[0];
+      if (f) {
+        const pr = f.properties, [lon, lat] = f.geometry.coordinates;
+        const kind = pr.kind || (POI_KINDS.find(k => k[4].includes(pr.class)) || POI_KINDS[POI_KINDS.length - 1])[0];
+        showPlace({ lat, lon, name: labelText(pr), kind, cat: pr.cat || pr.subclass || pr.class || '' });
+      } else hidePlace();
+      return;
+    }
     const which = !trip.from ? 'from' : !trip.to ? 'to' : null;
     if (!which) return;
     const { lat, lng } = e.lngLat;
@@ -1386,6 +1401,7 @@ function clearTrip() {
 // if the browser's permission prompt is turned down, the map simply stays on Bangladesh.
 let locateMe = () => {}, locatedOnce = false, quietLocate = false;
 enter.trip = async () => {
+  if (trip.from || trip.to || pendingPath || pendingBus) $('page-trip').classList.add('dir-on');
   try { await ensureMap(); } catch { return; }
   if (current !== 'trip') return;
   drawMarkers();
@@ -1405,6 +1421,120 @@ enter.trip = async () => {
   }
 };
 $('reset').addEventListener('click', clearTrip);
+
+// ---- Search on the map, as Google Maps has it: one box; a place's card with its distance; directions on a button ----
+let myLoc = null;
+const KIND_BN = { food: 'খাবার', shop: 'দোকান', health: 'হাসপাতাল ও স্বাস্থ্য', stay: 'হোটেল', learn: 'স্কুল ও কলেজ', green: 'পার্ক ও খেলাধুলা', bus: 'বাস', rail: 'ট্রেন',
+  worship: 'মসজিদ ও উপাসনালয়', bank: 'ব্যাংক ও এটিএম', fuel: 'পেট্রল পাম্প', civic: 'সরকারি অফিস', sight: 'দর্শনীয় স্থান', other: 'জায়গা' };
+const CHIPS = [['food', 'রেস্টুরেন্ট'], ['learn', 'স্কুল'], ['health', 'হাসপাতাল'], ['bank', 'ব্যাংক ও এটিএম'], ['fuel', 'পেট্রল পাম্প'], ['stay', 'হোটেল'], ['worship', 'মসজিদ'], ['shop', 'দোকান']];
+const dirOpen = () => $('page-trip').classList.contains('dir-on');
+function openDirections(on) {
+  $('page-trip').classList.toggle('dir-on', on);
+  if (!on) return;
+  hidePlace();
+  setTimeout(() => { const i = $('trip-search').querySelector(trip.from ? 'input[data-w=to]' : 'input[data-w=from]'); if (i && !(trip.from && trip.to)) i.focus(); }, 60);
+}
+const bnDigits = v => LANG === 'en' ? String(v) : String(v).replace(/\d/g, d => '০১২৩৪৫৬৭৮৯'[d]);
+const kmText = km => km < 1 ? `${bnDigits(Math.round(km * 100) * 10)} মিটার` : `${bnDigits(km < 10 ? km.toFixed(1) : Math.round(km))} কিমি`;
+let placeMarker = null;
+function hidePlace() { $('place-card').hidden = true; if (placeMarker) { placeMarker.remove(); placeMarker = null; } }
+function showPlace(pl) {
+  const card = $('place-card');
+  const k = POI_KINDS.find(x => x[0] === pl.kind) || POI_KINDS[POI_KINDS.length - 1];
+  if (placeMarker) placeMarker.remove();
+  const pinEl = el('div', 'sel-pin'); pinEl.appendChild(el('i'));
+  placeMarker = new maplibregl.Marker({ element: pinEl, anchor: 'bottom' }).setLngLat([pl.lon, pl.lat]).addTo(map);
+  const km = myLoc ? haversineKm(myLoc, pl) : null;
+  const head = el('div', 'pc-head');
+  const badge = el('span', 'pc-badge'); badge.style.background = k[1]; badge.innerHTML = k[3].raw ? `<svg viewBox="0 0 24 24">${k[3].raw}</svg>` : `<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">${k[3]}</svg>`;
+  const t = el('div', 'pc-t'); t.append(el('b', 'no-tr', pl.name || 'বাছাই করা জায়গা'), el('span', null, [KIND_BN[pl.kind] || '', pl.sub || ''].filter(Boolean).join(' · ')));
+  const x = el('button', 'icon-btn pc-x'); x.innerHTML = svg('close'); x.setAttribute('aria-label', 'বন্ধ করুন'); x.addEventListener('click', hidePlace);
+  head.append(badge, t, x);
+  const dist = el('p', 'pc-dist');
+  if (km != null) dist.textContent = `আপনার থেকে সোজা ${kmText(km)}`;
+  else { const b = el('button', 'pc-link', 'আপনার থেকে কত দূর দেখতে লোকেশন চালু করুন'); b.addEventListener('click', () => { locateMe(); const w = setInterval(() => { if (myLoc) { clearInterval(w); showPlace(pl); } }, 500); setTimeout(() => clearInterval(w), 15000); }); dist.appendChild(b); }
+  const acts = el('div', 'pc-acts');
+  const go = el('button', 'btn pc-go'); go.append(ic('route'), el('span', null, 'দিকনির্দেশ'));
+  go.addEventListener('click', () => {
+    const to = { lat: pl.lat, lon: pl.lon, label: pl.name || 'বাছাই করা জায়গা' };
+    hidePlace(); openDirections(true);
+    if (myLoc) { trip.from = { lat: myLoc.lat, lon: myLoc.lon, label: 'আমার লোকেশন' }; }
+    setPlace('to', to);
+  });
+  const from = el('button', 'btn quiet'); from.append(ic('pin'), el('span', null, 'এখান থেকে'));
+  from.addEventListener('click', () => { hidePlace(); openDirections(true); setPlace('from', { lat: pl.lat, lon: pl.lon, label: pl.name || 'বাছাই করা জায়গা' }); });
+  acts.append(go, from);
+  card.replaceChildren(head, dist, acts);
+  card.hidden = false;
+  map.easeTo({ center: [pl.lon, pl.lat], zoom: Math.max(map.getZoom(), 16.2), duration: 700, padding: mapPadding() });
+}
+(function initMapSearch() {
+  const input = $('ms-input'), sug = $('ms-sug'), clear = $('ms-clear');
+  let timer = null, seq = 0;
+  const here = () => myLoc || (map ? { lat: map.getCenter().lat, lon: map.getCenter().lng } : { lat: 23.81, lon: 90.41 });
+  const item = (pl, icon) => {
+    const k = POI_KINDS.find(x => x[0] === pl.kind);
+    const row = el('div', 'sug');
+    const t = el('div', 't'); t.append(el('b', 'no-tr', pl.name), el('span', null, [pl.km != null ? kmText(pl.km) : '', KIND_BN[pl.kind] || pl.sub || ''].filter(Boolean).join(' · ')));
+    const i = ic(icon || 'pin'); if (k) i.style.color = k[1];
+    row.append(i, t);
+    row.addEventListener('mousedown', e => { e.preventDefault(); sug.hidden = true; input.value = pl.name; clear.hidden = false; input.blur(); showPlace(pl); });
+    sug.appendChild(row);
+  };
+  async function run() {
+    const q = input.value.trim(), mine = ++seq;
+    clear.hidden = !q;
+    if (q.length < 2) { sug.hidden = true; return; }
+    const h = here();
+    const [ours, local] = await Promise.all([
+      fetch(`api/pois/search?q=${encodeURIComponent(q)}&lat=${h.lat}&lon=${h.lon}`).then(r => r.json()).then(j => j.results).catch(() => []),
+      Promise.resolve(searchLocal(q))
+    ]);
+    if (mine !== seq) return;
+    sug.replaceChildren();
+    for (const pl of ours) item({ ...pl, name: LANG !== 'en' && pl.bn ? pl.bn : pl.name }, 'pin');
+    for (const pl of local.slice(0, 4)) item({ lat: pl.lat, lon: pl.lon, name: pl.title, sub: pl.sub }, pl.icon);
+    sug.hidden = !sug.children.length;
+    // places OpenStreetMap knows (areas, roads, landmarks) after a pause
+    clearTimeout(timer);
+    timer = setTimeout(async () => {
+      const online = await searchOnline(q).catch(() => []);
+      if (mine !== seq || document.activeElement !== input) return;
+      for (const pl of online.slice(0, 4)) item({ lat: pl.lat, lon: pl.lon, name: pl.title, sub: pl.sub }, 'pin');
+      if (!sug.children.length) sug.appendChild(el('div', 'empty', 'কিছু পাওয়া যায়নি — অন্য বানানে লিখে দেখুন।'));
+      sug.hidden = false;
+    }, 500);
+  }
+  let typing = null;
+  input.addEventListener('input', () => { clearTimeout(typing); typing = setTimeout(run, 220); });
+  input.addEventListener('focus', () => { if (input.value.trim().length >= 2) run(); });
+  input.addEventListener('blur', () => setTimeout(() => { sug.hidden = true; }, 150));
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') { const f = sug.querySelector('.sug'); if (f) f.dispatchEvent(new MouseEvent('mousedown', { cancelable: true })); } });
+  clear.addEventListener('click', () => { input.value = ''; clear.hidden = true; sug.hidden = true; hidePlace(); input.focus(); });
+  $('ms-dir').addEventListener('click', () => openDirections(true));
+  // the directions panel gets a way back to the single box
+  const back = el('button', 'icon-btn dir-back'); back.innerHTML = svg('back'); back.setAttribute('aria-label', 'ফিরে যান');
+  back.addEventListener('click', () => { openDirections(false); if (trip.from || trip.to) clearTrip(); });
+  $('trip-search').prepend(back);
+  // nearby, by kind
+  const chips = $('ms-chips');
+  for (const [kind, label] of CHIPS) {
+    const k = POI_KINDS.find(x => x[0] === kind);
+    const c = el('button', 'ms-chip'); const dot = el('i'); dot.style.background = k[1]; c.append(dot, el('span', null, label));
+    c.addEventListener('click', async () => {
+      const h = here();
+      const res = await fetch(`api/pois/near?kind=${kind}&lat=${h.lat}&lon=${h.lon}`).then(r => r.json()).then(j => j.results).catch(() => []);
+      sug.replaceChildren(el('div', 'sug-head', `কাছের ${label}`));
+      for (const pl of res) item({ ...pl, name: LANG !== 'en' && pl.bn ? pl.bn : pl.name }, 'pin');
+      if (!res.length) sug.appendChild(el('div', 'empty', 'কাছে কিছু পাওয়া যায়নি।'));
+      sug.hidden = false;
+      if (res.length && map) { const b = res.slice(0, 10).reduce((bx, pl) => bx.extend([pl.lon, pl.lat]), new maplibregl.LngLatBounds([h.lon, h.lat], [h.lon, h.lat])); map.fitBounds(b, { padding: mapPadding(), maxZoom: 16, duration: 800 }); }
+      const away = e => { if (!sug.contains(e.target) && !chips.contains(e.target)) { sug.hidden = true; document.removeEventListener('pointerdown', away); } };
+      setTimeout(() => document.addEventListener('pointerdown', away), 0);
+    });
+    chips.appendChild(c);
+  }
+})();
 for (const b of $('seg').children) b.addEventListener('click', () => showPane(b.dataset.pane));
 
 // ---- Dhaka buses ----

@@ -4152,3 +4152,48 @@ button.dg-wiki { background: none; border: 0; padding: 0; cursor: pointer; font:
 .bn-labels .k-water { font-size: 11.5px; }
 .bn-labels .k-poi { font-size: 11.5px; }
 .bn-labels.on-sat .k-country, .bn-labels.on-sat .k-division, .bn-labels.on-sat .k-district { color: rgba(255, 255, 255, .92) !important; }
+
+/* ================= Map search, Google style: one box, chips, a place card; directions on a button ================= */
+#page-trip:not(.dir-on) #trip-search, #page-trip:not(.dir-on) #sheet { display: none !important; }
+#page-trip.dir-on #map-search { display: none; }
+.ms { position: relative; z-index: 3; display: grid; gap: 10px; pointer-events: none; }
+.ms > * { pointer-events: auto; }
+.ms-bar { display: flex; align-items: center; gap: 10px; height: 54px; padding: 0 6px 0 18px; border-radius: 999px; border: 1px solid var(--line);
+  backdrop-filter: saturate(1.7) blur(24px); -webkit-backdrop-filter: saturate(1.7) blur(24px); }
+.ms-bar > [data-ic] { font-size: 20px; color: var(--muted); }
+.ms-bar input { flex: 1; min-width: 0; height: 100%; border: 0; outline: none; background: none; font-size: 16.5px; color: var(--ink); }
+.ms-bar input::placeholder { color: var(--muted); }
+.ms-clear, .ms-dir { flex: none; width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; font-size: 19px; color: var(--muted); transition: background .2s, transform .15s var(--ease); }
+.ms-clear:active, .ms-dir:active { transform: scale(.92); }
+.ms-dir { color: #fff; background: var(--brand-grad, var(--accent)); box-shadow: 0 8px 18px -10px #059669; }
+.ms-sug { position: static; max-height: 52vh; overflow-y: auto; padding: 6px; border-radius: 22px; }
+.ms-sug .sug { border-radius: 14px; }
+.ms-chips { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; padding: 0 2px 2px; margin: 0 -2px; }
+.ms-chips::-webkit-scrollbar { display: none; }
+.ms-chip { flex: none; display: inline-flex; align-items: center; gap: 7px; height: 36px; padding: 0 14px 0 11px; border-radius: 999px; font-size: 13.5px; font-weight: 700; color: var(--ink);
+  background: var(--glass); border: 1px solid var(--line); box-shadow: var(--shadow-1); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); transition: transform .15s var(--ease); }
+.ms-chip:active { transform: scale(.95); }
+.ms-chip i { width: 10px; height: 10px; border-radius: 50%; }
+.dir-back { margin: -4px 0 6px -4px; }
+
+/* the place card */
+.pc { margin-top: auto; padding: 16px 18px 18px; border-radius: 26px; pointer-events: auto; animation: pop .4s var(--ease); }
+.pc-head { display: grid; grid-template-columns: 44px 1fr auto; gap: 12px; align-items: center; }
+.pc-badge { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; box-shadow: 0 6px 14px -6px rgba(0, 0, 0, .4); }
+.pc-badge svg { width: 22px; height: 22px; }
+.pc-t { min-width: 0; display: grid; gap: 2px; }
+.pc-t b { font-size: 18px; font-weight: 800; letter-spacing: -.01em; line-height: 1.25; }
+.pc-t span { font-size: 13px; color: var(--muted); }
+.pc-dist { margin: 12px 0 14px; font-size: 14.5px; font-weight: 600; color: var(--ink-2); }
+.pc-link { padding: 0; font-size: 14px; font-weight: 700; color: var(--accent); background: none; border: 0; text-align: left; }
+.pc-acts { display: flex; gap: 8px; }
+.pc-acts .btn { flex: 1; justify-content: center; height: 46px; }
+@media (max-width: 760px) {
+  .ms-bar { height: 50px; }
+  .pc { margin: auto -10px 0; border-radius: 26px 26px 0 0; padding-bottom: calc(18px + env(safe-area-inset-bottom)); }
+}
+/* the chosen place: a red drop pin, as in Google Maps */
+.sel-pin { width: 30px; height: 40px; }
+.sel-pin i { display: block; width: 100%; height: 100%; background: no-repeat center / contain url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 40'%3E%3Cpath d='M15 39C15 39 28 24.5 28 14A13 13 0 0 0 2 14C2 24.5 15 39 15 39Z' fill='%23ea4335' stroke='%23a50e0e' stroke-width='1.5'/%3E%3Ccircle cx='15' cy='14' r='5' fill='%23a50e0e'/%3E%3C/svg%3E");
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, .35)); animation: pinDrop .45s cubic-bezier(.32, 1.4, .5, 1) both; }
+@keyframes pinDrop { from { transform: translateY(-18px); opacity: 0; } to { transform: none; opacity: 1; } }
