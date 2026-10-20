@@ -38,7 +38,7 @@ function closeStudio() {
   if (!studio) return;
   stopCamera();
   if (studio.preview) studio.preview.stop();
-  if (studio.pre && studio.pre.xhr && !studio.pre.done) studio.pre.xhr.abort();
+  if (studio.pre && studio.pre.xhr && !studio.pre.done && !studio.pre.keep) studio.pre.xhr.abort();
   if (studio.url) URL.revokeObjectURL(studio.url);
   studio.closing = true;
   dropItems(studio);
@@ -143,7 +143,7 @@ function dropItems(st) {
   if (!st.items) return;
   for (const it of st.items) {
     if (it.url !== st.url) URL.revokeObjectURL(it.url);
-    if (it.pre && it.pre.xhr && !it.pre.done && st.closing) it.pre.xhr.abort();
+    if (it.pre && it.pre.xhr && !it.pre.done && st.closing && !it.pre.keep) it.pre.xhr.abort();
   }
   st.items = null;
 }
@@ -936,84 +936,106 @@ async function openDrafts() {
   }, [.6, .92]);
 }
 
+// Share, as on Instagram: the studio closes at once and the post goes up in the background, under a small pill at the
+// top of the screen that shows how far it has got; the app stays free to use. Only what needs the studio's pictures
+// (framing photos, a video's cover) is done before it closes — a few moments; the sending is all done after.
 async function share(btn, progress, note) {
   const st = studio;
   if (!st || !st.file) return;
   if (btn) btn.disabled = true;
-  if (progress) progress.hidden = false;
-  // Over the studio: how much has gone, so a big video does not look stuck.
-  const up = el('div', 'st-up');
-  const ring = el('div', 'ring'), pct = el('b', null, '0%'), size = el('span', 'no-tr'), hint = el('small', null, LANG === 'en' ? 'Keep BD Map open until it is done' : 'শেষ না হওয়া পর্যন্ত অ্যাপটি খোলা রাখুন');
-  up.append(ring, pct, size, hint);
-  st.box.appendChild(up);
-  const mb = n => n >= 1e9 ? (n / 1e9).toFixed(2) + ' GB' : Math.max(.1, n / 1e6).toFixed(1) + ' MB';
-  const onProgress = (f, sent, total) => {
-    if (progress) progress.firstChild.style.width = Math.round(f * 100) + '%';
-    ring.style.setProperty('--p', f);
-    pct.textContent = Math.floor(f * 100) + '%';
-    if (total) size.textContent = `${mb(sent)} / ${mb(total)}`;
-  };
+  let job;
   try {
-    let blob = st.file, type = st.kind === 'video' ? videoType(st.file) : st.file.type, fx = st.fx, poster = '', layers = [];
     const shape = st.shape || frameShape(st);
-    let w = st.w, h = st.h;
-    let more = [];
+    const parts = [];                                         // what goes up, in order: { blob, type, pre, poster, layers, w, h, video }
     if (st.items) {
-      const n = st.items.length, sent = [];
-      const step = (i, f) => onProgress((i + f) / n);
-      for (const [i, it] of st.items.entries()) {
-        if (it.kind === 'photo') {
-          const b = await bakeFrame(it, shape, canvasFilters ? fx : '');
-          sent.push({ media: await uploadMedia(b.blob, 'image/jpeg', f => step(i, f)), w: b.w, h: b.h });
-        } else {
-          let m = null;
-          if (it.pre) { it.pre.on = f => step(i, f); step(i, it.pre.f); try { m = await it.pre.promise; } catch { m = null; } }
-          if (!m) m = await uploadMedia(it.file, videoType(it.file), f => step(i, f));
-          if (!it.w) await mediaSize(it);
-          sent.push({ media: m, poster: it.thumb || await videoPoster(it.file), layers: it.layers, w: it.w, h: it.h, video: true });
-        }
+      for (const it of st.items) {
+        if (it.kind === 'photo') { const b = await bakeFrame(it, shape, canvasFilters ? st.fx : ''); parts.push({ blob: b.blob, type: 'image/jpeg', w: b.w, h: b.h }); }
+        else { if (!it.w) await mediaSize(it); parts.push({ blob: it.file, type: videoType(it.file), pre: it.pre, poster: it.thumb || await videoPoster(it.file), layers: it.layers, w: it.w, h: it.h, video: true }); }
       }
-      blob = null; type = 'image/jpeg';
-      if (canvasFilters) fx = '';
-      const first = sent[0];
-      w = first.w; h = first.h;
-      if (first.video) { poster = first.poster; layers = first.layers; }
-      st.preMedia = first.media;
-      more = sent.slice(1).map(x => ({ media: x.media, poster: x.poster || '', layers: x.layers || [], w: x.w, h: x.h }));
     } else if (st.kind === 'photo') {
-      const baked = await bakeFrame(st, shape, canvasFilters ? fx : '');
-      blob = baked.blob; w = baked.w; h = baked.h;
-      if (canvasFilters) fx = '';
-      type = 'image/jpeg';
-    } else { poster = (st.cover && st.cover.url) || await videoPoster(st.file); layers = st.layers; }
-    let media = st.items ? st.preMedia : null;
-    if (!st.items && st.kind === 'video' && st.pre && st.pre.file === st.file) {
-      onProgress(st.pre.f, st.pre.sent, st.pre.total);
-      st.pre.on = onProgress;
-      try { media = await st.pre.promise; st.pre.done = true; } catch { media = null; }
+      const b = await bakeFrame(st, shape, canvasFilters ? st.fx : '');
+      parts.push({ blob: b.blob, type: 'image/jpeg', w: b.w, h: b.h });
+    } else {
+      parts.push({ blob: st.file, type: videoType(st.file), pre: st.pre && st.pre.file === st.file ? st.pre : null, poster: (st.cover && st.cover.url) || await videoPoster(st.file), layers: st.layers, w: st.w, h: st.h, video: true });
     }
-    if (!media) media = await uploadMedia(blob, type, onProgress);
-    const send = m => st.mode === 'story' ? exploreApi('story', { media: m, poster, w, h, layers }) : exploreApi('post', { poster, w, h, layers, caption: st.caption || '', place: st.place || null, fx, music: st.music ? st.music.id : '', mstart: st.music ? st.music.start : 0,
+    const fx = (st.items || st.kind === 'photo') && canvasFilters ? '' : st.fx;
+    const fields = { caption: st.caption || '', place: st.place || null, fx, music: st.music ? st.music.id : '', mstart: st.music ? st.music.start : 0,
       orig: st.kind === 'video' ? st.orig : true, audience: st.audience || 'all', at: st.at || 0, tags: (st.tags || []).map(t => t.id), nocomm: !!st.nocomm, hidelikes: !!st.hidelikes,
-      media: m, more, aname: st.aname || '', story: !!st.alsoStory && !more.length });
-    // an upload made long before Share (over an hour) is cleared by the server: then it goes up again
-    try { await send(media); } catch (e) { if (e.message !== 'media') throw e; await send(await uploadMedia(blob, type, onProgress)); }
-    if (st.draftId) draftsTx('readwrite', s => s.delete(st.draftId)).catch(() => {});
-    const mode = st.mode, later = st.at;
-    closeStudio();
-    chatToast(ME, later ? (LANG === 'en' ? 'Scheduled. It will show at the time you picked.' : 'সময় ঠিক হয়েছে — সেই সময়ে পোস্টটি দেখাবে।')
-      : mode === 'story' ? 'স্টোরি দেওয়া হয়েছে — ২৪ ঘণ্টা থাকবে।' : mode === 'reel' ? 'রিল পোস্ট হয়েছে।' : 'পোস্ট হয়েছে।');
-    if (typeof refreshStoryRings === 'function') refreshStoryRings();
-    if (current === 'explore') enter.explore(); else if (current === 'profile') drawProfile(); else go('explore');
-  } catch (e) {
-    up.remove();
+      aname: st.aname || '', story: !!st.alsoStory && parts.length === 1 };
+    job = { mode: st.mode, later: st.at, parts, fields, draftId: st.draftId, thumb: parts[0].video ? parts[0].poster : URL.createObjectURL(parts[0].blob) };
+  } catch {
     if (btn) btn.disabled = false;
-    if (progress) progress.hidden = true;
-    const text = e.message === 'big' ? (LANG === 'en' ? 'The file is too big (3 GB at most).' : 'ফাইলটি অনেক বড় — সর্বোচ্চ ৩ জিবি।') : e.message === 'space' ? (LANG === 'en' ? 'The server has no room for this file now. Try a smaller one.' : 'সার্ভারে এখন এত বড় ফাইলের জায়গা নেই। ছোট একটি দিন।')
-      : e.message === 'type' ? 'এই ধরনের ফাইল নেওয়া যায় না।' : e.message === 'slow' ? 'আজ অনেকগুলো পোস্ট হয়েছে। কাল আবার চেষ্টা করুন।'
-      : e.message === 'closed' ? 'এই মুহূর্তে পোস্ট দেওয়া বন্ধ আছে।' : 'শেয়ার করা যায়নি। সংযোগ দেখে আবার চেষ্টা করুন।';
+    const text = 'ছবিটি তৈরি করা গেল না। আবার চেষ্টা করুন।';
     if (note) { note.className = 'form-note bad'; note.textContent = text; } else chatToast(ME, text);
+    return;
   }
+  // the uploads already under way keep going: the studio must not stop them as it closes
+  for (const part of job.parts) if (part.pre) part.pre.keep = true;
+  if (st.pre) st.pre.keep = true;
+  closeStudio();
+  sendPost(job);
+}
+const uploads = new Set();
+addEventListener('beforeunload', e => { if (uploads.size) { e.preventDefault(); e.returnValue = ''; } });   // closing the tab would stop it
+async function sendPost(job) {
+  uploads.add(job);
+  const pill = uploadPill(job);
+  const n = job.parts.length;
+  try {
+    const sent = [];
+    for (const [i, part] of job.parts.entries()) {
+      const step = (f, done, total) => pill.progress((i + f) / n, n === 1 ? done : 0, n === 1 ? total : 0);
+      let m = null;
+      if (part.pre) { part.pre.on = step; step(part.pre.f, part.pre.sent, part.pre.total); try { m = await part.pre.promise; } catch { m = null; } }
+      if (!m) m = await uploadMedia(part.blob, part.type, step);
+      sent.push({ ...part, media: m });
+    }
+    const first = sent[0], more = sent.slice(1).map(x => ({ media: x.media, poster: x.poster || '', layers: x.layers || [], w: x.w, h: x.h }));
+    const body = m => job.mode === 'story' ? exploreApi('story', { media: m, poster: first.poster || '', w: first.w, h: first.h, layers: first.layers || [] })
+      : exploreApi('post', { ...job.fields, media: m, more, poster: first.poster || '', w: first.w, h: first.h, layers: first.layers || [] });
+    // an upload made long before Share (over an hour) is cleared by the server: then it goes up again
+    try { await body(first.media); } catch (e) { if (e.message !== 'media') throw e; await body(await uploadMedia(first.blob, first.type, f => pill.progress(f))); }
+    if (job.draftId) draftsTx('readwrite', s => s.delete(job.draftId)).catch(() => {});
+    uploads.delete(job);
+    pill.done(job.later ? (LANG === 'en' ? 'Scheduled' : 'সময় ঠিক হয়েছে') : job.mode === 'story' ? 'স্টোরি দেওয়া হয়েছে' : job.mode === 'reel' ? 'রিল পোস্ট হয়েছে' : 'পোস্ট হয়েছে');
+    if (typeof refreshStoryRings === 'function') refreshStoryRings();
+    if (current === 'explore') enter.explore(); else if (current === 'profile') drawProfile();
+    if (document.hidden && 'Notification' in window && Notification.permission === 'granted') new Notification('BD Map', { body: 'আপনার পোস্টটি দেওয়া হয়েছে।', icon: 'icon.svg' });
+  } catch (e) {
+    uploads.delete(job);
+    console.warn('post not sent:', e && e.message);
+    window.lastPostError = e && e.message;
+    const text = e.message === 'big' ? (LANG === 'en' ? 'Too big (3 GB at most)' : 'ফাইলটি অনেক বড় — সর্বোচ্চ ৩ জিবি') : e.message === 'space' ? 'সার্ভারে এখন জায়গা নেই'
+      : e.message === 'type' ? 'এই ধরনের ফাইল নেওয়া যায় না' : e.message === 'slow' ? 'আজ অনেকগুলো পোস্ট হয়েছে' : e.message === 'closed' ? 'এখন পোস্ট দেওয়া বন্ধ' : 'পোস্ট হয়নি — সংযোগ দেখুন';
+    pill.fail(text, ['big', 'type', 'slow', 'closed'].includes(e.message) ? null : () => { for (const part of job.parts) part.pre = null; sendPost(job); });
+  }
+}
+// the pill: the post's picture, what is happening, and a thin bar; tap a failed one to try again
+function uploadPill(job) {
+  let stack = document.getElementById('up-stack');
+  if (!stack) { stack = el('div', 'up-stack'); stack.id = 'up-stack'; document.body.appendChild(stack); }
+  const pill = el('div', 'up-pill');
+  const pic = el('span', 'up-pic'); if (job.thumb) pic.style.backgroundImage = `url("${job.thumb}")`;
+  const text = el('span', 'up-t'), title = el('b', null, job.mode === 'story' ? 'স্টোরি দেওয়া হচ্ছে…' : 'পোস্ট হচ্ছে…'), sub = el('small', 'no-tr', '০%');
+  text.append(title, sub);
+  const bar = el('i', 'up-bar'), fill = el('i');
+  bar.appendChild(fill);
+  pill.append(pic, text, bar);
+  stack.appendChild(pill);
+  requestAnimationFrame(() => pill.classList.add('in'));
+  const mb = n => n >= 1e9 ? (n / 1e9).toFixed(2) + ' GB' : Math.max(.1, n / 1e6).toFixed(1) + ' MB';
+  const out = () => { pill.classList.remove('in'); setTimeout(() => pill.remove(), 400); };
+  return {
+    progress(f, done, total) {
+      fill.style.width = Math.round(f * 100) + '%';
+      sub.textContent = (LANG === 'en' ? Math.floor(f * 100) : num(Math.floor(f * 100))) + '%' + (total ? ` · ${mb(done)} / ${mb(total)}` : '');
+    },
+    done(t) { pill.classList.add('ok'); title.textContent = t; sub.textContent = 'সবাই দেখতে পাবে'; fill.style.width = '100%'; setTimeout(out, 2600); },
+    fail(t, retry) {
+      pill.classList.add('bad'); title.textContent = t; sub.textContent = retry ? 'আবার চেষ্টা করতে চাপুন' : 'বন্ধ করতে চাপুন';
+      pill.addEventListener('click', () => { out(); if (retry) retry(); }, { once: true });
+    }
+  };
 }
 // The photo as it was framed: 1080 px wide in the post's shape (or 1080x1920 for a story), with the filter, a blurred
 // copy behind a picture that does not fill a story, and the words and stickers drawn in.

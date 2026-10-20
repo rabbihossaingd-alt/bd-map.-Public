@@ -1152,21 +1152,45 @@ function showCall(status) {
   $('call-status').textContent = status;
   $('call-avatar').replaceChildren(avatar(call.peer, 'xl'));
   $('call-accept').hidden = call.state !== 'ringing';
-  $('call-mic').hidden = $('call-cam').hidden = call.state === 'ringing';
+  $('call-mic').hidden = $('call-cam').hidden = $('call-spk').hidden = call.state === 'ringing';
+  $('call-spk').classList.toggle('on', !!call.loud);
   if (!call.video) $('call-cam').hidden = true;
 }
 
 // What each side's network offered (host = same Wi-Fi, srflx = through the router, relay = through TURN) —
 // told to the server when a call fails, so the reason can be seen.
 const candType = c => (/ typ (\w+)/.exec(c && (c.candidate || c)) || [])[1] || '?';
+// ---- the call's sound: by the ear, as a phone call is, unless the loudspeaker is chosen ----
+// A web page cannot pick the earpiece everywhere. Where the browser can say what the audio is for (Safari on
+// iPhone, iOS 16.4+: 'play-and-record' is a phone-call session, heard at the ear) or which output to use
+// (setSinkId with an earpiece among the outputs), that is used; otherwise the call is simply quieter until the
+// loudspeaker button is pressed. A video call starts on the loudspeaker, as WhatsApp's do.
+async function applyCallSound() {
+  const loud = !!call.loud, outs = [$('call-remote'), ...document.querySelectorAll('.gc-tile video')];
+  try { if (navigator.audioSession) navigator.audioSession.type = loud ? 'auto' : 'play-and-record'; } catch { /* not this browser */ }
+  let sink = null;
+  try {
+    if (outs[0].setSinkId && navigator.mediaDevices.enumerateDevices) {
+      const devs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'audiooutput');
+      sink = devs.find(d => (loud ? /speaker/i : /earpiece|receiver|handset/i).test(d.label));
+    }
+  } catch { /* no list of outputs */ }
+  for (const v of outs) {
+    if (sink) v.setSinkId(sink.deviceId).catch(() => {});
+    v.volume = loud || sink ? 1 : 0.35;
+  }
+  $('call-spk').classList.toggle('on', loud);
+}
 async function newPeer() {
+  call.loud = call.video;
+  applyCallSound();
   // fetched for each call: relay passwords from metered.ca change
   try { const d = await chatApi('ice'); iceServers = d.iceServers; call.relay = d.relay; } catch { if (!iceServers) throw new Error('ice'); }
   const pc = call.pc = new RTCPeerConnection({ iceServers });
   call.diag = { mine: new Set(), theirs: new Set(), restarted: false };
   for (const track of call.media.getTracks()) pc.addTrack(track, call.media);
   pc.onicecandidate = e => { if (e.candidate) { call.diag.mine.add(candType(e.candidate)); signal({ type: 'ice', candidate: e.candidate }).catch(() => {}); } };
-  pc.ontrack = e => { const v = $('call-remote'); v.srcObject = e.streams[0]; v.play().catch(() => {}); };
+  pc.ontrack = e => { const v = $('call-remote'); v.srcObject = e.streams[0]; v.play().catch(() => {}); applyCallSound(); };
   const failed = () => {
     if (call.pc !== pc) return;
     // One more try with fresh routes (an ICE restart) before giving up; the caller starts it.
@@ -1318,6 +1342,7 @@ function stopMedia() {
   call.media = null;
 }
 function endCall(message, linger) {
+  try { if (navigator.audioSession) navigator.audioSession.type = 'auto'; } catch { /* not this browser */ }
   clearTimeout(call.ring);
   clearInterval(call.clock);
   if (call.pc) { call.pc.onconnectionstatechange = null; call.pc.close(); }
@@ -1409,6 +1434,7 @@ function hangUp() {
     const track = call.media && call.media.getAudioTracks()[0];
     if (track) { track.enabled = !track.enabled; e.currentTarget.classList.toggle('off', !track.enabled); }
   });
+  $('call-spk').addEventListener('click', () => { call.loud = !call.loud; applyCallSound(); });
   $('call-cam').addEventListener('click', e => {
     const track = call.media && call.media.getVideoTracks()[0];
     if (track) { track.enabled = !track.enabled; e.currentTarget.classList.toggle('off', !track.enabled); }

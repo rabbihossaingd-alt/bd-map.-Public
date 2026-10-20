@@ -86,7 +86,10 @@ addEventListener('hashchange', () => { for (const f of feedSounds) f.sound.stop(
 let feedWatcher = null;      // plays a feed video while it is on screen, pauses it when it leaves
 let feedSound = true;        // sound is on, as on Instagram; a browser that refuses sound before a tap gets it at the first tap
 let feedNeedsTap = false;
-addEventListener('pointerdown', () => {
+// A browser lets a video play with sound only after a real tap: a touch's pointerup/touchend, a click or a key —
+// not pointerdown, and not a scroll. Unmuting before that pauses the video, which looked like a stall.
+const soundAllowed = () => !navigator.userActivation || navigator.userActivation.hasBeenActive;
+for (const type of ['pointerup', 'touchend', 'click', 'keydown']) addEventListener(type, () => {
   if (!feedNeedsTap) return;
   feedNeedsTap = false;
   if (feedSound) setFeedSound(true);
@@ -147,6 +150,8 @@ function feedCard(p, onGone) {
     speaker.addEventListener('click', e => { e.stopPropagation(); setFeedSound(!feedSound); if (feedSound) v.play().catch(() => {}); });
     v.muted = !feedSound || !p.orig;
     v.dataset.orig = p.orig ? '1' : '0';
+    v.addEventListener('waiting', () => media.classList.add('buffering'));
+    for (const t of ['playing', 'pause', 'canplay']) v.addEventListener(t, () => media.classList.remove('buffering'));
     if (sound) {
       feedSounds.add({ v, sound });
       let last = 0;
@@ -827,17 +832,15 @@ function openQuickPost() {
       return;
     }
     share.disabled = true;
-    bar.hidden = false;
     note.className = 'form-note';
-    note.textContent = 'আপলোড হচ্ছে…';
+    note.textContent = 'তৈরি হচ্ছে…';
     try {
       const video = file.type.startsWith('video');
       const blob = video ? file : await shrinkPhoto(file);
       const poster = video ? await videoPoster(file) : '';
-      const media = await uploadMedia(blob, video ? (file.type || 'video/mp4') : 'image/jpeg', f => { bar.firstChild.style.width = Math.round(f * 100) + '%'; });
-      await exploreApi('post', { media, poster, caption: caption.value, place });
+      // from here it goes up in the background, under the pill at the top (studio.js), as on Instagram
       closeModal();
-      if (current === 'explore') enter.explore(); else if (current === 'profile') drawProfile(); else go('explore');
+      sendPost({ mode: 'post', parts: [{ blob, type: video ? (file.type || 'video/mp4') : 'image/jpeg', poster, video }], fields: { caption: caption.value, place }, thumb: poster || URL.createObjectURL(blob) });
     } catch (e) {
       share.disabled = false;
       bar.hidden = true;
@@ -856,8 +859,15 @@ function openQuickPost() {
     for (const e of entries) {
       const v = e.target;
       if (e.isIntersecting && e.intersectionRatio > 0.6) {
-        v.muted = !feedSound || v.dataset.orig === '0';
-        v.play().catch(() => { v.muted = true; feedNeedsTap = true; v.play().catch(() => {}); });
+        // one video at a time, as Instagram plays them
+        for (const o of document.querySelectorAll('.fc-media video')) if (o !== v && !o.paused) o.pause();
+        const wantSound = feedSound && v.dataset.orig !== '0';
+        v.muted = !(wantSound && soundAllowed());
+        if (wantSound && v.muted) feedNeedsTap = true;
+        v.play().catch(() => { v.muted = true; if (wantSound) feedNeedsTap = true; v.play().catch(() => {}); });
+        // the next video starts loading now, so it is ready when it scrolls in
+        const cards = [...document.querySelectorAll('.fc-media video')], next = cards[cards.indexOf(v) + 1];
+        if (next && next.preload !== 'auto') next.preload = 'auto';
       } else if (!v.paused) { v.dataset.auto = '1'; v.pause(); }
     }
   }, { threshold: [0, 0.6] });

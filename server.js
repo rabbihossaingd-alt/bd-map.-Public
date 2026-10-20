@@ -1393,6 +1393,65 @@ function musicLabel(m) {
 //   GET  /api/explore/feed?before=&user=&kind=video&q=   -> { posts }          GET /api/explore/post?id= -> { post, comments }
 //   POST /api/explore/like {id}   /save {id}   /comment {id, body}   /delete {id}   /report {id, reason}
 //   GET  /api/explore/stories    POST /api/explore/story {media, poster?}    POST /api/explore/story-delete {id}
+// ---- "Fast start" for phone videos ----
+// Many phones write a video's index (the moov box) at the end of the file, after the pictures. A browser must then
+// fetch the end before it can play, and it stalls while it seeks back and forth. Like qt-faststart, this moves the
+// index to the front and moves every chunk offset in it by the index's size; the new file replaces the old one
+// in one rename once it is whole, so a viewer never sees half of it.
+async function mp4Faststart(file) {
+  const fh = await fs.promises.open(file, 'r');
+  let atoms = [], moov, buf;
+  try {
+    const { size: total } = await fh.stat(), head = Buffer.alloc(16);
+    for (let pos = 0; pos < total;) {
+      await fh.read(head, 0, 16, pos);
+      let size = head.readUInt32BE(0);
+      if (size === 1) size = Number(head.readBigUInt64BE(8)); else if (size === 0) size = total - pos;
+      if (size < 8) return;
+      atoms.push({ type: head.toString('latin1', 4, 8), pos, size });
+      pos += size;
+    }
+    moov = atoms.find(a => a.type === 'moov');
+    const mdat = atoms.find(a => a.type === 'mdat');
+    if (!moov || !mdat || moov.pos < mdat.pos || moov.size > 64e6 || atoms[0].type !== 'ftyp') return;   // already in front, or not a plain MP4
+    buf = Buffer.alloc(moov.size);
+    await fh.read(buf, 0, moov.size, moov.pos);
+  } finally { await fh.close(); }
+  // every chunk offset that pointed before the old index moves forward by the index's size
+  const shift = moov.size, before = moov.pos;
+  const walk = (start, end) => {
+    for (let p = start; p + 8 <= end;) {
+      const size = buf.readUInt32BE(p), type = buf.toString('latin1', p + 4, p + 8);
+      if (size < 8 || p + size > end) return false;
+      if (['trak', 'mdia', 'minf', 'stbl'].includes(type)) { if (!walk(p + 8, p + size)) return false; }
+      else if (type === 'stco') {
+        const n = buf.readUInt32BE(p + 12);
+        for (let i = 0; i < n; i++) { const at = p + 16 + i * 4, v = buf.readUInt32BE(at); if (v < before) { if (v + shift > 0xffffffff) return false; buf.writeUInt32BE(v + shift, at); } }
+      } else if (type === 'co64') {
+        const n = buf.readUInt32BE(p + 12);
+        for (let i = 0; i < n; i++) { const at = p + 16 + i * 8, v = buf.readBigUInt64BE(at); if (v < BigInt(before)) buf.writeBigUInt64BE(v + BigInt(shift), at); }
+      } else if (type === 'cmov') return false;                   // a compressed index: leave the file as it is
+      p += size;
+    }
+    return true;
+  };
+  if (!walk(8, buf.length)) return;
+  // ftyp, then the index, then everything else in its old order
+  const tmp = file + '.fs', out = fs.createWriteStream(tmp), ftyp = atoms[0];
+  const copy = (start, end) => new Promise((ok, bad) => {
+    if (end <= start) return ok();
+    const r = fs.createReadStream(file, { start, end: end - 1 });
+    r.on('error', bad); r.on('end', ok); r.pipe(out, { end: false });
+  });
+  try {
+    await copy(0, ftyp.size);
+    await new Promise((ok, bad) => out.write(buf, e => (e ? bad(e) : ok())));
+    await copy(ftyp.size, moov.pos);
+    await copy(moov.pos + moov.size, atoms.at(-1).pos + atoms.at(-1).size);
+    await new Promise((ok, bad) => out.end(e => (e ? bad(e) : ok())));
+    await fs.promises.rename(tmp, file);
+  } catch (e) { out.destroy(); fs.promises.unlink(tmp).catch(() => {}); throw e; }
+}
 const viewed = new Map();
 setInterval(() => { const old = Date.now() - 6 * 36e5; for (const [k, t] of viewed) if (t < old) viewed.delete(k); }, 30 * 60_000).unref();
 async function exploreApi(req, res, action, query) {
@@ -1498,6 +1557,7 @@ async function exploreApi(req, res, action, query) {
         if (size < 200) return fail(400, 'bad request');
         db.prepare('INSERT INTO uploads (name, user, kind, created) VALUES (?, ?, ?, ?)').run(name, me.id, kind, Date.now());
         json(res, 200, { media: name });
+        if (kind === 'video' && /\.(mp4|mov)$/.test(name)) mp4Faststart(file).catch(e => console.warn('faststart', name, e.message));
       });
     });
     return;

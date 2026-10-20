@@ -4214,3 +4214,22 @@ button.dg-wiki { background: none; border: 0; padding: 0; cursor: pointer; font:
   .hm-acct.me .avatar { width: 36px; height: 36px; box-shadow: 0 0 0 2px var(--surface); }
   .hero { padding-top: calc(70px + env(safe-area-inset-top)); }
 }
+
+/* Posts going up in the background (studio.js): a pill at the top of the screen, as Instagram shows it */
+.up-stack { position: fixed; z-index: 6000; top: calc(10px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); width: min(92vw, 380px); display: grid; gap: 8px; pointer-events: none; }
+.up-pill { position: relative; display: grid; grid-template-columns: 40px 1fr; gap: 10px; align-items: center; padding: 8px 14px 12px 8px; border-radius: 18px; pointer-events: auto; overflow: hidden;
+  color: var(--ink); background: var(--glass); border: 1px solid var(--line); box-shadow: var(--shadow-2); -webkit-backdrop-filter: saturate(180%) blur(22px); backdrop-filter: saturate(180%) blur(22px);
+  transform: translateY(-16px) scale(.97); opacity: 0; transition: transform .35s cubic-bezier(.32, .72, 0, 1), opacity .25s; }
+.up-pill.in { transform: none; opacity: 1; }
+.up-pic { width: 40px; height: 40px; border-radius: 10px; background: var(--raised) center / cover; }
+.up-t { display: grid; min-width: 0; }
+.up-t b { font-size: 14px; font-weight: 800; }
+.up-t small { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.up-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: color-mix(in srgb, var(--ink) 8%, transparent); }
+.up-bar > i { display: block; width: 0; height: 100%; background: var(--brand-grad, var(--accent)); transition: width .3s; }
+.up-pill.ok b { color: var(--accent); }
+.up-pill.bad { cursor: pointer; } .up-pill.bad b { color: #e5484d; } .up-pill.bad .up-bar > i { background: #e5484d; }
+/* a feed video waiting for the network: a small turning ring over the picture, not a frozen frame */
+.fc-media.buffering::after { content: ""; position: absolute; left: 50%; top: 50%; width: 34px; height: 34px; margin: -17px 0 0 -17px; border-radius: 50%; z-index: 3; pointer-events: none;
+  border: 3px solid rgba(255, 255, 255, .35); border-top-color: #fff; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
