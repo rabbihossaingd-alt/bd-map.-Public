@@ -795,7 +795,34 @@ function addAdmin(style, vector, dark) {
 // Imagery: Esri World Imagery (Esri, Vantor, Earthstar Geographics). Esri asks public apps to use it with an
 // ArcGIS key; one can be added to SAT_KEY without other changes.
 const SAT_KEY = '';
-const SAT_TILES = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}' + (SAT_KEY ? '?token=' + SAT_KEY : '');
+const SAT_TILES = 'esri://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}' + (SAT_KEY ? '?token=' + SAT_KEY : '');
+let esriOn = false;
+const satShallow = new Map();
+// Where Esri's photos stop early (a village at 18, not 19), allow one step past the last real photo, no more —
+// Apple's Maps stops zooming there too, rather than show a smear.
+function satZoomLimit() {
+  if (mapMode === 'standard') return;
+  const c = map.getCenter(), z = Math.floor(map.getZoom()), n = 2 ** z;
+  const x = Math.floor((c.lng + 180) / 360 * n), y = Math.floor((1 - Math.log(Math.tan(c.lat * Math.PI / 180) + 1 / Math.cos(c.lat * Math.PI / 180)) / Math.PI) / 2 * n);
+  const real = satShallow.get(z + '/' + y + '/' + x);
+  map.setMaxZoom(real != null ? Math.min(19, real + 1) : 19);
+}
+// A tile Esri has no photo for is drawn from its parent: the parent's quarter, enlarged (up to three levels up).
+async function esriTile(url, signal, depth = 0) {
+  const r = await fetch(url, { signal });
+  const data = await r.arrayBuffer();
+  if (r.ok && data.byteLength !== 2521) return data;
+  const m = /\/tile\/(\d+)\/(\d+)\/(\d+)/.exec(url);
+  if (!m || depth >= 3 || +m[1] <= 10 || typeof OffscreenCanvas === 'undefined') throw new Error('no imagery here');
+  const [z, y, x] = [+m[1], +m[2], +m[3]];
+  satShallow.set(z + '/' + y + '/' + x, z - 1 - depth);           // the deepest real photo here is at least one up
+  const parent = await esriTile(url.replace(m[0], '/tile/' + (z - 1) + '/' + (y >> 1) + '/' + (x >> 1)), signal, depth + 1);
+  const img = await createImageBitmap(new Blob([parent]));
+  const c = new OffscreenCanvas(256, 256), g = c.getContext('2d');
+  g.imageSmoothingQuality = 'high';
+  g.drawImage(img, (x & 1) * img.width / 2, (y & 1) * img.height / 2, img.width / 2, img.height / 2, 0, 0, 256, 256);
+  return (await c.convertToBlob({ type: 'image/jpeg', quality: 0.9 })).arrayBuffer();
+}
 let mapMode = (() => { try { return localStorage.getItem('bdmap.mapmode') || 'standard'; } catch { return 'standard'; } })();
 const OUR_LAYERS = /^(route|bus|stops|places2|sat)/;
 function setMapMode(mode) {
@@ -803,10 +830,15 @@ function setMapMode(mode) {
   try { localStorage.setItem('bdmap.mapmode', mode); } catch { /* storage off */ }
   if (!map || !map.getStyle()) return;
   if (!map.getSource('sat')) {
+    // Past its last zoom Esri answers with a grey 'Map data not yet available' picture (always the same 2,521
+    // bytes) instead of an error. Treat it as missing, so the map stretches the last real photo, as Apple does.
+    if (!esriOn) { maplibregl.addProtocol('esri', (req, abort) => esriTile(req.url.replace('esri://', 'https://'), abort.signal).then(data => ({ data }))); esriOn = true; }
     map.addSource('sat', { type: 'raster', tiles: [SAT_TILES], tileSize: 256, maxzoom: 19, attribution: 'Imagery: Esri, Vantor, Earthstar Geographics' });
     map.addLayer({ id: 'sat', type: 'raster', source: 'sat', layout: { visibility: 'none' }, paint: { 'raster-fade-duration': 200 } }, (map.getStyle().layers[1] || {}).id);
   }
   const sat = mode !== 'standard';
+  map.setMaxZoom(sat ? 19 : 22);
+  if (sat && !map._satLimit) { map.on('idle', satZoomLimit); map._satLimit = true; }                                  // Esri's photos stop at 19 here; Apple stops there too
   for (const l of map.getStyle().layers) {
     if (l.id === 'sat') { map.setLayoutProperty('sat', 'visibility', sat ? 'visible' : 'none'); continue; }
     if (OUR_LAYERS.test(l.id) || l['source-layer'] === 'building') continue;     // buildings: standBuildings decides
@@ -828,7 +860,7 @@ function setMapMode(mode) {
   const card = el('div', 'mm-panel');
   const head = el('div', 'mm-head'); head.append(el('b', null, 'ম্যাপের ধরন'));
   const x = el('button', 'mm-x'); x.innerHTML = svg('close'); x.setAttribute('aria-label', 'বন্ধ করুন'); head.appendChild(x);
-  const sat = SAT_TILES.replace('{z}', '15').replace('{y}', '14159').replace('{x}', '24613');
+  const sat = SAT_TILES.replace('esri://', 'https://').replace('{z}', '15').replace('{y}', '14159').replace('{x}', '24613');
   const cards = el('div', 'mm-cards');
   for (const [mode, label] of [['standard', 'সাধারণ'], ['hybrid', 'হাইব্রিড'], ['satellite', 'স্যাটেলাইট']]) {
     const c = el('button', 'mm-card ' + mode); c.dataset.mode = mode;
