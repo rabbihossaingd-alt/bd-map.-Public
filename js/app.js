@@ -466,7 +466,7 @@ const TERRAIN_TILES = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{
 // The same base style is recoloured for light and dark, so both modes show the same things.
 const PALETTES = {
   light: {
-    ground: '#f6f4ef', halo: '#ffffff', label: '#1f2937', roadLabel: '#4b5563', waterLabel: '#2f7bbf', border: '#0a8f62',
+    ground: '#f6f4ef', halo: '#ffffff', label: '#1f2937', roadLabel: '#4b5563', waterLabel: '#2f7bbf', border: '#a29bb5',
     // [layer id, fill, edge]
     roads: [[/motorway/, '#f9cf6a', '#e3ab38'], [/trunk_primary/, '#fde6a3', '#e7c472'], [/secondary_tertiary/, '#ffffff', '#d9d3c7'], [/./, '#ffffff', '#e1dcd2']],
     casing: true, path: '#e4ded2', reliefOpacity: 1, ferry: '#5aa0d8',
@@ -492,7 +492,7 @@ const PALETTES = {
     }
   },
   dark: {
-    ground: '#1d1f23', halo: '#141619', label: '#e5e7eb', roadLabel: '#b6bcc6', waterLabel: '#7cb6ea', border: '#2fbf8a',
+    ground: '#1d1f23', halo: '#141619', label: '#e5e7eb', roadLabel: '#b6bcc6', waterLabel: '#7cb6ea', border: '#6c6f80',
     roads: [[/motorway/, '#9c8550', '#9c8550'], [/trunk_primary/, '#686458', '#686458'], [/secondary_tertiary/, '#4d5158', '#4d5158'], [/./, '#3d4046', '#3d4046']],
     casing: false, path: '#34373d', reliefOpacity: 0, ferry: '#4f8fc7',
     use: { commercial: '#2b2626', retail: '#2d2627', industrial: '#26272a', university: '#2b2922', college: '#2a2822', kindergarten: '#2a2822',
@@ -607,7 +607,7 @@ function restyle(style, dark) {
     }
 
     if (l.type === 'line') {
-      if (/^boundary(_2|_country)/.test(l.id)) Object.assign(paint, { 'line-color': P.border, 'line-opacity': 0.75 });
+      if (/^boundary(_2|_country)/.test(l.id)) Object.assign(paint, { 'line-color': P.border, 'line-opacity': 0.9, 'line-width': ['interpolate', ['linear'], ['zoom'], 2, 0.6, 6, 1.1, 10, 1.6] });   // a quiet grey line, as Google draws borders
       else if (/path_pedestrian/.test(l.id)) { if (!l.id.endsWith('_casing')) paint['line-color'] = P.path; else paint['line-opacity'] = 0; }
       else if (/^(road|bridge|tunnel)_/.test(l.id) && !/rail|pattern/.test(l.id)) {
         const [, fill, edge] = P.roads.find(([re]) => re.test(l.id));
@@ -796,8 +796,14 @@ function addAdmin(style, vector, dark) {
 // (from the server, /api/map-config) so the use counts against our free allowance; without a key, the public copy.
 const SAT_PUBLIC = 'esri://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
 let SAT_TILES = SAT_PUBLIC;
-const satKey = fetch('api/map-config').then(r => r.json()).then(j => {
-  if (j.esriKey) SAT_TILES = 'esri://ibasemaps-api.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}?token=' + encodeURIComponent(j.esriKey);
+// The key is tried on one tile first: a wrong or expired key would turn every photo into an error, so then the
+// public copy is used instead.
+const satKey = fetch('api/map-config').then(r => r.json()).then(async j => {
+  if (!j.esriKey) return;
+  const keyed = 'https://ibasemaps-api.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}?token=' + encodeURIComponent(j.esriKey);
+  const test = await fetch(keyed.replace('{z}', '6').replace('{y}', '27').replace('{x}', '48'));
+  if (test.ok && (test.headers.get('content-type') || '').startsWith('image')) SAT_TILES = keyed.replace('https://', 'esri://');
+  else console.warn('imagery key refused; using the public imagery');
 }).catch(() => {});
 let esriOn = false;
 const satShallow = new Map();
@@ -826,7 +832,7 @@ async function esriTile(url, signal, depth = 0) {
   g.drawImage(img, (x & 1) * img.width / 2, (y & 1) * img.height / 2, img.width / 2, img.height / 2, 0, 0, 256, 256);
   return (await c.convertToBlob({ type: 'image/jpeg', quality: 0.9 })).arrayBuffer();
 }
-let mapMode = (() => { try { return localStorage.getItem('bdmap.mapmode') || 'standard'; } catch { return 'standard'; } })();
+let mapMode = (() => { try { return localStorage.getItem('bdmap.mapmode') || 'hybrid'; } catch { return 'standard'; } })();
 const OUR_LAYERS = /^(route|bus|stops|places2|sat)/;
 async function setMapMode(mode) {
   mapMode = mode;
@@ -845,6 +851,7 @@ async function setMapMode(mode) {
   if (sat && !map._satLimit) { map.on('idle', satZoomLimit); map._satLimit = true; }                                  // Esri's photos stop at 19 here; Apple stops there too
   for (const l of map.getStyle().layers) {
     if (l.id === 'sat') { map.setLayoutProperty('sat', 'visibility', sat ? 'visible' : 'none'); continue; }
+    if (l.id === 'places2') { map.setLayoutProperty(l.id, 'visibility', mode === 'satellite' ? 'none' : 'visible'); continue; }   // photo only, as Apple's
     if (OUR_LAYERS.test(l.id) || l['source-layer'] === 'building') continue;     // buildings: standBuildings decides
     const keep = mode === 'standard' || (mode === 'hybrid' && (l.type === 'symbol' || (l.type === 'line' && /^(road|bridge|tunnel|admin|boundary)/.test(l.id) && !/casing/.test(l.id))));
     if (l.type === 'background') { map.setPaintProperty(l.id, 'background-opacity', sat ? 0 : 1); continue; }
@@ -891,7 +898,7 @@ async function setMapMode(mode) {
 // Each label is a small HTML element pinned to a map position, so Bangla conjuncts and vowel signs are
 // shaped properly (the map engine cannot do that). Which places get a label is decided by the map (the invisible labels above); this only
 // redraws the text. Positions follow the map while it moves; the set is rebuilt whenever it comes to rest.
-const bnLabels = { box: null, items: [] };
+const bnLabels = { box: null, items: [], nodes: new Map(), prev: new Map() };
 const LABEL_STYLE = [
   [/^admin-div/, 'division'], [/^admin-dist/, 'district'], [/^label_country/, 'country'], [/^label_city/, 'city'], [/^label_town/, 'town'], [/^label_state/, 'state'],
   [/^label_/, 'village'], [/^highway-name/, 'road'], [/^water/, 'water'], [/./, 'poi']
@@ -937,7 +944,11 @@ function drawBanglaLabels() {
       raw.forEach((c, i) => { if (i) for (let k = 1; k < 8; k++) line.push([raw[i - 1][0] + (c[0] - raw[i - 1][0]) * k / 8, raw[i - 1][1] + (c[1] - raw[i - 1][1]) * k / 8]); line.push(c); });
       const visible = line.map((c, i) => i).filter(i => onScreen(map.project(line[i])));
       if (visible.length < 2) continue;
-      const mid = visible[Math.floor(visible.length / 2)];
+      // keep the spot the name already had while it is still on this line and on screen — a name that slides
+      // along its road every time the map stops reads as jumping
+      const had = bnLabels.prev.get('road|' + text);
+      let mid = visible[Math.floor(visible.length / 2)];
+      if (had) { const near = visible.find(i => Math.abs(line[i][0] - had.at[0]) < 1e-7 && Math.abs(line[i][1] - had.at[1]) < 1e-7); if (near != null) mid = near; }
       const p = map.project(line[mid]);
       if (roads.some(r => r.text === text && Math.hypot(r.x - p.x, r.y - p.y) < 200)) continue;   // one name per stretch
       roads.push({ text, x: p.x, y: p.y });
@@ -947,19 +958,28 @@ function drawBanglaLabels() {
     items.push(item);
     if (items.length >= 260) break;
   }
-  bnLabels.box.replaceChildren(...items.map(it => {
-    it.node = el('span', 'k-' + it.kind, it.text);
-    if (it.color) it.node.style.color = it.color;
-    return it.node;
-  }));
-  bnLabels.items = items;
+  const keyOf = it => it.next ? 'road|' + it.text : it.kind + '|' + it.text + '|' + it.at[0].toFixed(4) + '|' + it.at[1].toFixed(4);
+  const old = bnLabels.nodes, nodes = new Map(), prev = new Map();
+  for (const it of items) {
+    const key = keyOf(it);
+    if (nodes.has(key)) continue;
+    let node = old.get(key);
+    if (node) { old.delete(key); node.classList.remove('fresh'); }
+    else { node = el('span', 'k-' + it.kind + ' fresh', it.text); if (it.color) node.style.color = it.color; bnLabels.box.appendChild(node); }
+    it.node = node; it.wasShown = node.style.visibility !== 'hidden' && !node.classList.contains('fresh');
+    nodes.set(key, node);
+    if (it.next) prev.set(key, it);
+  }
+  for (const node of old.values()) node.remove();
+  bnLabels.nodes = nodes; bnLabels.prev = prev;
+  bnLabels.items = items.filter(it => it.node && nodes.get(keyOf(it)) === it.node);
   placeBanglaLabels();
 
   // The map spaced these names for its own invisible text; ours can be wider. Keep the important ones
   // (places, then roads and water, then shops) and hide any name that would print over one already kept.
   const rank = { country: 0, division: 0.5, city: 1, district: 1.5, town: 2, state: 3, village: 4, road: 5, water: 6, poi: 7 };
   const kept = [];
-  for (const it of [...items].sort((a, b) => rank[a.kind] - rank[b.kind])) {
+  for (const it of [...bnLabels.items].sort((a, b) => rank[a.kind] - rank[b.kind] || b.wasShown - a.wasShown)) {
     const r = it.node.getBoundingClientRect();
     const clash = kept.some(k => r.left < k.right + 4 && r.right > k.left - 4 && r.top < k.bottom + 2 && r.bottom > k.top - 2);
     it.node.style.visibility = clash ? 'hidden' : '';

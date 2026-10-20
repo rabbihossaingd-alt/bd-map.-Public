@@ -407,7 +407,8 @@ input[type=range]::-moz-range-thumb { width: 30px; height: 30px; border-radius: 
 .bn-labels { position: absolute; inset: 0; overflow: hidden; pointer-events: none; --halo: #ffffff; --ink-map: #1f2937; }
 .bn-labels span { position: absolute; left: 0; top: 0; white-space: nowrap; font-size: 12.5px; font-weight: 500; line-height: 1.2; color: var(--ink-map);
                   text-shadow: 0 0 2px var(--halo), 0 0 2px var(--halo), 1px 1px 0 var(--halo), -1px -1px 0 var(--halo), 1px -1px 0 var(--halo), -1px 1px 0 var(--halo);
-                  will-change: transform; animation: fade .35s var(--ease); }
+                  will-change: transform; }
+.bn-labels span.fresh { animation: fade .35s var(--ease); }   /* only a name that has just appeared fades in */
 .bn-labels .k-country { font-size: 17px; font-weight: 700; letter-spacing: .01em; }
 .bn-labels .k-city { font-size: 14px; font-weight: 600; }
 .bn-labels .k-town { font-size: 13px; font-weight: 600; }
@@ -4135,3 +4136,19 @@ button.dg-wiki { background: none; border: 0; padding: 0; cursor: pointer; font:
   .mm-sheet { align-items: flex-end; padding: 0 10px calc(var(--tab-h) + 18px + env(safe-area-inset-bottom)); background: rgba(0, 0, 0, .18); }
   .mm-panel { width: 100%; transform: translateY(24px); transform-origin: bottom center; }
 }
+
+/* Map names, quieter: Google sets country and region names small, grey and spaced, so the map, not its
+   lettering, is what the eye meets. Sizes step down from country to shop. */
+.bn-labels { --name-quiet: #5d6472; }
+:root[data-theme=dark] .bn-labels { --name-quiet: #aeb4bf; }
+.bn-labels .k-country { font-size: 13px; font-weight: 600; letter-spacing: .04em; color: var(--name-quiet); }
+.bn-labels .k-division { font-size: 12px; font-weight: 600; letter-spacing: .1em; opacity: .85; }
+.bn-labels .k-state { font-size: 11px; font-weight: 600; letter-spacing: .08em; opacity: .6; }
+.bn-labels .k-city { font-size: 13px; font-weight: 600; }
+.bn-labels .k-district { font-size: 11.5px; font-weight: 500; letter-spacing: .06em; }
+.bn-labels .k-town { font-size: 12px; font-weight: 600; }
+.bn-labels .k-village { font-size: 11.5px; font-weight: 500; }
+.bn-labels .k-road { font-size: 11px; font-weight: 600; }
+.bn-labels .k-water { font-size: 11.5px; }
+.bn-labels .k-poi { font-size: 11.5px; }
+.bn-labels.on-sat .k-country, .bn-labels.on-sat .k-division, .bn-labels.on-sat .k-district { color: rgba(255, 255, 255, .92) !important; }
