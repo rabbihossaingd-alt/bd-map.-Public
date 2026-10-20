@@ -125,6 +125,7 @@ const EXACT = {
   'খরচ হিসাব করুন, সবার ছবি দিয়ে শেয়ার করার কার্ড বানান।': 'Work out the cost and make a card with everyone on it to share.', 'আপনার জানা ভাড়াটি একজন যাত্রীকে ঠকা থেকে বাঁচায়।': 'The fare you know saves a passenger from being overcharged.',
   'প্রশ্নের উত্তর ও সাপোর্ট': 'Answers and support', 'জরুরি নম্বর': 'Emergency numbers', 'চাপ দিলে কল হবে': 'tap to call', 'বাংলাদেশের যাতায়াত, এক জায়গায়': 'Getting around Bangladesh, in one place',
   'ভাড়া: বিআরটিএ · ম্যাপ: OpenStreetMap, OpenFreeMap ও Overture Maps · ট্রেন ও লঞ্চ: খোলা তথ্যভান্ডার · ছবি: উইকিমিডিয়া কমন্স। তথ্য বদলাতে পারে — যাত্রার আগে মিলিয়ে নিন।': 'Fares: BRTA · Map: OpenStreetMap, OpenFreeMap and Overture Maps · Trains and launches: open datasets · Photos: Wikimedia Commons. Information can change — check before you travel.',
+  'ম্যাপের ধরন': 'Map type', 'সাধারণ': 'Standard', 'হাইব্রিড': 'Hybrid', 'স্যাটেলাইট': 'Satellite', '৩D ভবন ও পাহাড়': '3D buildings and hills',
   'রূপসী বাংলা · আজকের গন্তব্য': 'Rupashi Bangla · Today’s pick', '৬৪ জেলা ঘুরে দেখুন': 'Explore 64 districts', '৬৪ জেলার জায়গা, বিখ্যাত খাবার, ট্যুর প্ল্যান': 'Places of 64 districts, famous food, trip plans',
   'ভাড়া: বিআরটিএ · ম্যাপ: OpenStreetMap ও OpenFreeMap · ট্রেন ও লঞ্চ: খোলা তথ্যভান্ডার। তথ্য বদলাতে পারে — যাত্রার আগে মিলিয়ে নিন।': 'Fares: BRTA · Map: OpenStreetMap and OpenFreeMap · Trains and launches: open datasets. Information can change — check before you travel.',
   // explore

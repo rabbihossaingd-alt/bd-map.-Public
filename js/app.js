@@ -719,6 +719,7 @@ async function buildStyle() {
       layout: { 'text-field': ['get', 'housenumber'], 'text-font': ['Noto Sans Regular'], 'text-size': 10.5 },
       paint: { 'text-color': dark ? '#8b9099' : '#8a8172', 'text-halo-color': P.halo, 'text-halo-width': 1.2 } });
   }
+  if (vector) addAdmin(style, vector, dark);
   NAME_LAYERS.length = 0;
   restyle(style, dark);
   return style;
@@ -749,13 +750,114 @@ function addBdBuildings() {
   standBuildings();
 }
 
+// ---- Divisions and districts, as Google Maps shows them ----
+// Borders from the tiles (OSM admin levels: 4 division, 5 district, 6 upazila), each drawn in its own weight;
+// names from the app's list of 64 districts — a division's name at the middle of its districts, a district's at
+// its town — so the map reads ঢাকা বিভাগ from afar and গাজীপুর, নরসিংদী as you come closer.
+function addAdmin(style, vector, dark) {
+  const base = style.layers.find(l => l.id === 'boundary_3');
+  if (base) {
+    const at = style.layers.indexOf(base), line = dark ? '#6b7280' : '#9aa1ad';
+    const border = (id, level, minzoom, width, dash, opacity) => ({ id, type: 'line', source: vector, 'source-layer': 'boundary', minzoom,
+      filter: ['all', ['==', ['get', 'admin_level'], level], ['!=', ['get', 'maritime'], 1]], layout: { 'line-join': 'round' },
+      paint: { 'line-color': line, 'line-width': width, 'line-opacity': opacity, ...(dash ? { 'line-dasharray': dash } : {}) } });
+    style.layers.splice(at, 1,
+      border('admin_6', 6, 9.5, ['interpolate', ['linear'], ['zoom'], 9.5, 0.5, 14, 1], [1, 2], 0.5),
+      border('admin_5', 5, 6.5, ['interpolate', ['linear'], ['zoom'], 6.5, 0.6, 12, 1.4], [3, 2], 0.8),
+      border('admin_4', 4, 4.5, ['interpolate', ['linear'], ['zoom'], 4.5, 0.8, 10, 2], null, 0.9));
+  }
+  if (typeof DISTRICTS === 'undefined') return;
+  const features = [];
+  const point = (lon, lat, props) => features.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [lon, lat] }, properties: props });
+  const divisions = [...new Set(DISTRICTS.map(d => d.division))];
+  for (const div of divisions) {
+    const ds = DISTRICTS.filter(d => d.division === div);
+    const en = (DISTRICTS.find(d => d.bn === div) || {}).en || div;
+    point(ds.reduce((a, d) => a + d.lon, 0) / ds.length, ds.reduce((a, d) => a + d.lat, 0) / ds.length,
+      { kind: 'div', name: en + ' Division', 'name:bn': div + ' বিভাগ', 'name:en': en + ' Division' });
+  }
+  for (const d of DISTRICTS) point(d.lon, d.lat, { kind: 'dist', name: d.en, 'name:bn': d.bn, 'name:en': d.en });
+  style.sources.admin = { type: 'geojson', data: { type: 'FeatureCollection', features } };
+  const label = (id, kind, minzoom, maxzoom, size) => ({ id, type: 'symbol', source: 'admin', minzoom, maxzoom, filter: ['==', ['get', 'kind'], kind],
+    layout: { 'text-field': ['get', 'name'], 'text-font': ['Noto Sans Regular'], 'text-size': size, 'text-letter-spacing': 0.08, 'text-max-width': 8, 'text-padding': 6 },
+    paint: { 'text-opacity': 0 } });
+  // the tiles' own division names (faint "state" labels) would print each division twice
+  const states = style.layers.find(l => l.id === 'label_state');
+  if (states) {
+    const has = (word, key) => ['in', word, ['coalesce', ['get', key], '']];
+    states.filter = ['all', states.filter, ['!', ['any', has('বিভাগ', 'name:bn'), has('বিভাগ', 'name'), has('Division', 'name:en'), has('Division', 'name')]]];
+  }
+  // on top of the list, so the map places them before villages and shops
+  style.layers.push(label('admin-dist', 'dist', 7, 10.5, 12), label('admin-div', 'div', 5, 7.6, 14));
+}
+
+// ---- Standard, satellite and hybrid, as Apple and Google offer them ----
+// Imagery: Esri World Imagery (Esri, Vantor, Earthstar Geographics). Esri asks public apps to use it with an
+// ArcGIS key; one can be added to SAT_KEY without other changes.
+const SAT_KEY = '';
+const SAT_TILES = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}' + (SAT_KEY ? '?token=' + SAT_KEY : '');
+let mapMode = (() => { try { return localStorage.getItem('bdmap.mapmode') || 'standard'; } catch { return 'standard'; } })();
+const OUR_LAYERS = /^(route|bus|stops|places2|sat)/;
+function setMapMode(mode) {
+  mapMode = mode;
+  try { localStorage.setItem('bdmap.mapmode', mode); } catch { /* storage off */ }
+  if (!map || !map.getStyle()) return;
+  if (!map.getSource('sat')) {
+    map.addSource('sat', { type: 'raster', tiles: [SAT_TILES], tileSize: 256, maxzoom: 19, attribution: 'Imagery: Esri, Vantor, Earthstar Geographics' });
+    map.addLayer({ id: 'sat', type: 'raster', source: 'sat', layout: { visibility: 'none' }, paint: { 'raster-fade-duration': 200 } }, (map.getStyle().layers[1] || {}).id);
+  }
+  const sat = mode !== 'standard';
+  for (const l of map.getStyle().layers) {
+    if (l.id === 'sat') { map.setLayoutProperty('sat', 'visibility', sat ? 'visible' : 'none'); continue; }
+    if (OUR_LAYERS.test(l.id) || l['source-layer'] === 'building') continue;     // buildings: standBuildings decides
+    const keep = mode === 'standard' || (mode === 'hybrid' && (l.type === 'symbol' || (l.type === 'line' && /^(road|bridge|tunnel|admin|boundary)/.test(l.id) && !/casing/.test(l.id))));
+    if (l.type === 'background') { map.setPaintProperty(l.id, 'background-opacity', sat ? 0 : 1); continue; }
+    map.setLayoutProperty(l.id, 'visibility', keep ? 'visible' : 'none');
+    if (l.type === 'line' && /^(road|bridge|tunnel)/.test(l.id)) map.setPaintProperty(l.id, 'line-opacity', mode === 'hybrid' ? 0.55 : (l.id.startsWith('tunnel_') ? 0.55 : 1));
+  }
+  if (bnLabels.box) { bnLabels.box.classList.toggle('on-sat', mode === 'hybrid'); bnLabels.box.hidden = mode === 'satellite'; }
+  buildingsHere = ''; standBuildings();
+  for (const b of document.querySelectorAll('.mm-card')) b.classList.toggle('on', b.dataset.mode === mode);
+}
+
+// The chooser: three cards, like Apple's "Choose Map", and the 3D switch. The pictures are real tiles of Dhaka.
+(function mapModeChooser() {
+  const btn = document.getElementById('tool-layers');
+  if (!btn) return;
+  const sheet = el('div', 'mm-sheet'); sheet.hidden = true;
+  const card = el('div', 'mm-panel');
+  const head = el('div', 'mm-head'); head.append(el('b', null, 'ম্যাপের ধরন'));
+  const x = el('button', 'mm-x'); x.innerHTML = svg('close'); x.setAttribute('aria-label', 'বন্ধ করুন'); head.appendChild(x);
+  const sat = SAT_TILES.replace('{z}', '15').replace('{y}', '14159').replace('{x}', '24613');
+  const cards = el('div', 'mm-cards');
+  for (const [mode, label] of [['standard', 'সাধারণ'], ['hybrid', 'হাইব্রিড'], ['satellite', 'স্যাটেলাইট']]) {
+    const c = el('button', 'mm-card ' + mode); c.dataset.mode = mode;
+    const pic = el('span', 'mm-pic'); if (mode !== 'standard') pic.style.backgroundImage = `url("${sat}")`;
+    c.append(pic, el('span', 'mm-name', label));
+    c.addEventListener('click', () => { setMapMode(mode); });
+    cards.appendChild(c);
+  }
+  const row = el('label', 'mm-row');
+  const cb = Object.assign(el('input'), { type: 'checkbox' });
+  cb.addEventListener('change', () => { if (map) set3D(cb.checked); });
+  row.append(el('span', null, '৩D ভবন ও পাহাড়'), cb);
+  card.append(head, cards, row);
+  sheet.appendChild(card);
+  document.getElementById('page-trip').appendChild(sheet);
+  const open = () => { cb.checked = is3D; for (const b of cards.children) b.classList.toggle('on', b.dataset.mode === mapMode); sheet.hidden = false; requestAnimationFrame(() => sheet.classList.add('in')); };
+  const close = () => { sheet.classList.remove('in'); setTimeout(() => { sheet.hidden = true; }, 220); };
+  btn.addEventListener('click', () => (sheet.hidden ? open() : close()));
+  x.addEventListener('click', close);
+  sheet.addEventListener('click', e => { if (e.target === sheet) close(); });
+})();
+
 // ---- Names on the map ----
 // Each label is a small HTML element pinned to a map position, so Bangla conjuncts and vowel signs are
 // shaped properly (the map engine cannot do that). Which places get a label is decided by the map (the invisible labels above); this only
 // redraws the text. Positions follow the map while it moves; the set is rebuilt whenever it comes to rest.
 const bnLabels = { box: null, items: [] };
 const LABEL_STYLE = [
-  [/^label_country/, 'country'], [/^label_city/, 'city'], [/^label_town/, 'town'], [/^label_state/, 'state'],
+  [/^admin-div/, 'division'], [/^admin-dist/, 'district'], [/^label_country/, 'country'], [/^label_city/, 'city'], [/^label_town/, 'town'], [/^label_state/, 'state'],
   [/^label_/, 'village'], [/^highway-name/, 'road'], [/^water/, 'water'], [/./, 'poi']
 ];
 function placeBanglaLabels() {
@@ -819,7 +921,7 @@ function drawBanglaLabels() {
 
   // The map spaced these names for its own invisible text; ours can be wider. Keep the important ones
   // (places, then roads and water, then shops) and hide any name that would print over one already kept.
-  const rank = { country: 0, city: 1, town: 2, state: 3, village: 4, road: 5, water: 6, poi: 7 };
+  const rank = { country: 0, division: 0.5, city: 1, district: 1.5, town: 2, state: 3, village: 4, road: 5, water: 6, poi: 7 };
   const kept = [];
   for (const it of [...items].sort((a, b) => rank[a.kind] - rank[b.kind])) {
     const r = it.node.getBoundingClientRect();
@@ -870,6 +972,7 @@ async function createMap() {
   map.on('moveend', standBuildings);
   standBuildings();
   try { addBdBuildings(); } catch (e) { console.warn('buildings', e); }
+  if (mapMode !== 'standard') setMapMode(mapMode);
   map.setLight({ anchor: 'viewport', color: '#ffffff', intensity: dark ? 0.28 : 0.4, position: [1.3, 200, 40] });   // a soft sun from the upper left
   // Start with the credits folded into their (i) button; they open on tap.
   const credits = document.querySelector('.maplibregl-ctrl-attrib');
@@ -1043,14 +1146,14 @@ const insideBorder = (x, y) => typeof BD_OUTLINE === 'undefined' ? inBangladesh(
   return c;
 });
 function standBuildings() {
-  const up = is3D || map.getPitch() > 12, c = map.getCenter();
+  const up = is3D || map.getPitch() > 12, c = map.getCenter(), onSat = mapMode !== 'standard';
   const here = map.getLayer('bd-building') && insideBorder(c.lng, c.lat) ? 'bd' : 'base';
   if (up === buildingsUp && here === buildingsHere) return;
   buildingsUp = up; buildingsHere = here;
   for (const l of map.getStyle().layers) {
     if (l['source-layer'] !== 'building') continue;
     const ours = l.id.startsWith('bd-'), mine = (here === 'bd') === ours;
-    map.setLayoutProperty(l.id, 'visibility', mine && (l.type !== 'fill-extrusion' || up) ? 'visible' : 'none');
+    map.setLayoutProperty(l.id, 'visibility', mine && !onSat && (l.type !== 'fill-extrusion' || up) ? 'visible' : 'none');
   }
 }
 $('tool-home').addEventListener('click', () => { if (map) fit(BD_LNGLAT); });

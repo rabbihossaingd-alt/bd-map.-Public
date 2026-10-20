@@ -48,9 +48,15 @@ for (const visit of ['first visit', 'second visit']) {
   if (process.env.BLOCK) r.source = await evalJs("(map.getStyle().sources.openmaptiles || {}).url || 'tiles'");
   console.log(visit.padEnd(13), r.source ? 'source ' + r.source + ' ·' : '', `note gone ${(r.noteGone / 1000).toFixed(1)} s · map load ${(r.load / 1000).toFixed(1)} s · all tiles ${(r.idle / 1000).toFixed(1)} s`);
 }
+// EVAL=expression runs in the page once the map is up (after a jump, if JUMP=lng,lat,zoom) and prints the result
+if (process.env.EVAL) {
+  if (process.env.JUMP) { const [x, y, z] = process.env.JUMP.split(',').map(Number); await evalJs(`new Promise(r => { map.jumpTo({ center: [${x}, ${y}], zoom: ${z} }); setTimeout(r, 7000); })`); }
+  console.log(JSON.stringify(await evalJs(process.env.EVAL), null, 1));
+}
 // SHOT=file.png saves what the phone shows at the end, zoomed into Dhaka
 if (process.env.SHOT) {
-  await evalJs("new Promise(r => { map.jumpTo({ center: [90.4125, 23.7275], zoom: 15.5 }); setTimeout(r, 6000); })");
+  const [vx, vy, vz] = (process.env.SHOTVIEW || '90.4125,23.7275,15.5').split(',').map(Number);   // where to look
+  await evalJs(`new Promise(r => { map.jumpTo({ center: [${vx}, ${vy}], zoom: ${vz} }); setTimeout(r, 7000); })`);
   const { result } = await cdp('Page.captureScreenshot', { format: 'png' });
   (await import('node:fs')).writeFileSync(process.env.SHOT, Buffer.from(result.data, 'base64'));
 }

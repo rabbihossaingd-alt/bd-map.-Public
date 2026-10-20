@@ -4085,3 +4085,53 @@ button.dg-wiki { background: none; border: 0; padding: 0; cursor: pointer; font:
 .trip-sug::-webkit-scrollbar { display: none; }
 .trip-sug > small { flex: none; font-weight: 700; }
 .trip-sug .trip-chip { flex: none; }
+
+/* ================= Map: divisions and districts, and the map-type chooser ================= */
+.bn-labels .k-division { font-size: 15px; font-weight: 700; letter-spacing: .08em; color: #6b5b95; opacity: .9; }
+.bn-labels .k-district { font-size: 12.5px; font-weight: 600; letter-spacing: .05em; color: #7a6f8f; }
+:root[data-theme=dark] .bn-labels .k-division { color: #c4b5fd; }
+:root[data-theme=dark] .bn-labels .k-district { color: #b3a9c9; }
+/* on imagery the names turn white on a dark edge, as in Google's hybrid view */
+.bn-labels.on-sat { --halo: rgba(0, 0, 0, .75); --ink-map: #ffffff; }
+.bn-labels.on-sat span { color: #fff !important; text-shadow: 0 0 3px rgba(0, 0, 0, .9), 0 1px 2px rgba(0, 0, 0, .9); }
+.bn-labels.on-sat .k-road { color: #fde68a !important; }
+
+.mm-sheet { position: absolute; inset: 0; z-index: 1300; display: flex; align-items: flex-start; justify-content: flex-end; padding: 16px 70px 16px 16px; background: transparent; }
+.mm-panel { width: min(100%, 360px); padding: 16px; border-radius: 26px; color: var(--ink); background: var(--glass); border: 1px solid var(--line);
+  -webkit-backdrop-filter: saturate(180%) blur(24px); backdrop-filter: saturate(180%) blur(24px); box-shadow: var(--shadow-2);
+  transform: translateY(-8px) scale(.97); opacity: 0; transform-origin: top right; transition: transform .28s cubic-bezier(.32, .72, 0, 1), opacity .2s; }
+.mm-sheet.in .mm-panel { transform: none; opacity: 1; }
+.mm-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.mm-head b { font-size: 18px; font-weight: 800; letter-spacing: -.01em; }
+.mm-x { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: var(--raised); color: var(--ink-2); }
+.mm-x svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; }
+.mm-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.mm-card { display: grid; gap: 6px; padding: 4px; border-radius: 16px; text-align: center; color: var(--ink-2); border: 2px solid transparent; transition: border-color .2s, transform .2s var(--ease); }
+.mm-card:active { transform: scale(.96); }
+.mm-card.on { border-color: var(--accent); color: var(--ink); }
+.mm-pic { position: relative; display: block; aspect-ratio: 1; border-radius: 12px; overflow: hidden; background: #e9e6df center / cover; }
+/* the standard card: a little drawn map */
+.mm-card.standard .mm-pic { background:
+  linear-gradient(115deg, transparent 46%, #f9cf6a 46%, #f9cf6a 54%, transparent 54%),
+  linear-gradient(20deg, transparent 60%, #ffffff 60%, #ffffff 64%, transparent 64%),
+  radial-gradient(circle at 78% 22%, #9fd4f7 0 18%, transparent 19%),
+  radial-gradient(circle at 22% 78%, #cfe9bf 0 22%, transparent 23%), #f1eee7; }
+:root[data-theme=dark] .mm-card.standard .mm-pic { background:
+  linear-gradient(115deg, transparent 46%, #9c8550 46%, #9c8550 54%, transparent 54%),
+  linear-gradient(20deg, transparent 60%, #4d5158 60%, #4d5158 64%, transparent 64%),
+  radial-gradient(circle at 78% 22%, #12324c 0 18%, transparent 19%),
+  radial-gradient(circle at 22% 78%, #1e3a29 0 22%, transparent 23%), #1d1f23; }
+/* the hybrid card: the photo with a road and a name on it */
+.mm-card.hybrid .mm-pic::after { content: "ঢাকা"; position: absolute; left: 0; right: 0; top: 40%; font-size: 12px; font-weight: 700; color: #fff; text-shadow: 0 1px 3px #000;
+  border-top: 3px solid rgba(253, 230, 138, .8); padding-top: 3px; transform: rotate(-12deg); }
+.mm-name { font-size: 13px; font-weight: 700; }
+.mm-row { display: flex; align-items: center; justify-content: space-between; margin-top: 14px; padding: 12px 4px 2px; border-top: 1px solid var(--line); font-size: 14.5px; font-weight: 600; }
+.mm-row input { width: 44px; height: 26px; appearance: none; -webkit-appearance: none; border-radius: 999px; background: var(--raised); position: relative; cursor: pointer; transition: background .2s; }
+.mm-row input::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .3); transition: transform .25s var(--ease); }
+.mm-row input:checked { background: var(--accent); }
+.mm-row input:checked::after { transform: translateX(18px); }
+#tool-layers svg { display: block; }
+@media (max-width: 760px) {
+  .mm-sheet { align-items: flex-end; padding: 0 10px calc(var(--tab-h) + 18px + env(safe-area-inset-bottom)); background: rgba(0, 0, 0, .18); }
+  .mm-panel { width: 100%; transform: translateY(24px); transform-origin: bottom center; }
+}
