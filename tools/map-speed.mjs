@@ -24,6 +24,8 @@ const cdp = (method, params = {}) => new Promise(r => { const i = ++id; pending.
 const evalJs = async expr => (await cdp('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true })).result?.result?.value;
 
 await cdp('Network.enable');
+// BLOCK=pattern,pattern stops those requests, to see the map cope with a service that is down
+if (process.env.BLOCK) await cdp('Network.setBlockedURLs', { urls: process.env.BLOCK.split(',') });
 await cdp('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 3, mobile: true });
 await cdp('Network.emulateNetworkConditions', { offline: false, latency: 150, downloadThroughput: 1.6e6 / 8 * 9, uploadThroughput: 750e3 / 8 * 9 });   // ~14 Mbps down, 150 ms
 await cdp('Emulation.setCPUThrottlingRate', { rate: 4 });                                                                                 // a mid-range phone
@@ -43,6 +45,13 @@ for (const visit of ['first visit', 'second visit']) {
   await cdp('Page.navigate', { url });
   await wait(300);
   const r = await evalJs(probe);
-  console.log(visit.padEnd(13), `note gone ${(r.noteGone / 1000).toFixed(1)} s · map load ${(r.load / 1000).toFixed(1)} s · all tiles ${(r.idle / 1000).toFixed(1)} s`);
+  if (process.env.BLOCK) r.source = await evalJs("(map.getStyle().sources.openmaptiles || {}).url || 'tiles'");
+  console.log(visit.padEnd(13), r.source ? 'source ' + r.source + ' ·' : '', `note gone ${(r.noteGone / 1000).toFixed(1)} s · map load ${(r.load / 1000).toFixed(1)} s · all tiles ${(r.idle / 1000).toFixed(1)} s`);
+}
+// SHOT=file.png saves what the phone shows at the end, zoomed into Dhaka
+if (process.env.SHOT) {
+  await evalJs("new Promise(r => { map.jumpTo({ center: [90.4125, 23.7275], zoom: 15.5 }); setTimeout(r, 6000); })");
+  const { result } = await cdp('Page.captureScreenshot', { format: 'png' });
+  (await import('node:fs')).writeFileSync(process.env.SHOT, Buffer.from(result.data, 'base64'));
 }
 ws.close(); browser.kill();

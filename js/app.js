@@ -684,7 +684,7 @@ async function buildStyle() {
   for (const src of Object.values(style.sources)) {
     if (src.url !== TILEJSON_URL) continue;
     if (tiles) { delete src.url; Object.assign(src, { tiles: tiles.tiles, minzoom: tiles.minzoom, maxzoom: tiles.maxzoom, attribution: tiles.attribution }); }
-    else if (window.pmtiles) { if (!pmtilesOn) { maplibregl.addProtocol('pmtiles', new pmtiles.Protocol().tile); pmtilesOn = true; } src.url = 'pmtiles://' + BD_TILES; }
+    else if (window.pmtiles) { if (!pmtilesOn) { maplibregl.addProtocol('pmtiles', new pmtiles.Protocol().tile); pmtilesOn = true; } src.url = 'pmtiles://' + BD_TILES; src.attribution = '<a href="https://openmaptiles.org" target="_blank" rel="noopener">© OpenMapTiles</a> <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a>'; }
   }
 
   // Elevation: soft hill shading in every view, real relief when the map is tilted (separate source for each use).
