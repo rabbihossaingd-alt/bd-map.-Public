@@ -44,8 +44,9 @@ const r2 = require('./lib/r2.cjs');
 const backupOn = r2.ready() && process.env.R2_BACKUP === '1';
 const DB_FILE = path.join(DATA_DIR, 'ratings.db');
 const R2_PREFIX = (process.env.R2_PREFIX || 'state/').replace(/^\/+/, '');   // tests use their own prefix, never the live one
+let dbRestored = false;
 if (backupOn && !fs.existsSync(DB_FILE)) {
-  try { console.log(require('node:child_process').execFileSync(process.execPath, [path.join(ROOT, 'lib', 'r2.cjs'), 'get', R2_PREFIX + 'ratings.db', DB_FILE], { encoding: 'utf8', timeout: 120_000 }).trim()); }
+  try { const said = require('node:child_process').execFileSync(process.execPath, [path.join(ROOT, 'lib', 'r2.cjs'), 'get', R2_PREFIX + 'ratings.db', DB_FILE], { encoding: 'utf8', timeout: 120_000 }).trim(); console.log(said); dbRestored = said.startsWith('restored'); }
   catch (e) { console.error('Could not restore the database from R2:', e.message); }
 }
 const db = new DatabaseSync(DB_FILE);
@@ -2768,7 +2769,8 @@ function mediaBack(name) {
   return mediaFetching.get(name);
 }
 if (backupOn) {
-  dbCopied = changesNow();                               // what was restored (or found) is already up there
+  // a database just brought back from R2 is already up there; any other (the first run, or a disk that survived) goes up once now
+  if (dbRestored) dbCopied = changesNow(); else setTimeout(copyDbUp, 30_000).unref();
   setInterval(() => { copyDbUp(); }, 2 * 60_000).unref();
   setInterval(() => { copyMediaUp(); }, 60_000).unref();
   setTimeout(copyMediaUp, 20_000).unref();
