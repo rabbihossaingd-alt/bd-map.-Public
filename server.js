@@ -43,10 +43,21 @@ const r2 = require('./lib/r2.cjs');
 // on only where asked (R2_BACKUP=1, set on the host): a developer's computer with R2 keys must not send its test data up
 const backupOn = r2.ready() && process.env.R2_BACKUP === '1';
 const DB_FILE = path.join(DATA_DIR, 'ratings.db');
-const R2_PREFIX = (process.env.R2_PREFIX || 'state/').replace(/^\/+/, '');   // tests use their own prefix, never the live one
+// The bucket also serves the map files to everyone (r2.dev, or its own domain), so a copy under a plain name could be
+// downloaded by anyone who guessed it. The copies sit under a name made from the server's own R2 secret instead: public
+// links cannot list a bucket, so without the secret the name cannot be found. (Rotating the R2 key changes the name:
+// copy state-<old>/ to the new one first.) Tests give their own R2_PREFIX.
+const R2_PREFIX = (process.env.R2_PREFIX || 'state-' + require('node:crypto').createHash('sha256').update('bdmap backup ' + (process.env.R2_SECRET_ACCESS_KEY || '')).digest('hex').slice(0, 32) + '/').replace(/^\/+/, '');
+const R2_OLD = process.env.R2_OLD_PREFIX || (process.env.R2_PREFIX ? '' : 'state/');   // where the live copies used to be (public): read from once, then emptied
 let dbRestored = false;
 if (backupOn && !fs.existsSync(DB_FILE)) {
-  try { const said = require('node:child_process').execFileSync(process.execPath, [path.join(ROOT, 'lib', 'r2.cjs'), 'get', R2_PREFIX + 'ratings.db', DB_FILE], { encoding: 'utf8', timeout: 120_000 }).trim(); console.log(said); dbRestored = said.startsWith('restored'); }
+  const fetchDb = key => require('node:child_process').execFileSync(process.execPath, [path.join(ROOT, 'lib', 'r2.cjs'), 'get', key, DB_FILE], { encoding: 'utf8', timeout: 120_000 }).trim();
+  try {
+    let said = fetchDb(R2_PREFIX + 'ratings.db');
+    if (!said.startsWith('restored') && R2_OLD) said = fetchDb(R2_OLD + 'ratings.db');   // the first start after the move
+    console.log(said.replace(R2_PREFIX, '(backup)/'));
+    dbRestored = said.startsWith('restored ' + R2_PREFIX);    // from the old place it still has to go up to the new one
+  }
   catch (e) { console.error('Could not restore the database from R2:', e.message); }
 }
 const db = new DatabaseSync(DB_FILE);
@@ -2834,7 +2845,8 @@ async function copyMediaUp() {
 const mediaFetching = new Map();
 function mediaBack(name) {
   if (!backupOn) return Promise.resolve(false);
-  if (!mediaFetching.has(name)) mediaFetching.set(name, r2.get(R2_PREFIX + 'media/' + name, path.join(MEDIA_DIR, name)).catch(() => false).finally(() => setTimeout(() => mediaFetching.delete(name), 60_000)));
+  const fetchIt = async () => (await r2.get(R2_PREFIX + 'media/' + name, path.join(MEDIA_DIR, name))) || (R2_OLD ? r2.get(R2_OLD + 'media/' + name, path.join(MEDIA_DIR, name)) : false);
+  if (!mediaFetching.has(name)) mediaFetching.set(name, fetchIt().catch(() => false).finally(() => setTimeout(() => mediaFetching.delete(name), 60_000)));
   return mediaFetching.get(name);
 }
 if (backupOn) {
@@ -2843,6 +2855,24 @@ if (backupOn) {
   setInterval(() => { copyDbUp(); }, 2 * 60_000).unref();
   setInterval(() => { copyMediaUp(); }, 60_000).unref();
   setTimeout(copyMediaUp, 20_000).unref();
+  // Leaving the old, public place: every file copied up there moves to the new name (R2 copies it), then the old copy
+  // goes. The old server of a deploy may still write its last database there as it stops, so that one is removed again
+  // every half hour.
+  if (R2_OLD) {
+    const leaveOld = async () => {
+      try {
+        for (const { name } of db.prepare('SELECT name FROM r2_files').all()) {
+          if (db.prepare("SELECT 1 FROM settings WHERE key = ?").get('r2moved:' + name)) continue;
+          await r2.copy(R2_OLD + 'media/' + name, R2_PREFIX + 'media/' + name);
+          await r2.del(R2_OLD + 'media/' + name);
+          db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run('r2moved:' + name, '1');
+        }
+        if (dbCopied >= 0) await r2.del(R2_OLD + 'ratings.db');    // only once a copy sits at the new place
+      } catch (e) { console.error('Moving the R2 copies failed (tried again later):', e.message); }
+    };
+    setTimeout(leaveOld, 90_000).unref();
+    setInterval(leaveOld, 30 * 60_000).unref();
+  }
   // the host stops the server before a deploy or when it sleeps: send the last changes first (Render waits 30 s)
   for (const sig of ['SIGTERM', 'SIGINT']) process.once(sig, () => {
     console.log(`${sig}: copying the database to R2 before stopping…`);

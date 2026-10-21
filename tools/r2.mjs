@@ -4,6 +4,7 @@
 // Run: node tools/r2.mjs put <local file> <key> [content-type]
 //      node tools/r2.mjs head <key>
 //      node tools/r2.mjs del <key>
+//      node tools/r2.mjs list [prefix]
 import { readFileSync, statSync, createReadStream } from 'node:fs';
 import { createHmac, createHash } from 'node:crypto';
 import { request } from 'node:https';
@@ -16,21 +17,22 @@ const host = new URL(R2_ENDPOINT).host;
 const hmac = (k, s) => createHmac('sha256', k).update(s).digest();
 const sha = s => createHash('sha256').update(s).digest('hex');
 
-function signed(method, key, extra = {}) {
+function signed(method, key, extra = {}, query = {}) {
   const now = new Date(), amz = now.toISOString().replace(/[-:]/g, '').replace(/\.\d+/, ''), day = amz.slice(0, 8);
-  const path = '/' + R2_BUCKET + '/' + key.split('/').map(encodeURIComponent).join('/');
+  const path = '/' + R2_BUCKET + (key ? '/' + key.split('/').map(encodeURIComponent).join('/') : '');
+  const qs = Object.keys(query).sort().map(k => encodeURIComponent(k) + '=' + encodeURIComponent(query[k])).join('&');
   const headers = { host, 'x-amz-content-sha256': 'UNSIGNED-PAYLOAD', 'x-amz-date': amz, ...extra };
   const names = Object.keys(headers).map(h => h.toLowerCase()).sort();
-  const canon = [method, path, '', ...names.map(h => `${h}:${String(headers[Object.keys(headers).find(k => k.toLowerCase() === h)]).trim()}`), '', names.join(';'), 'UNSIGNED-PAYLOAD'].join('\n');
+  const canon = [method, path, qs, ...names.map(h => `${h}:${String(headers[Object.keys(headers).find(k => k.toLowerCase() === h)]).trim()}`), '', names.join(';'), 'UNSIGNED-PAYLOAD'].join('\n');
   const scope = `${day}/auto/s3/aws4_request`;
   const toSign = ['AWS4-HMAC-SHA256', amz, scope, sha(canon)].join('\n');
   const kSig = hmac(hmac(hmac(hmac('AWS4' + SK, day), 'auto'), 's3'), 'aws4_request');
   headers.authorization = `AWS4-HMAC-SHA256 Credential=${AK}/${scope}, SignedHeaders=${names.join(';')}, Signature=${createHmac('sha256', kSig).update(toSign).digest('hex')}`;
-  return { path, headers };
+  return { path: path + (qs ? '?' + qs : ''), headers };
 }
-function send(method, key, extra, body) {
+function send(method, key, extra, body, query) {
   return new Promise((ok, fail) => {
-    const { path, headers } = signed(method, key, extra);
+    const { path, headers } = signed(method, key, extra, query);
     const req = request({ host, path, method, headers }, res => { let t = ''; res.on('data', d => t += d); res.on('end', () => ok({ status: res.statusCode, headers: res.headers, text: t })); });
     req.on('error', fail);
     if (body) body.pipe(req); else req.end();
@@ -51,4 +53,14 @@ if (cmd === 'put') {
 } else if (cmd === 'head') {
   const r = await send('HEAD', a);
   console.log(`HEAD ${a}: ${r.status}`, r.headers['content-length'] || '');
+} else if (cmd === 'list') {                         // every key under a prefix, with its size
+  let token = '', n = 0;
+  do {
+    const q = { 'list-type': '2', prefix: a || '', ...(token ? { 'continuation-token': token } : {}) };
+    const r = await send('GET', '', {}, null, q);
+    if (r.status >= 300) { console.log('LIST', r.status, r.text.slice(0, 200)); break; }
+    for (const m of r.text.matchAll(/<Key>([^<]*)<\/Key>.*?<Size>(\d+)<\/Size>/gs)) { console.log(m[2].padStart(12), m[1]); n++; }
+    token = (/<NextContinuationToken>([^<]*)</.exec(r.text) || [])[1] || '';
+  } while (token);
+  console.log(n + ' keys');
 } else console.log('usage: node tools/r2.mjs put <file> <key> [type] | head <key> | del <key>');
