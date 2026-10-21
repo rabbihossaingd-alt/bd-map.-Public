@@ -111,9 +111,10 @@ const VIDEO_EXT = /\.(mp4|m4v|mov|webm|3gp|mkv|avi)$/i;
 const isVideo = f => f.type.startsWith('video') || (!f.type && VIDEO_EXT.test(f.name || ''));
 const isPhoto = f => f.type.startsWith('image') || (!f.type && /\.(jpe?g|png|webp|heic|heif|gif)$/i.test(f.name || ''));
 const videoType = f => f.type || ({ mov: 'video/quicktime', webm: 'video/webm' })[(f.name || '').split('.').pop().toLowerCase()] || 'video/mp4';
-function takeFile(file, baked) {
+async function takeFile(file, baked) {
   const st = studio;
   const video = isVideo(file);
+  if (video && !baked) { const secs = await videoLength(file); if (secs > MAX_SECS + 1) { chatToast(ME, tooLongText(secs)); return; } if (studio !== st) return; }
   if (video && file.size > MAX_VIDEO) { chatToast(ME, LANG === 'en' ? 'The video is over 3 GB.' : 'ভিডিওটি ৩ জিবির বেশি। ছোট একটি দিন।'); return; }
   if (st.mode === 'reel' && !video) { chatToast(ME, 'রিলের জন্য একটি ভিডিও দিন।'); return; }
   if (st.url) URL.revokeObjectURL(st.url);
@@ -138,6 +139,18 @@ function preUpload(st) {
   st.pre = startUpload(st.file);
 }
 const MAX_VIDEO = 3e9;
+// a video post, reel or story: up to 5 minutes (the server checks it too, and allows 5 video posts a day)
+const MAX_SECS = 300;
+const videoLength = file => new Promise(done => {
+  const v = el('video'), url = URL.createObjectURL(file);
+  const end = secs => { URL.revokeObjectURL(url); v.removeAttribute('src'); done(secs); };
+  v.preload = 'metadata'; v.muted = true;
+  v.onloadedmetadata = () => end(isFinite(v.duration) ? v.duration : 0);   // a recording straight from a browser may not know its length: 0, let it through
+  v.onerror = () => end(0);
+  setTimeout(() => end(0), 6000);
+  v.src = url;
+});
+const tooLongText = secs => LANG === 'en' ? `This video is ${Math.round(secs / 60)} minutes — up to 5 minutes, please.` : `ভিডিওটি প্রায় ${num(Math.round(secs / 60))} মিনিটের। ৫ মিনিট পর্যন্ত দিন।`;
 // A carousel: st.items holds every photo with its own words and stickers; st.file/url/layers are the one being edited.
 function dropItems(st) {
   if (!st.items) return;
@@ -150,6 +163,10 @@ function dropItems(st) {
 const newItem = f => { const video = isVideo(f); const it = { file: f, kind: video ? 'video' : 'photo', url: URL.createObjectURL(f), layers: [], w: 0, h: 0 }; if (video) { it.pre = startUpload(f); videoPoster(f).then(p => { it.thumb = p; }); } return it; };
 async function takeMany(files) {
   const st = studio;
+  const lens = await Promise.all(files.map(f => (isVideo(f) ? videoLength(f) : 0)));
+  const long = lens.filter(s => s > MAX_SECS + 1);
+  if (long.length) { chatToast(ME, tooLongText(long[0])); files = files.filter((f, i) => !(lens[i] > MAX_SECS + 1)); if (!files.length) return; if (files.length === 1) { takeFile(files[0], false); return; } }
+  if (studio !== st) return;
   if (st.url) URL.revokeObjectURL(st.url);
   dropItems(st);
   st.textStory = null;
@@ -317,8 +334,8 @@ async function openCamera() {
     tick = setInterval(() => {
       const s = (Date.now() - started) / 1000;
       timer.textContent = `${num(Math.floor(s / 60))}:${num(Math.floor(s % 60)).padStart(2, num(0))}`;
-      shutter.style.setProperty('--p', Math.min(1, s / 60));
-      if (s >= 60) stopRec();
+      shutter.style.setProperty('--p', Math.min(1, s / MAX_SECS));
+      if (s >= MAX_SECS) stopRec();
     }, 200);
   });
   const galleryBtn = sbtn('image', 'গ্যালারি', drawSource, 'round');
@@ -1006,8 +1023,8 @@ async function sendPost(job) {
     console.warn('post not sent:', e && e.message);
     window.lastPostError = e && e.message;
     const text = e.message === 'big' ? (LANG === 'en' ? 'Too big (3 GB at most)' : 'ফাইলটি অনেক বড় — সর্বোচ্চ ৩ জিবি') : e.message === 'space' ? 'সার্ভারে এখন জায়গা নেই'
-      : e.message === 'type' ? 'এই ধরনের ফাইল নেওয়া যায় না' : e.message === 'slow' ? 'আজ অনেকগুলো পোস্ট হয়েছে' : e.message === 'closed' ? 'এখন পোস্ট দেওয়া বন্ধ' : 'পোস্ট হয়নি — সংযোগ দেখুন';
-    pill.fail(text, ['big', 'type', 'slow', 'closed'].includes(e.message) ? null : () => { for (const part of job.parts) part.pre = null; sendPost(job); });
+      : e.message === 'type' ? 'এই ধরনের ফাইল নেওয়া যায় না' : e.message === 'slow' ? 'আজ অনেকগুলো পোস্ট হয়েছে' : e.message === 'videos' ? 'আজ ৫টি ভিডিও পোস্ট হয়ে গেছে — কাল আবার দিন' : e.message === 'long' ? 'ভিডিও ৫ মিনিটের বেশি — ছোট একটি দিন' : e.message === 'closed' ? 'এখন পোস্ট দেওয়া বন্ধ' : 'পোস্ট হয়নি — সংযোগ দেখুন';
+    pill.fail(text, ['big', 'type', 'slow', 'closed', 'videos', 'long'].includes(e.message) ? null : () => { for (const part of job.parts) part.pre = null; sendPost(job); });
   }
 }
 // the pill: the post's picture, what is happening, and a thin bar; tap a failed one to try again

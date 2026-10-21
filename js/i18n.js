@@ -583,7 +583,20 @@ const EXACT = {
   'রিলের মূল অডিও — অন্যদের রিলের শব্দ দিয়ে বানান': 'Original audio from reels — make yours with their sound',
   'এখনো কোনো রিল নেই।': 'No reels yet.',
   'পোস্ট হয়েছে।': 'Posted.',
-  'রিল পোস্ট হয়েছে।': 'Reel posted.'
+  'রিল পোস্ট হয়েছে।': 'Reel posted.',
+  'এখনো কোনো মন্তব্য নেই': 'No comments yet',
+  'আলোচনা শুরু করুন।': 'Start the conversation.',
+  'এই পোস্টে মন্তব্য বন্ধ।': 'Comments are turned off.',
+  'মন্তব্য পাঠানো যায়নি। আবার চেষ্টা করুন।': 'Could not send the comment. Try again.',
+  '১টি মন্তব্য দেখুন': 'View 1 comment',
+  'লাইভ': 'Live',
+  'প্রাইভেসি পলিসি': 'Privacy policy',
+  'কোন তথ্য রাখা হয়, কার কাছে যায়, কীভাবে মুছবেন': 'What is kept, who gets it, how to delete it',
+  'ব্যবহারের শর্তাবলি': 'Terms of use',
+  'অ্যাপের নিয়ম, ভিডিওর সীমা': 'App rules, video limits',
+  'আজ ৫টি ভিডিও পোস্ট হয়ে গেছে — কাল আবার দিন': '5 videos posted today — post more tomorrow',
+  'ভিডিও ৫ মিনিটের বেশি — ছোট একটি দিন': 'The video is over 5 minutes — choose a shorter one',
+  'ভিউ, লাইক আর নতুন ফলোয়ার': 'Views, likes and new followers'
 };
 
 // Sentences with a number or a name inside. First match wins; N is a number as the app prints it.

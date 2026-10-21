@@ -342,10 +342,18 @@ setInterval(() => {
 function deleteUser(id) {
   aq.endAll.run(id);
   for (const g of db.prepare('SELECT grp FROM group_members WHERE user = ?').all(id)) leaveGroup(g.grp, id);
+  // the files behind it all: photos, videos and files in their chats (both ways), their sounds, place photos, hidden gems, unused uploads
+  const jsonOf = t => { try { return JSON.parse(t); } catch { return null; } };
+  for (const m of db.prepare("SELECT body FROM messages WHERE (a = ?1 OR b = ?1 OR sender = ?1) AND kind IN ('photo', 'video', 'file', 'audio')").all(id)) { const b = jsonOf(m.body); if (b) { unlinkMedia(b.src); unlinkMedia(b.poster); } }
+  for (const x of db.prepare('SELECT file FROM sounds WHERE user = ?').all(id)) unlinkMedia(x.file);
+  for (const x of db.prepare('SELECT file FROM place_photos WHERE user = ?').all(id)) unlinkMedia(x.file);
+  for (const x of db.prepare('SELECT files FROM gems WHERE user = ?').all(id)) for (const f of jsonOf(x.files) || []) unlinkMedia(f);
+  for (const x of db.prepare('SELECT name FROM uploads WHERE user = ? AND used = 0').all(id)) unlinkMedia(x.name);
   for (const sql of ['DELETE FROM friends WHERE a = ?1 OR b = ?1', 'DELETE FROM messages WHERE a = ?1 OR b = ?1 OR sender = ?1', 'DELETE FROM notes WHERE user = ?1', 'DELETE FROM chat_prefs WHERE user = ?1', 'DELETE FROM earnings WHERE user = ?1', 'DELETE FROM payouts WHERE user = ?1', 'DELETE FROM notifications WHERE user = ?1 OR actor = ?1', 'DELETE FROM reports WHERE reporter = ?1 OR about = ?1',
                      'DELETE FROM ticket_msgs WHERE ticket IN (SELECT id FROM tickets WHERE user = ?1)', 'DELETE FROM tickets WHERE user = ?1', 'DELETE FROM contributions WHERE user = ?1', 'DELETE FROM post_likes WHERE user = ?1', 'DELETE FROM post_saves WHERE user = ?1', 'DELETE FROM post_comments WHERE user = ?1',
                      'DELETE FROM chat_ok WHERE a = ?1 OR b = ?1']) db.prepare(sql).run(id);
   for (const st of db.prepare('SELECT * FROM stories WHERE user = ?').all(id)) deleteStory(st);
+  for (const sql of ['DELETE FROM sounds WHERE user = ?', 'DELETE FROM place_photos WHERE user = ?', 'DELETE FROM place_reviews WHERE user = ?', 'DELETE FROM place_wants WHERE user = ?', 'DELETE FROM gems WHERE user = ?', 'DELETE FROM uploads WHERE user = ?']) db.prepare(sql).run(id);
   for (const p of db.prepare('SELECT * FROM posts WHERE user = ?').all(id)) deletePost(p);
   aq.dropRatings.run('u' + id);
   aq.dropFares.run('u' + id);
@@ -1364,7 +1372,16 @@ for (const t of ['posts', 'stories'])
     if (!db.prepare(`SELECT COUNT(*) AS n FROM pragma_table_info('${t}') WHERE name = ?`).get(col).n) db.exec(`ALTER TABLE ${t} ADD COLUMN ${col} ${def}`);
 function deleteStory(st) { unlinkMedia(st.file); unlinkMedia(st.poster); db.prepare('DELETE FROM stories WHERE id = ?').run(st.id); }
 db.exec(`CREATE TABLE IF NOT EXISTS post_comments (id INTEGER PRIMARY KEY, post INTEGER NOT NULL, user INTEGER NOT NULL, body TEXT NOT NULL, created INTEGER NOT NULL)`);
-const unlinkMedia = name => { if (name) fs.unlink(path.join(MEDIA_DIR, path.basename(name)), () => {}); };
+// a deleted file goes from the disk and from the copy on R2 (else the copy would bring it back: see mediaBack)
+const unlinkMedia = name => {
+  if (!name) return;
+  const base = path.basename(String(name));
+  fs.unlink(path.join(MEDIA_DIR, base), () => {});
+  if (backupOn) {
+    r2.del(R2_PREFIX + 'media/' + base).catch(e => console.error('R2 delete failed:', base, e.message));
+    try { db.prepare('DELETE FROM r2_files WHERE name = ?').run(base); } catch { /* table not made yet */ }
+  }
+};
 function deletePost(p) {
   unlinkMedia(p.file); unlinkMedia(p.poster);
   for (const x of moreOf(p.more)) { unlinkMedia(x.f); unlinkMedia(x.p); }
@@ -1412,6 +1429,51 @@ function musicLabel(m) {
 // fetch the end before it can play, and it stalls while it seeks back and forth. Like qt-faststart, this moves the
 // index to the front and moves every chunk offset in it by the index's size; the new file replaces the old one
 // in one rename once it is whole, so a viewer never sees half of it.
+const VIDEO_SECS = 300, VIDEOS_A_DAY = 5;      // a video post or reel: up to 5 minutes; 5 of them a day
+// How long a video is, read from the file: an MP4/MOV's movie header (mvhd), or a WebM's Duration. null when the
+// file does not say (a WebM straight from a browser's recorder often leaves it out); then the app's own check stands.
+async function videoSecs(file) {
+  let fh;
+  try {
+    fh = await fs.promises.open(file, 'r');
+    const { size: total } = await fh.stat(), head = Buffer.alloc(16);
+    await fh.read(head, 0, 16, 0);
+    if (head.readUInt32BE(0) === 0x1a45dfa3) {                       // WebM / Matroska
+      const buf = Buffer.alloc(Math.min(total, 256 * 1024));
+      await fh.read(buf, 0, buf.length, 0);
+      const vint = p => { const b = buf[p]; let len = 1; while (len <= 8 && !(b & (0x80 >> (len - 1)))) len++; let v = b & (0xff >> len); for (let i = 1; i < len; i++) v = v * 256 + buf[p + i]; return [v, len]; };
+      let scale = 1e6, dur = null;
+      for (let p = 0; p + 12 < buf.length; p++) {
+        if (buf[p] === 0x2a && buf[p + 1] === 0xd7 && buf[p + 2] === 0xb1) { const [n, l] = vint(p + 3); if (n > 0 && n <= 8) scale = buf.readUIntBE(p + 3 + l, n); }
+        if (buf[p] === 0x44 && buf[p + 1] === 0x89) { const [n, l] = vint(p + 2); if (n === 4) dur = buf.readFloatBE(p + 2 + l); else if (n === 8) dur = buf.readDoubleBE(p + 2 + l); if (dur != null) break; }
+      }
+      return dur != null && isFinite(dur) && dur > 0 ? dur * scale / 1e9 : null;
+    }
+    for (let pos = 0; pos + 16 <= total;) {                           // MP4 / MOV: the top-level boxes, then mvhd inside moov
+      await fh.read(head, 0, 16, pos);
+      let size = head.readUInt32BE(0);
+      const type = head.toString('latin1', 4, 8);
+      if (size === 1) size = Number(head.readBigUInt64BE(8)); else if (size === 0) size = total - pos;
+      if (size < 8) return null;
+      if (type === 'moov') {
+        const buf = Buffer.alloc(Math.min(size, 64e6));
+        await fh.read(buf, 0, buf.length, pos);
+        for (let p = 8; p + 32 <= buf.length;) {
+          const s = buf.readUInt32BE(p);
+          if (buf.toString('latin1', p + 4, p + 8) === 'mvhd') {
+            const v1 = buf[p + 8] === 1, scale = buf.readUInt32BE(p + (v1 ? 28 : 20)), d = v1 ? Number(buf.readBigUInt64BE(p + 32)) : buf.readUInt32BE(p + 24);
+            return scale ? d / scale : null;
+          }
+          if (s < 8) return null;
+          p += s;
+        }
+        return null;
+      }
+      pos += size;
+    }
+    return null;
+  } catch { return null; } finally { if (fh) await fh.close().catch(() => {}); }
+}
 async function mp4Faststart(file) {
   const fh = await fs.promises.open(file, 'r');
   let atoms = [], moov, buf;
@@ -1597,11 +1659,18 @@ async function exploreApi(req, res, action, query) {
       if (buf && buf.length > 200 && buf.length < 400_000) { poster = crypto.randomBytes(12).toString('hex') + '.jpg'; fs.writeFileSync(path.join(MEDIA_DIR, poster), buf); }
     }
     if (action === 'story') {
+      if (up.kind === 'video') { const secs = await videoSecs(path.join(MEDIA_DIR, up.name)); if (secs && secs > VIDEO_SECS + 1) { unlinkMedia(poster); return json(res, 400, { error: 'long', secs: Math.round(secs) }); } }
       db.prepare('INSERT INTO stories (user, kind, file, poster, created, w, h, layers) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(me.id, up.kind, up.name, poster, now, sizeOf(body.w), sizeOf(body.h), up.kind === 'video' ? cleanLayers(body.layers) : '');
       db.prepare('UPDATE uploads SET used = 1 WHERE name = ?').run(up.name);
       return json(res, 200, { ok: true });
     }
     const place = body.place && inBangladesh(body.place) ? body.place : null;
+    // videos: 5 a day in posts and reels, each up to 5 minutes (storage is what costs; stories go after a day)
+    const posted = db.prepare('SELECT kind, more FROM posts WHERE user = ? AND created > ?').all(me.id, now - 864e5);
+    const videosToday = posted.reduce((n, p) => n + (p.kind === 'video' ? 1 : 0) + moreOf(p.more).filter(x => x.k === 'video').length, 0);
+    const newVideos = [up, ...(Array.isArray(body.more) ? body.more : []).slice(0, 9).map(x => db.prepare('SELECT * FROM uploads WHERE name = ? AND user = ? AND used = 0').get(String(typeof x === 'string' ? x : x && x.media), me.id))].filter(u => u && u.kind === 'video');
+    if (newVideos.length && videosToday + newVideos.length > VIDEOS_A_DAY && me.role === 'user') { unlinkMedia(poster); return json(res, 429, { error: 'videos', left: Math.max(0, VIDEOS_A_DAY - videosToday) }); }
+    for (const v of newVideos) { const secs = await videoSecs(path.join(MEDIA_DIR, v.name)); if (secs && secs > VIDEO_SECS + 1) { unlinkMedia(poster); return json(res, 400, { error: 'long', secs: Math.round(secs) }); } }
     const fx = FX.includes(body.fx) ? body.fx : '', music = cleanMusic(body.music);
     const mstart = Math.max(0, Math.min(600, Number(body.mstart) || 0)), orig = body.orig === false ? 0 : 1;
     const audience = ['all', 'friends', 'me'].includes(body.audience) ? body.audience : 'all';

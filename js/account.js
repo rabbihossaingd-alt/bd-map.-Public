@@ -226,7 +226,7 @@ function openLogin(mode = 'login', presetEmail = '') {
   const divider = el('div', 'auth-or', 'অথবা');
   const create = el('button', 'auth-btn ghost', 'নতুন অ্যাকাউন্ট খুলুন');
   create.addEventListener('click', () => openSignup(email.value));
-  authShell([form, divider, create], [el('span', null, 'লগইন করলে আপনি BD Map-এর নিয়ম ও প্রাইভেসি মেনে নিচ্ছেন।')]);
+  authShell([form, divider, create], [legalLine()]);
   email.focus();
 }
 
@@ -470,6 +470,14 @@ async function logOut() {
   try { await acctApi('logout', {}); } catch { /* the cookie is cleared the next time the server answers */ }
   signedOut();
   go('more');
+}
+// the line under sign-in, with the terms and the privacy policy one tap away (they open in a new tab)
+function legalLine() {
+  const s = el('span', 'legal-line');
+  const a = (href, bn, en) => Object.assign(el('a', null, LANG === 'en' ? en : bn), { href: href + (LANG === 'en' ? '?lang=en' : ''), target: '_blank', rel: 'noopener' });
+  if (LANG === 'en') s.append('By signing in you agree to BD Map’s ', a('terms.html', 'নিয়ম', 'terms'), ' and ', a('privacy.html', 'প্রাইভেসি', 'privacy policy'), '.');
+  else s.append('লগইন করলে আপনি BD Map-এর ', a('terms.html', 'নিয়ম', 'terms'), ' ও ', a('privacy.html', 'প্রাইভেসি পলিসি', 'privacy policy'), ' মেনে নিচ্ছেন।');
+  return s;
 }
 function confirmDelete() {
   if (!ME) return;
