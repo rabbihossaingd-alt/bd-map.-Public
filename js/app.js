@@ -1361,7 +1361,25 @@ async function calculate() {
   const km = r.distance / 1000, min = r.duration / 60;
   saveRecent(trip.from, trip.to);
   $('trip-km').textContent = `${num(km, 1)} কিমি`;
-  $('trip-time').textContent = `গাড়িতে প্রায় ${fmtMin(min)} · জ্যাম ছাড়া`;
+  // How long by each way of going, as Google lists them above a route. The road's length is the route's; walking,
+  // rickshaw and bus speeds are the usual ones in Bangladesh, and the times are said to be rough.
+  const WAY_ICONS = {
+    walk: '<circle cx="13" cy="4" r="2"/><path d="M10 21l2-6 3 3v3M9 12l2-4 4 2 2 4M11 8l-3 3"/>',
+    rick: '<circle cx="6" cy="17" r="3"/><circle cx="18" cy="17" r="3"/><path d="M6 17l4-8h5l3 8M13 9V5h3"/>',
+    bus: '<rect x="4" y="3" width="16" height="14" rx="3"/><path d="M4 10h16M7 21v-4M17 21v-4"/>',
+    car: '<path d="M4 16l2-6a2 2 0 012-1.4h8a2 2 0 012 1.4l2 6v3H4z"/><circle cx="8" cy="16" r="1.4"/><circle cx="16" cy="16" r="1.4"/>'
+  };
+  const ways = [['car', 'গাড়িতে', min], ['bus', 'বাসে', km / (km < 40 ? 14 : 40) * 60],
+    ...(km <= 10 ? [['rick', 'রিকশা', km / 10 * 60]] : []), ['walk', 'হেঁটে', km / 4.5 * 60]];
+  const row = el('div', 'ways');
+  for (const [k, label, m] of ways) {
+    const b = el('button', 'way' + (k === 'bus' ? ' on' : ''));
+    b.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${WAY_ICONS[k]}</svg>`;
+    b.appendChild(el('span', null, `${label} ${fmtMin(Math.max(1, Math.round(m)))}`));
+    b.addEventListener('click', () => { for (const x of row.children) x.classList.toggle('on', x === b); if (k === 'bus') showPane('bus'); if (k === 'car') showPane('ride'); });
+    row.appendChild(b);
+  }
+  $('trip-time').replaceChildren(row, el('p', 'ways-note', 'সময় আনুমানিক · গাড়ির সময় জ্যাম ছাড়া'));
   $('sheet').hidden = false;
   if (phoneSheet) phoneSheet.snap(1, false);
   $('trip-photo').replaceChildren(photoStrip(trip.to));

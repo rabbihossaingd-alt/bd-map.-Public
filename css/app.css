@@ -4233,3 +4233,24 @@ button.dg-wiki { background: none; border: 0; padding: 0; cursor: pointer; font:
 .fc-media.buffering::after { content: ""; position: absolute; left: 50%; top: 50%; width: 34px; height: 34px; margin: -17px 0 0 -17px; border-radius: 50%; z-index: 3; pointer-events: none;
   border: 3px solid rgba(255, 255, 255, .35); border-top-color: #fff; animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* The from/to panel on the map: compact glass, the back arrow beside the two fields, not a tall white card */
+#page-trip #trip-search { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 2px; padding: 6px 8px 6px 4px; border-radius: 22px;
+  background: var(--glass); border: 1px solid var(--line); box-shadow: var(--shadow-2); -webkit-backdrop-filter: saturate(180%) blur(24px); backdrop-filter: saturate(180%) blur(24px); }
+#page-trip #trip-search .dir-back { margin: 0; width: 36px; height: 36px; }
+#page-trip #trip-search .od { background: color-mix(in srgb, var(--ink) 5%, transparent); border-radius: 16px; padding: 0 4px 0 12px; gap: 10px; }
+#page-trip #trip-search .dots .l { height: 16px; }
+#page-trip #trip-search .field input { padding: 9px 0; font-size: 15px; }
+#page-trip #trip-search .field .icon-btn { width: 32px; height: 32px; font-size: 17px; }
+#page-trip #trip-search .status { grid-column: 1 / -1; padding: 6px 8px 0; font-size: 13px; }
+#page-trip #trip-search .suggest { left: -30px; }
+
+/* How long by each way of going, as Google shows above the route */
+.ways { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; margin: 10px -2px 2px; padding: 0 2px 2px; }
+.ways::-webkit-scrollbar { display: none; }
+.way { flex: none; display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 12px 0 10px; border-radius: 999px; font-size: 13.5px; font-weight: 700; color: var(--ink-2);
+  background: var(--raised); border: 1px solid transparent; transition: background .2s, color .2s, transform .15s var(--ease); }
+.way:active { transform: scale(.95); }
+.way svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.way.on { color: #fff; background: var(--brand-grad, var(--accent)); box-shadow: 0 8px 18px -10px #059669; }
+.ways-note { margin: 4px 2px 0; font-size: 12px; color: var(--muted); }
