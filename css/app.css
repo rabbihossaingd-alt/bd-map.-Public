@@ -4254,3 +4254,48 @@ button.dg-wiki { background: none; border: 0; padding: 0; cursor: pointer; font:
 .way svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .way.on { color: #fff; background: var(--brand-grad, var(--accent)); box-shadow: 0 8px 18px -10px #059669; }
 .ways-note { margin: 4px 2px 0; font-size: 12px; color: var(--muted); }
+
+/* ================= Explore v3: comment sheet, cleaner cards, smaller tabs ================= */
+/* comments: a sheet from the bottom, as on Instagram (over the feed and over reels) */
+.cs { position: fixed; inset: 0; z-index: 3100; background: rgba(0, 0, 0, .42); animation: fade .22s var(--ease); display: flex; align-items: flex-end; justify-content: center; }
+.cs-sheet { width: min(560px, 100%); height: min(72dvh, 680px); display: flex; flex-direction: column; background: var(--surface); border-radius: 22px 22px 0 0;
+  box-shadow: 0 -18px 60px rgba(0, 0, 0, .28); animation: cs-up .34s var(--ease); transition: transform .26s var(--ease); padding-bottom: env(safe-area-inset-bottom); }
+:root[data-theme=light] .cs-sheet { background: #fff; }
+@keyframes cs-up { from { transform: translateY(100%); } to { transform: none; } }
+.cs.out { animation: fade .26s reverse forwards; } .cs.out .cs-sheet { transform: translateY(100%); }
+.cs-grip { height: 22px; display: grid; place-items: center; cursor: grab; touch-action: none; }
+.cs-grip::before { content: ''; width: 40px; height: 4px; border-radius: 4px; background: color-mix(in srgb, var(--ink) 22%, transparent); }
+.cs-head { text-align: center; font-weight: 700; font-size: 15.5px; padding: 0 0 12px; border-bottom: 1px solid var(--line); touch-action: none; cursor: grab; }
+.cs-list { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 8px 16px; }
+.cs-list .skeleton { height: 46px; border-radius: 12px; margin: 10px 0; }
+.cs-row { display: flex; gap: 12px; padding: 10px 0; animation: rise .3s var(--ease); }
+.cs-row .avatar { flex: none; cursor: pointer; }
+.cs-t { min-width: 0; flex: 1; }
+.cs-top { display: flex; align-items: baseline; gap: 8px; }
+.cs-top b { font-size: 13.5px; font-weight: 700; cursor: pointer; color: var(--ink); }
+.cs-top small { font-size: 12px; color: var(--muted); }
+.cs-t p { margin: 2px 0 0; font-size: 14.5px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ink); }
+.cs-none { display: grid; justify-items: center; gap: 6px; padding: 56px 20px; text-align: center; }
+.cs-none b { font-size: 19px; font-weight: 700; } .cs-none span { color: var(--muted); font-size: 14px; }
+.cs-foot { border-top: 1px solid var(--line); padding: 8px 12px 10px; }
+.cs-quick { display: flex; justify-content: space-between; padding: 2px 4px 8px; }
+.cs-quick button { font-size: 25px; line-height: 1; padding: 4px; border-radius: 10px; transition: transform .15s var(--ease); }
+.cs-quick button:active { transform: scale(1.25); }
+.cs-form { display: flex; align-items: center; gap: 10px; }
+.cs-form input { flex: 1; min-width: 0; height: 42px; padding: 0 16px; border-radius: 21px; border: 1px solid var(--line); background: var(--raised); color: var(--ink); font: inherit; font-size: 15px; outline: none; }
+.cs-form input:focus { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); }
+.cs-send { font-weight: 700; font-size: 15px; color: var(--accent); padding: 8px 4px; transition: opacity .2s; }
+.cs-send:disabled { opacity: .35; }
+.cs-off { text-align: center; color: var(--muted); padding: 10px; font-size: 14px; }
+
+/* the feed: no hard line around pictures on phones; captions and counts like Instagram */
+@media (max-width: 760px) { .fc-media { border: 0; } }
+.fc { border-bottom: 0; padding-bottom: 6px; margin-bottom: 14px; }
+.fc-all { color: var(--muted); padding: 4px 0 0; }
+.fc-likes { font-weight: 700; }
+/* Feed · Reels · Live: smaller pills */
+.ex-tabs { gap: 6px; }
+.ex-tabs button { padding: 6px 13px; border-radius: 999px; font-size: 13.5px; }
+.ex-tabs [data-ic] { font-size: 15px; }
+/* the post window: the name in full ink, the heart without a 0 */
+.post-who .t b { color: var(--ink); }

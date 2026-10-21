@@ -230,7 +230,7 @@ function feedCard(p, onGone) {
   const talk = el('button', 'fc-btn');
   talk.innerHTML = svg('chat');
   talk.setAttribute('aria-label', 'মন্তব্য');
-  talk.addEventListener('click', () => openPost(p.id, onGone));
+  talk.addEventListener('click', () => openComments(p, paintAll));
   const send = el('button', 'fc-btn');
   send.innerHTML = svg('share');
   send.setAttribute('aria-label', 'শেয়ার');
@@ -257,8 +257,10 @@ function feedCard(p, onGone) {
     cap.append(el('b', null, p.user.name), document.createTextNode(' ' + p.caption));
     body.appendChild(cap);
   }
-  const all = el('button', 'fc-all', p.comments ? `সব ${num(p.comments)} টি মন্তব্য দেখুন` : 'প্রথম মন্তব্যটি করুন');
-  all.addEventListener('click', () => openPost(p.id, onGone));
+  const all = el('button', 'fc-all');
+  function paintAll() { all.textContent = p.comments ? (p.comments === 1 ? '১টি মন্তব্য দেখুন' : `সব ${num(p.comments)} টি মন্তব্য দেখুন`) : 'প্রথম মন্তব্যটি করুন'; }
+  paintAll();
+  all.addEventListener('click', () => openComments(p, paintAll));
   body.appendChild(all);
   paint(false);
   if (p.kind === 'video') { media.prepend(head); card.append(media, bar, body); }
@@ -333,6 +335,85 @@ function postGrid(box, user, emptyText, query, saved) {
 }
 
 // ---- a post on its own, with its comments ----
+// Comments as on Instagram: a sheet from the bottom over whatever is open (feed or reels), the list, a row of quick
+// emoji and the box with your photo. onCount(n) tells the card the new number.
+function openComments(p, onCount) {
+  const box = el('div', 'cs');
+  const sheet = el('div', 'cs-sheet');
+  const grip = el('div', 'cs-grip');
+  const head = el('header', 'cs-head', 'মন্তব্য');
+  const list = el('div', 'cs-list');
+  list.append(el('div', 'skeleton'), el('div', 'skeleton'));
+  const closed = p.nocomm && (!ME || ME.id !== p.user.id);
+  let shown = 0;
+  const empty = () => { const n = el('div', 'cs-none'); n.append(el('b', null, 'এখনো কোনো মন্তব্য নেই'), el('span', null, closed ? 'এই পোস্টে মন্তব্য বন্ধ।' : 'আলোচনা শুরু করুন।')); return n; };
+  const row = c => {
+    const r = el('div', 'cs-row no-tr');
+    const t = el('div', 'cs-t');
+    const top = el('div', 'cs-top');
+    top.append(nameEl(c.user), el('small', null, agoText(c.created)));
+    t.append(top, Object.assign(el('p'), { textContent: c.body }));
+    const pic = avatar(c.user, 'sm');
+    const toUser = () => { close(); closeReels(); openProfilePage(c.user.id); };
+    pic.addEventListener('click', toUser);
+    top.querySelector('b').addEventListener('click', toUser);
+    r.append(pic, t);
+    return r;
+  };
+  const foot = el('div', 'cs-foot');
+  const input = Object.assign(el('input'), { placeholder: LANG === 'en' ? 'Add a comment…' : 'মন্তব্য লিখুন…', maxLength: 500, enterKeyHint: 'send' });
+  const send = el('button', 'cs-send', 'পোস্ট');
+  send.type = 'submit';
+  send.disabled = true;
+  const form = el('form', 'cs-form');
+  form.append(ME ? avatar(ME, 'sm') : el('span'), input, send);
+  input.addEventListener('input', () => { send.disabled = !input.value.trim(); });
+  const quick = el('div', 'cs-quick');
+  for (const e of ['❤️', '🙌', '🔥', '👏', '😍', '😮', '😂', '🙏']) {
+    const b = el('button', null, e);
+    b.type = 'button';
+    b.addEventListener('click', () => { input.value += e; send.disabled = false; input.focus(); });
+    quick.appendChild(b);
+  }
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    if (!ME) { openLogin(); return; }
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = ''; send.disabled = true;
+    try {
+      const c = (await exploreApi('comment', { id: p.id, body: text })).comment;
+      if (!shown++) list.replaceChildren();
+      list.appendChild(row(c));
+      list.scrollTop = list.scrollHeight;
+      p.comments = (p.comments || 0) + 1;
+      if (onCount) onCount(p.comments);
+    } catch { input.value = text; send.disabled = false; exploreNote('মন্তব্য পাঠানো যায়নি। আবার চেষ্টা করুন।'); }
+  });
+  if (closed) foot.appendChild(el('div', 'cs-off', 'এই পোস্টে মন্তব্য বন্ধ।'));
+  else foot.append(quick, form);
+  sheet.append(grip, head, list, foot);
+  box.appendChild(sheet);
+  const close = () => { if (!box.isConnected || box.classList.contains('out')) return; box.classList.add('out'); setTimeout(() => box.remove(), 260); removeEventListener('keydown', key); };
+  const key = e => { if (e.key === 'Escape') close(); };
+  box.addEventListener('click', e => { if (e.target === box) close(); });
+  addEventListener('keydown', key);
+  // drag the top of the sheet down to close it
+  let y0 = null;
+  for (const h of [grip, head]) {
+    h.addEventListener('pointerdown', e => { y0 = e.clientY; sheet.style.transition = 'none'; try { h.setPointerCapture(e.pointerId); } catch { /* old browser */ } });
+    h.addEventListener('pointermove', e => { if (y0 != null) sheet.style.transform = `translateY(${Math.max(0, e.clientY - y0)}px)`; });
+    const end = e => { if (y0 == null) return; const d = e.clientY - y0; y0 = null; sheet.style.transition = ''; sheet.style.transform = ''; if (d > 90) close(); };
+    h.addEventListener('pointerup', end); h.addEventListener('pointercancel', end);
+  }
+  document.body.appendChild(box);
+  exploreApi('post?id=' + p.id).then(d => {
+    shown = d.comments.length;
+    list.replaceChildren(...(shown ? d.comments.map(row) : [empty()]));
+    if (d.post.comments !== p.comments && onCount) { p.comments = d.post.comments; onCount(p.comments); }
+  }, () => list.replaceChildren(el('div', 'cs-none', 'দেখানো যায়নি।')));
+}
+
 async function openPost(id, onGone) {
   let data;
   try { data = await exploreApi('post?id=' + id); } catch { return; }
@@ -355,7 +436,7 @@ async function openPost(id, onGone) {
   who.addEventListener('click', () => { closeReels(); openProfilePage(p.user.id); });
 
   const like = el('button', 'heart-btn');
-  const paint = pop => { like.innerHTML = svg('heart'); like.appendChild(document.createTextNode(num(p.likes))); like.classList.toggle('on', p.liked); if (pop) { like.classList.add('pop'); setTimeout(() => like.classList.remove('pop'), 400); } };
+  const paint = pop => { like.innerHTML = svg('heart'); if (p.likes) like.appendChild(document.createTextNode(num(p.likes))); like.classList.toggle('on', p.liked); if (pop) { like.classList.add('pop'); setTimeout(() => like.classList.remove('pop'), 400); } };
   paint(false);
   like.addEventListener('click', () => toggleLike(p, paint));
   const bar = el('div', 'post-bar');
@@ -561,12 +642,12 @@ async function openReels(startId, user) {
     }
     const side = el('div', 'reel-side');
     const act = (icon, text, fn) => { const b = el('button', 'reel-btn'); b.innerHTML = svg(icon); const n = el('span', null, text); b.appendChild(n); b.addEventListener('click', fn); side.appendChild(b); return [b, n]; };
-    const [like, likes] = act('heart', num(p.likes), () => toggleLike(p, pop => {
-      like.classList.toggle('on', p.liked); likes.textContent = num(p.likes);
+    const [like, likes] = act('heart', p.likes ? num(p.likes) : '', () => toggleLike(p, pop => {
+      like.classList.toggle('on', p.liked); likes.textContent = p.likes ? num(p.likes) : '';
       if (pop) { like.classList.remove('pop'); void like.offsetWidth; like.classList.add('pop'); }
     }));
     like.classList.toggle('on', p.liked);
-    act('chat', num(p.comments), () => { v.pause(); openPost(p.id); });
+    const [, talks] = act('chat', p.comments ? num(p.comments) : '', () => openComments(p, n => { talks.textContent = num(n); }));
     act('share', '', () => sharePost(p));
     const [keep] = act('bookmark', '', () => toggleSave(p, () => keep.classList.toggle('on', p.saved)));
     keep.classList.toggle('on', p.saved);
