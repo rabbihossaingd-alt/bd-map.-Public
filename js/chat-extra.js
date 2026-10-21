@@ -222,7 +222,7 @@ function groupPeer(id) {
   gc.peers.set(id, p);
   for (const tr of gc.media.getTracks()) pc.addTrack(tr, gc.media);
   pc.onicecandidate = e => { if (e.candidate) gsignal(id, { type: 'ice', candidate: e.candidate }); };
-  pc.ontrack = e => { const v = tileOf(id).querySelector('video'); if (v.srcObject !== e.streams[0]) v.srcObject = e.streams[0]; tileOf(id).classList.add('live'); };
+  pc.ontrack = e => { const v = tileOf(id).querySelector('video'); if (v.srcObject !== e.streams[0]) v.srcObject = e.streams[0]; tileOf(id).classList.add('live'); groupSound(); };
   pc.onconnectionstatechange = () => {
     const tile = gc.peers.has(id) && tileOf(id);
     if (tile) tile.dataset.state = pc.connectionState;
@@ -313,13 +313,18 @@ function showGroupCall() {
     const cam = mk('video', 'ক্যামেরা', '', () => { const tr = gc.media.getVideoTracks()[0]; if (tr) { tr.enabled = !tr.enabled; cam.classList.toggle('off', !tr.enabled); $('gc-grid').querySelector('.gc-tile.me').classList.toggle('cam-off', !tr.enabled); } });
     btns.push(cam);
   }
-  btns.push(mk('phone', 'কল ছাড়ুন', 'hang', leaveGroupCall));
+  // the loudspeaker, as in a one-to-one call: a voice call starts at the ear, a video call loud
+  if (gc.loud == null) gc.loud = gc.video;
+  const spk = mk('sound', tx('লাউডস্পিকার', 'Speaker'), 'spk' + (gc.loud ? ' on' : ''), () => { gc.loud = !gc.loud; spk.classList.toggle('on', gc.loud); groupSound(); });
+  btns.push(spk, mk('phone', 'কল ছাড়ুন', 'hang', leaveGroupCall));
+  groupSound();
   actions.replaceChildren(...btns);
   clearInterval(gc.clock);
   gc.clock = setInterval(paintGroupCall, 1000);
   paintGroupCall();
   renderCallBar();
 }
+function groupSound() { if (gc.group) routeSound([...document.querySelectorAll('#gc-grid .gc-tile:not(.me) video')], !!gc.loud); }
 function paintGroupCall() {
   const grid = $('gc-grid');
   if (!grid || !gc.group) return;
@@ -337,7 +342,8 @@ async function leaveGroupCall() {
   for (const id of [...gc.peers.keys()]) dropPeer(id);
   if (gc.media) for (const tr of gc.media.getTracks()) tr.stop();
   clearInterval(gc.clock);
-  Object.assign(gc, { group: null, media: null, started: 0 });
+  Object.assign(gc, { group: null, media: null, started: 0, loud: null });
+  try { if (navigator.audioSession) navigator.audioSession.type = 'auto'; } catch { /* not this browser */ }
   const box = $('gcall');
   if (box) { box.hidden = true; $('gc-grid').replaceChildren(); }
   await chatApi('group-call-leave', { group: gid }).catch(() => {});

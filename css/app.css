@@ -4299,3 +4299,16 @@ button.dg-wiki { background: none; border: 0; padding: 0; cursor: pointer; font:
 .ex-tabs [data-ic] { font-size: 15px; }
 /* the post window: the name in full ink, the heart without a 0 */
 .post-who .t b { color: var(--ink); }
+
+/* ================= Messages v3 ================= */
+/* a name inside a row's text is the name, not the grey line under it (those rules match any span in .t) */
+.person .t b .nm, .who b .nm, .t b.no-tr > .nm { color: inherit; font-size: inherit; margin-top: 0; display: inline; }
+/* unread, as on Instagram: the name and the last line bold and dark, a blue dot */
+#chat-list .person.unread .t b, #chat-list .person.unread .t span { color: var(--ink); font-weight: 700; }
+/* the loudspeaker (and any toggle) lit when on, as on an iPhone call */
+.call-btn.on { background: #fff; color: #0b0f14; }
+/* the hover buttons beside a bubble never make the conversation scroll sideways */
+.chat-msgs { overflow-x: hidden; }
+/* All · Unread · Groups · Requests: smaller pills, as in Explore */
+.chat-tabs { gap: 6px; }
+.chat-tabs button { padding: 6px 13px; border-radius: 999px; font-size: 13.5px; }

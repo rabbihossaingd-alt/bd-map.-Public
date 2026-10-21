@@ -587,7 +587,7 @@ const cq = {
   setLink: db.prepare(`INSERT INTO friends (a, b, state, actor, updated) VALUES (?, ?, ?, ?, ?)
                        ON CONFLICT (a, b) DO UPDATE SET state = excluded.state, actor = excluded.actor, updated = excluded.updated`),
   drop:    db.prepare('DELETE FROM friends WHERE a = ? AND b = ?'),
-  links:   db.prepare(`SELECT f.state, f.actor, f.updated, u.id, u.name, u.bio, u.pic_v AS pic, u.verified, u.prefs FROM friends f
+  links:   db.prepare(`SELECT f.state, f.actor, f.updated, u.id, u.name, u.username, u.bio, u.pic_v AS pic, u.verified, u.prefs FROM friends f
                        JOIN users u ON u.id = CASE WHEN f.a = ?1 THEN f.b ELSE f.a END WHERE f.a = ?1 OR f.b = ?1`),
   last:    db.prepare(`SELECT ${MSG_COLS} FROM messages WHERE a = ? AND b = ? ORDER BY id DESC LIMIT 1`),
   unread:  db.prepare('SELECT COUNT(*) AS n FROM messages WHERE a = ? AND b = ? AND sender <> ? AND seen = 0 AND gone = 0'),
@@ -839,14 +839,14 @@ async function chatApi(req, res, action, query) {
         else if (last) out.requests.push(row);
       };
       for (const l of cq.links.all(me.id)) {
-        const who = { id: l.id, name: l.name, bio: l.bio, pic: l.pic, verified: l.verified, prefs: l.prefs };
+        const who = { id: l.id, name: l.name, username: l.username || '', bio: l.bio, pic: l.pic, verified: l.verified, prefs: l.prefs };
         if (l.state === 'friends') talk(who, l.updated, true);
         else if (l.state === 'pending') (l.actor === me.id ? out.outgoing : out.incoming).push(who);
         else { blocked.add(l.id); if (l.actor === me.id) out.blocked.push(who); }
       }
       for (const { other } of db.prepare('SELECT DISTINCT CASE WHEN a = ?1 THEN b ELSE a END AS other FROM messages WHERE a = ?1 OR b = ?1').all(me.id)) {
         const u = aq.byId.get(other);
-        if (u && !u.banned && !blocked.has(other)) talk({ id: u.id, name: u.name, bio: u.bio, pic: u.pic_v, verified: u.verified, prefs: u.prefs }, 0, false);
+        if (u && !u.banned && !blocked.has(other)) talk({ id: u.id, name: u.name, username: u.username || '', bio: u.bio, pic: u.pic_v, verified: u.verified, prefs: u.prefs }, 0, false);
       }
       for (const list of [out.incoming, out.outgoing, out.blocked]) for (const p of list) { p.verified = !!p.verified; delete p.prefs; }
       out.groups = gq.mine.all(me.id).map(g => {

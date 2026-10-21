@@ -372,7 +372,7 @@ function renderMsgs(scroll = true) {
   } else {
     const see = el('button', 'pill-btn quiet', 'প্রোফাইল দেখুন');
     see.addEventListener('click', () => openProfilePage(t.id));
-    intro.append(avatar(t, 'xl'), nameEl(t), Object.assign(el('span', 'no-tr'), { textContent: t.bio || 'BD Map' }), see);
+    intro.append(avatar(t, 'xl'), nameEl(t), Object.assign(el('span', 'no-tr'), { textContent: [t.username ? '@' + t.username : '', t.bio || 'BD Map'].filter(Boolean).join(' · ') }), see);
   }
   box.appendChild(intro);
   let day = '', prev = null;
@@ -1166,8 +1166,14 @@ const candType = c => (/ typ (\w+)/.exec(c && (c.candidate || c)) || [])[1] || '
 // (setSinkId with an earpiece among the outputs), that is used; otherwise the call is simply quieter until the
 // loudspeaker button is pressed. A video call starts on the loudspeaker, as WhatsApp's do.
 async function applyCallSound() {
-  const loud = !!call.loud, outs = [$('call-remote'), ...document.querySelectorAll('.gc-tile video')];
+  await routeSound([$('call-remote')], !!call.loud);
+  $('call-spk').classList.toggle('on', !!call.loud);
+}
+// the same for any set of players (a one-to-one call's, or a group call's tiles)
+async function routeSound(outs, loud) {
   try { if (navigator.audioSession) navigator.audioSession.type = loud ? 'auto' : 'play-and-record'; } catch { /* not this browser */ }
+  outs = outs.filter(Boolean);
+  if (!outs.length) return;
   let sink = null;
   try {
     if (outs[0].setSinkId && navigator.mediaDevices.enumerateDevices) {
@@ -1179,7 +1185,6 @@ async function applyCallSound() {
     if (sink) v.setSinkId(sink.deviceId).catch(() => {});
     v.volume = loud || sink ? 1 : 0.35;
   }
-  $('call-spk').classList.toggle('on', loud);
 }
 async function newPeer() {
   call.loud = call.video;
