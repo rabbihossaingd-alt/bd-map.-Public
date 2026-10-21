@@ -35,7 +35,20 @@ const PORT = Number(process.env.PORT) || 8765;
 // On a hosting service, point DATA_DIR at its persistent disk so ratings survive restarts and redeploys.
 const DATA_DIR = process.env.DATA_DIR || path.join(ROOT, 'db');
 fs.mkdirSync(DATA_DIR, { recursive: true });
-const db = new DatabaseSync(path.join(DATA_DIR, 'ratings.db'));
+// ---- Keeping the data on a host whose disk is wiped (Render's free plan): R2 holds a copy ----
+// With R2_* and R2_BACKUP=1 set, a fresh disk is filled from the last copy before the database opens; afterwards the database is
+// copied up two minutes after any change and once more when the host stops the server (it sends SIGTERM before a
+// deploy), and every uploaded file goes up too (see the media sync further down). Without R2_*, nothing changes.
+const r2 = require('./lib/r2.cjs');
+// on only where asked (R2_BACKUP=1, set on the host): a developer's computer with R2 keys must not send its test data up
+const backupOn = r2.ready() && process.env.R2_BACKUP === '1';
+const DB_FILE = path.join(DATA_DIR, 'ratings.db');
+const R2_PREFIX = (process.env.R2_PREFIX || 'state/').replace(/^\/+/, '');   // tests use their own prefix, never the live one
+if (backupOn && !fs.existsSync(DB_FILE)) {
+  try { console.log(require('node:child_process').execFileSync(process.execPath, [path.join(ROOT, 'lib', 'r2.cjs'), 'get', R2_PREFIX + 'ratings.db', DB_FILE], { encoding: 'utf8', timeout: 120_000 }).trim()); }
+  catch (e) { console.error('Could not restore the database from R2:', e.message); }
+}
+const db = new DatabaseSync(DB_FILE);
 // Write-ahead logging: readers never wait for a writer, and a write costs one disk flush at checkpoints instead of every time.
 db.exec('PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA busy_timeout = 4000');
 db.exec(`CREATE TABLE IF NOT EXISTS ratings (
@@ -1683,10 +1696,13 @@ async function exploreApi(req, res, action, query) {
 }
 
 // Photos and videos, with byte ranges so a phone can seek in a video and start it before it has all arrived.
-function serveMedia(req, res, name) {
+function serveMedia(req, res, name, again) {
   const file = path.join(MEDIA_DIR, path.basename(name));
   fs.stat(file, (err, stat) => {
-    if (err || !stat.isFile() || !/^[a-f0-9]{24}\.\w+$/.test(path.basename(name))) { res.writeHead(404).end(); return; }
+    const valid = /^[a-f0-9]{24}\.\w+$/.test(path.basename(name));
+    // gone from this disk (a fresh deploy): fetched back from R2 once, then served as usual
+    if (err && valid && !again) { mediaBack(path.basename(name)).then(found => (found ? serveMedia(req, res, name, true) : res.writeHead(404).end())); return; }
+    if (err || !stat.isFile() || !valid) { res.writeHead(404).end(); return; }
     const type = Object.entries(MEDIA_TYPES).find(([, v]) => v[0] === path.extname(file));
     const head = { 'Content-Type': type ? type[0] : 'application/octet-stream', 'Accept-Ranges': 'bytes', 'Cache-Control': 'public, max-age=31536000, immutable', 'X-Content-Type-Options': 'nosniff' };
     if (!type) head['Content-Disposition'] = 'attachment';
@@ -2706,6 +2722,65 @@ const server = http.createServer((req, res) => {
 });
 server.requestTimeout = 0;           // uploads of big videos; idle sockets are still closed by keepAliveTimeout
 server.headersTimeout = 60_000;
+// ---- The copies on R2 (see "Keeping the data" at the top) ----
+db.exec('CREATE TABLE IF NOT EXISTS r2_files (name TEXT PRIMARY KEY, at INTEGER NOT NULL)');
+let dbCopied = -1, dbCopying = null;
+const changesNow = () => db.prepare('SELECT total_changes() AS n').get().n;
+// the database: a clean copy (VACUUM INTO) sent up whenever something has changed since the last one
+function copyDbUp() {
+  if (!backupOn) return Promise.resolve();
+  if (dbCopying) return dbCopying;
+  const n = changesNow();
+  if (n === dbCopied) return Promise.resolve();
+  const tmp = path.join(DATA_DIR, 'ratings.copy.db');
+  dbCopying = (async () => {
+    try {
+      fs.rmSync(tmp, { force: true });
+      db.exec(`VACUUM INTO '${tmp.replace(/'/g, "''")}'`);
+      await r2.put(R2_PREFIX + 'ratings.db', tmp, 'application/vnd.sqlite3');
+      dbCopied = n;
+    } catch (e) { console.error('Database copy to R2 failed:', e.message); }
+    finally { fs.rmSync(tmp, { force: true }); dbCopying = null; }
+  })();
+  return dbCopying;
+}
+// uploaded files: each one sent up once, oldest first; a file still being written or rewritten (fast start) waits
+let mediaSyncing = false;
+async function copyMediaUp() {
+  if (!backupOn || mediaSyncing) return;
+  mediaSyncing = true;
+  try {
+    const done = new Set(db.prepare('SELECT name FROM r2_files').all().map(r => r.name)), now = Date.now();
+    const todo = fs.readdirSync(MEDIA_DIR).filter(n => /^[a-f0-9]{24}\.\w+$/.test(n) && !done.has(n))
+      .map(n => ({ n, st: fs.statSync(path.join(MEDIA_DIR, n)) })).filter(x => now - x.st.mtimeMs > 30_000).sort((a, b) => a.st.mtimeMs - b.st.mtimeMs);
+    for (const { n } of todo) {
+      const type = (Object.entries(MEDIA_TYPES).find(([, v]) => v[0] === path.extname(n)) || ['application/octet-stream'])[0];
+      try { await r2.put(R2_PREFIX + 'media/' + n, path.join(MEDIA_DIR, n), type); db.prepare('INSERT OR REPLACE INTO r2_files (name, at) VALUES (?, ?)').run(n, Date.now()); }
+      catch (e) { console.error('Media copy to R2 failed:', n, e.message); break; }
+    }
+  } finally { mediaSyncing = false; }
+}
+// a file the disk no longer has (it was wiped) is fetched back from R2 the first time someone asks for it
+const mediaFetching = new Map();
+function mediaBack(name) {
+  if (!backupOn) return Promise.resolve(false);
+  if (!mediaFetching.has(name)) mediaFetching.set(name, r2.get(R2_PREFIX + 'media/' + name, path.join(MEDIA_DIR, name)).catch(() => false).finally(() => setTimeout(() => mediaFetching.delete(name), 60_000)));
+  return mediaFetching.get(name);
+}
+if (backupOn) {
+  dbCopied = changesNow();                               // what was restored (or found) is already up there
+  setInterval(() => { copyDbUp(); }, 2 * 60_000).unref();
+  setInterval(() => { copyMediaUp(); }, 60_000).unref();
+  setTimeout(copyMediaUp, 20_000).unref();
+  // the host stops the server before a deploy or when it sleeps: send the last changes first (Render waits 30 s)
+  for (const sig of ['SIGTERM', 'SIGINT']) process.once(sig, () => {
+    console.log(`${sig}: copying the database to R2 before stopping…`);
+    const stop = setTimeout(() => process.exit(0), 25_000);
+    copyDbUp().finally(() => { clearTimeout(stop); process.exit(0); });
+  });
+  console.log('R2 copies: on');
+}
+
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`BD Map is running.\n  On this computer:  http://localhost:${PORT}`);
   for (const list of Object.values(os.networkInterfaces())) {

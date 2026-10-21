@@ -3,6 +3,7 @@
 // file of a few GB never sits in memory. A single PUT takes up to 5 GB, which the map's tile files stay under.
 // Run: node tools/r2.mjs put <local file> <key> [content-type]
 //      node tools/r2.mjs head <key>
+//      node tools/r2.mjs del <key>
 import { readFileSync, statSync, createReadStream } from 'node:fs';
 import { createHmac, createHash } from 'node:crypto';
 import { request } from 'node:https';
@@ -44,7 +45,10 @@ if (cmd === 'put') {
   const r = await send('PUT', b, { 'content-length': size, 'content-type': type || 'application/octet-stream' }, body);
   console.log(`\nPUT ${b}: ${r.status}${r.status >= 300 ? ' ' + r.text.slice(0, 300) : ''}`);
   process.exit(r.status < 300 ? 0 : 1);
+} else if (cmd === 'del') {
+  const r = await send('DELETE', a);
+  console.log(`DELETE ${a}: ${r.status}`);
 } else if (cmd === 'head') {
   const r = await send('HEAD', a);
   console.log(`HEAD ${a}: ${r.status}`, r.headers['content-length'] || '');
-} else console.log('usage: node tools/r2.mjs put <file> <key> [type] | head <key>');
+} else console.log('usage: node tools/r2.mjs put <file> <key> [type] | head <key> | del <key>');
