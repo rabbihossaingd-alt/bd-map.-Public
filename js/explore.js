@@ -294,11 +294,15 @@ function seenWatcher() {
 }
 
 // One square in a grid (profiles, search results).
+// a video posted without a cover shows its own picture from half a second in (only the start of the file is fetched)
+function firstFrame(p) {
+  return Object.assign(el('video', 'frame'), { src: p.src + '#t=0.5', muted: true, playsInline: true, preload: 'metadata', disablePictureInPicture: true, tabIndex: -1 });
+}
 function postTile(p, onGone, user) {
   const tile = el('button', 'tile-post');
   const img = Object.assign(el('img'), { loading: 'lazy', alt: p.caption || '', src: p.kind === 'video' ? p.poster : p.src });
   if (p.kind === 'text') { tile.classList.add('texty', 'g' + (p.id % 5)); tile.appendChild(Object.assign(el('span', 'tt no-tr'), { textContent: p.caption })); }
-  else if (p.kind === 'video' && !p.poster) tile.classList.add('blank'); else tile.appendChild(img);
+  else if (p.kind === 'video' && !p.poster) tile.appendChild(firstFrame(p)); else tile.appendChild(img);
   if (p.kind === 'video' && !(p.more && p.more.length)) tile.appendChild(svgEl('play', 'play'));
   if (p.more && p.more.length) tile.appendChild(svgEl('copy', 'multi'));
   const meta = el('span', 'meta');
@@ -1065,7 +1069,7 @@ async function loadHomePosts() {
   for (const p of posts) {
     const card = el('button', 'hp');
     if (p.kind === 'text') { card.classList.add('texty', 'g' + (p.id % 5)); card.appendChild(Object.assign(el('p', 'no-tr'), { textContent: p.caption })); }
-    else if (p.kind === 'video' && !p.poster) card.classList.add('g4');
+    else if (p.kind === 'video' && !p.poster) card.appendChild(firstFrame(p));
     else card.appendChild(Object.assign(el('img'), { src: p.kind === 'video' ? p.poster : p.src, alt: p.caption || '', loading: 'lazy' }));
     if (p.kind === 'video') card.appendChild(svgEl('play', 'play'));
     const who = el('span', 'hp-who');

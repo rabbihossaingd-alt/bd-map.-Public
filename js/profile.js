@@ -138,7 +138,7 @@ async function drawProfile() {
   info.append(nameEl(u, 'h2'), bio, chips);
 
   const actions = el('div', 'prof-actions');
-  if (mine) actions.append(button('edit', 'প্রোফাইল এডিট', () => openProfile(), true), button('plus', 'নতুন পোস্ট', openNewPost));
+  if (mine) actions.append(button('edit', 'প্রোফাইল এডিট', () => openProfile(), true), button('plus', 'নতুন পোস্ট', openNewPost, true));
   else {
     actions.appendChild(followButton(u, drawProfile, true));
     actions.appendChild(button('chat', 'মেসেজ', () => openThreadWith(u), true));
@@ -148,7 +148,7 @@ async function drawProfile() {
   if (mine) {
     const dash = el('button', 'prof-dash');
     dash.append(ic('chart'), el('span', 't'), ic('chev'));
-    dash.querySelector('.t').append(el('b', null, 'প্রফেশনাল ড্যাশবোর্ড'), el('em', null, 'আপনার পোস্টের ভিউ, লাইক আর নতুন ফলোয়ার'));
+    dash.querySelector('.t').append(el('b', null, 'প্রফেশনাল ড্যাশবোর্ড'), el('em', null, 'ভিউ, লাইক আর নতুন ফলোয়ার'));
     dash.addEventListener('click', () => go('insights'));
     card.appendChild(dash);
   }
