@@ -669,7 +669,10 @@ async function cachedJson(url, key) {
 const tileJson = () => cachedJson(TILEJSON_URL, 'bdmap.tilejson');
 // Our own copy of Bangladesh's tiles on R2 (tools/build-tiles.mjs, same OpenMapTiles layers): used only when
 // OpenFreeMap's tile index cannot be had at all, so the country's map still opens.
-const BD_TILES = 'https://pub-d68dd5fec84b4bbfa461621fce349435.r2.dev/tiles/bd.pmtiles';
+// Our map files on R2, under our own domain: Cloudflare keeps them in its cache near the reader (a cache rule for
+// tiles.manzeela.com), where the bucket's r2.dev address was rate-limited and never cached.
+const TILES_HOST = 'https://tiles.manzeela.com';
+const BD_TILES = TILES_HOST + '/tiles/bd.pmtiles';
 // Hill shading waits until the map is up: its elevation tiles come from AWS in the US and take two seconds or
 // more each, and the map's first view should not wait for shading.
 let pendingHills = null;
@@ -727,8 +730,8 @@ async function buildStyle() {
 
 // Bangladesh's buildings, from our own PMTiles file on R2 (tools/build-tiles.mjs), read a piece at a time.
 // Added once the map is up, never in the first style: MapLibre's 'load' waits for every source in the style, so a
-// slow or refused R2 (its public r2.dev address is rate-limited) would keep the whole map from opening.
-const BD_BUILDINGS = 'https://pub-d68dd5fec84b4bbfa461621fce349435.r2.dev/tiles/buildings-bd.pmtiles';
+// slow or refused R2 would keep the whole map from opening.
+const BD_BUILDINGS = TILES_HOST + '/tiles/buildings-bd.pmtiles';
 let pmtilesOn = false;
 function addBdBuildings() {
   if (!window.pmtiles || map.getSource('bdb')) return;          // no library: the base map's buildings stay
