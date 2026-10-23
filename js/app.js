@@ -2137,3 +2137,23 @@ document.addEventListener('focusin', e => {
     t.spellcheck = false; t.setAttribute('autocorrect', 'off'); t.setAttribute('autocapitalize', 'off'); t.dataset.plain = '1';
   }
 });
+
+// PC map: the place chips sit in one row beside the search box, as in Google Maps. When they do not all fit, the row
+// fades at the edge, arrows move it, and the mouse wheel scrolls it sideways (phones swipe it as before).
+(() => {
+  const chips = $('ms-chips'), bar = el('div', 'ms-chipbar');
+  const arrow = (side, icon) => { const b = el('button', 'ms-chipnav ' + side); b.type = 'button'; b.innerHTML = svg(icon); b.setAttribute('aria-label', side === 'l' ? 'আগের' : 'পরের'); return b; };
+  const l = arrow('l', 'back'), r = arrow('r', 'chev');
+  chips.before(bar); bar.append(l, chips, r);
+  const paint = () => {
+    const max = chips.scrollWidth - chips.clientWidth;
+    bar.classList.toggle('more-l', chips.scrollLeft > 2);
+    bar.classList.toggle('more-r', chips.scrollLeft < max - 2);
+  };
+  const step = d => chips.scrollBy({ left: d * Math.max(160, chips.clientWidth * 0.7), behavior: 'smooth' });
+  l.addEventListener('click', () => step(-1)); r.addEventListener('click', () => step(1));
+  chips.addEventListener('scroll', paint, { passive: true });
+  chips.addEventListener('wheel', e => { if (Math.abs(e.deltaY) > Math.abs(e.deltaX) && chips.scrollWidth > chips.clientWidth) { e.preventDefault(); chips.scrollLeft += e.deltaY; } }, { passive: false });
+  new ResizeObserver(paint).observe(chips);
+  addEventListener('resize', paint);
+})();

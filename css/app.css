@@ -4431,3 +4431,31 @@ button.dg-wiki { background: none; border: 0; padding: 0; cursor: pointer; font:
 .fp-t em { font-style: normal; font-size: 13px; color: var(--muted); }
 .fp-head { display: flex; align-items: center; gap: 6px; }
 .fp-back { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 50%; color: var(--ink); background: none; font-size: 20px; }
+
+/* PC map: the place chips in one row beside the search box, as in Google Maps */
+.ms-chipbar { display: contents; }
+.ms-chipnav { display: none; }
+@media (min-width: 761px) {
+  .ms-chipbar { display: block; position: absolute; top: 9px; left: calc(100% + 12px); width: max-content; max-width: calc(100vw - 16px - 392px - 12px - 92px); pointer-events: auto; }
+  .ms-chipbar .ms-chips { margin: 0; padding: 0 2px 6px; }
+  .ms-chipbar.more-r .ms-chips { -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 70px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 70px), transparent); }
+  .ms-chipbar.more-l .ms-chips { -webkit-mask-image: linear-gradient(90deg, transparent, #000 70px); mask-image: linear-gradient(90deg, transparent, #000 70px); }
+  .ms-chipbar.more-l.more-r .ms-chips { -webkit-mask-image: linear-gradient(90deg, transparent, #000 70px, #000 calc(100% - 70px), transparent); mask-image: linear-gradient(90deg, transparent, #000 70px, #000 calc(100% - 70px), transparent); }
+  .ms-chipnav { position: absolute; top: 0; z-index: 2; width: 36px; height: 36px; border-radius: 50%; place-items: center; font-size: 17px; color: var(--ink);
+    background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow-1); transition: transform .15s var(--ease); }
+  .ms-chipnav:hover { transform: scale(1.06); }
+  .ms-chipnav.l { left: -4px; } .ms-chipnav.r { right: -4px; }
+  .ms-chipbar.more-l .ms-chipnav.l, .ms-chipbar.more-r .ms-chipnav.r { display: grid; }
+  .ms-chip { cursor: pointer; }
+  .ms-chip:hover { background: var(--surface); }
+}
+@media (min-width: 761px) {
+  .ms-chipnav svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+  /* solid chips, readable over the satellite photo too */
+  .ms-chip { background: var(--surface); border-color: transparent; box-shadow: 0 1px 2px rgba(0, 0, 0, .12), 0 4px 14px -4px rgba(0, 0, 0, .22); -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .ms-chip:hover { background: color-mix(in srgb, var(--surface) 90%, var(--ink)); }
+}
+@media (min-width: 761px) {
+  .map-tools button { background: var(--surface); border-color: transparent; box-shadow: 0 1px 2px rgba(0, 0, 0, .12), 0 4px 14px -4px rgba(0, 0, 0, .22); -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .map-tools button:hover { background: color-mix(in srgb, var(--surface) 90%, var(--ink)); }
+}
