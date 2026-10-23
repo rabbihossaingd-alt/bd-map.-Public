@@ -1543,7 +1543,9 @@ function showPlace(pl) {
 (function initMapSearch() {
   const input = $('ms-input'), sug = $('ms-sug'), clear = $('ms-clear');
   let timer = null, seq = 0;
-  const here = () => myLoc || (map ? { lat: map.getCenter().lat, lon: map.getCenter().lng } : { lat: 23.81, lon: 90.41 });
+  // where to look first: you, or the part of the map you are looking at; with the whole country on screen (or no map yet),
+  // Dhaka — where most searches are — rather than the middle of the country
+  const here = () => myLoc || (map && map.getZoom() >= 9 ? { lat: map.getCenter().lat, lon: map.getCenter().lng } : { lat: 23.81, lon: 90.41 });
   const item = (pl, icon) => {
     const k = POI_KINDS.find(x => x[0] === pl.kind);
     const row = el('div', 'sug');

@@ -501,12 +501,25 @@ async function photonNear(center, tag, radiusKm) {
 //     (phone, opening hours, clinic or hospital, mosque rather than any place of worship). `onMore` is then
 //     called with the fuller list.
 const MOSQUE = /মসজিদ|masjid|mosque|mosjid|jame|জামে/i;
+// Do a Bangla name and an English one start with the same sound (প্যান… / Pan…)? Only the first letter is compared,
+// enough to keep two different places a street apart from being taken for one.
+const BN_START = { 'প': 'p', 'ফ': 'fp', 'ব': 'bv', 'ভ': 'bv', 'ম': 'm', 'ন': 'n', 'ণ': 'n', 'র': 'r', 'ল': 'l', 'স': 'sc', 'শ': 'sc', 'ষ': 'sc', 'ক': 'kcq', 'খ': 'k', 'গ': 'g', 'ঘ': 'g',
+  'জ': 'jz', 'ঝ': 'jz', 'য': 'jzy', 'ড': 'd', 'দ': 'd', 'ধ': 'd', 'ঢ': 'd', 'ট': 't', 'ত': 't', 'থ': 't', 'ঠ': 't', 'হ': 'h', 'চ': 'c', 'ছ': 'c', 'অ': 'ao', 'আ': 'a', 'ই': 'ie', 'ঈ': 'ie', 'উ': 'u', 'এ': 'ae', 'ও': 'o', 'ঔ': 'o', 'ঐ': 'o' };
+function sameStart(x, y) {
+  const b = /[ঀ-৿]/.test(x) ? x : y, l = b === x ? y : x;
+  const first = (b.match(/[অ-হ]/) || [''])[0], letter = (l.toLowerCase().match(/[a-z]/) || [''])[0];
+  return !!first && !!letter && (BN_START[first] || '').includes(letter);
+}
 function mergePlaces(lists) {
   // The same building is often mapped twice (a point and an outline): keep one per name within 120 m.
   const out = [];
   for (const p of lists.flat().sort((a, b) => a.km - b.km)) {
-    const twin = out.find(o => haversineKm(o, p) < 0.12 && (o.title === p.title || !Object.keys(p.x).length));
-    if (twin) twin.x = { ...p.x, ...twin.x }; else out.push(p);
+    // …and the same place under its Bangla and its English name a few metres apart (প্যান প্যাসিফিক হাসপাতাল / Pan Pacific
+    // Hospital): one, shown in the app's language
+    const bn = t => /[ঀ-৿]/.test(t || '');
+    const twin = out.find(o => (haversineKm(o, p) < 0.12 && o.title === p.title) || (haversineKm(o, p) < 0.06 && bn(o.title) !== bn(p.title) && sameStart(o.title, p.title)));
+    if (twin) { twin.x = { ...p.x, ...twin.x }; if (bn(p.title) !== bn(twin.title) && (LANG === 'en' ? !bn(p.title) : bn(p.title))) twin.title = p.title; }
+    else out.push(p);
   }
   return out.slice(0, 80);
 }

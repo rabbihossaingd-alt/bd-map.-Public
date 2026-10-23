@@ -2830,17 +2830,37 @@ function poisSearch(res, q, lat, lon) {
   json(res, 200, { results: hits.slice(0, 8).map(([, p, km]) => poiOut(p, km)) });
 }
 // ?kind=food&lat=&lon=: the nearest places of one kind, from the cells around the point outwards
+// What each map chip means: "হাসপাতাল" is hospitals (not pharmacies, dentists, labs or a medical-device company), "স্কুল"
+// schools and colleges, "রেস্টুরেন্ট" places to eat (not bus stations or grocers that the data files there), "ব্যাংক ও এটিএম"
+// banks and cash machines (not insurers or accountants). Other chips take their whole kind.
+const CHIP_CATS = {
+  health: c => c === 'hospital',
+  learn: c => /school|college|university/.test(c) && !/driving|dance|art|music|swimming|cooking/.test(c),
+  food: c => /restaurant|cafe|coffee|tea_room|bakery|food_court|dessert|ice_cream|sweet/.test(c),
+  bank: c => /^(bank_or_credit_union|bank|atm|credit_union)$/.test(c)
+};
 function poisNear(res, kind, lat, lon) {
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) return json(res, 400, { error: 'where?' });
   const cy = Math.floor(lat * POI_CELL), cx = Math.floor(lon * POI_CELL), found = [];
   for (let ring = 0; ring <= 12 && found.length < 20; ring++) {
     for (let y = cy - ring; y <= cy + ring; y++) for (let x = cx - ring; x <= cx + ring; x++) {
       if (Math.max(Math.abs(y - cy), Math.abs(x - cx)) !== ring) continue;
-      for (const p of poiCells.get(y + ':' + x) || []) if (p[2] === kind) found.push([poiKm(lat, lon, p[0], p[1]), p]);
+      for (const p of poiCells.get(y + ':' + x) || []) if (p[2] === kind && (!CHIP_CATS[kind] || CHIP_CATS[kind](p[5]))) found.push([poiKm(lat, lon, p[0], p[1]), p]);
     }
   }
   found.sort((a, b) => a[0] - b[0]);
-  json(res, 200, { results: found.slice(0, 20).map(([km, p]) => poiOut(p, km)) });
+  // The same place listed twice (one record named in Bangla, one in English, a few metres apart — OpenStreetMap's and
+  // another source's): one entry, carrying both names.
+  const kept = [];
+  for (const [km, p] of found) {
+    const isBn = t => /[ঀ-৿]/.test(t), latin = t => t.toLowerCase().replace(/[^a-z0-9]+/g, '');
+    const twin = kept.find(([, q]) => q[5] === p[5] && poiKm(q[0], q[1], p[0], p[1]) < 0.03 &&
+      (isBn(q[3]) !== isBn(p[3]) || (latin(q[3]) && latin(q[3]) === latin(p[3]))));
+    if (twin) { const q = twin[1]; if (!q[4] && isBn(p[3]) && !isBn(q[3])) twin[1] = [...q.slice(0, 4), p[3], q[5]]; continue; }
+    kept.push([km, p]);
+    if (kept.length >= 20) break;
+  }
+  json(res, 200, { results: kept.map(([km, p]) => poiOut(p, km)) });
 }
 const poiZipped = new Map();                            // a busy city cell is a few hundred kB as text, a fifth of that zipped
 function poisApi(req, res, searchParams) {

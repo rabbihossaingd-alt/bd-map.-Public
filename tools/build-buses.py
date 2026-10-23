@@ -324,6 +324,7 @@ def km(a, b):
 
 
 def main():
+    sys.stdout.reconfigure(encoding='utf-8')
     data = json.load(io.open(SRC, encoding='utf-8'))['data']
     stops = {sid: (bn, en, lat, lon) for (sid, bn, en, lat, lon) in STOPS.values()}
     for sid, row in MORE_STOPS.items():
@@ -354,6 +355,42 @@ def main():
 
     for bn, en, line in EXTRA_ROUTES:
         routes.append([bn, en, line.split()])
+
+    # Names the dataset spells in English or wrongly (the company's own Bangla name).
+    NAME_FIX = {'Lal Sabuj': 'লাল সবুজ', 'মাঞ্জিল এক্সপ্রেস': 'মঞ্জিল এক্সপ্রেস'}
+    for r in routes:
+        r[0] = NAME_FIX.get(r[0], r[0])
+
+    # One bus, one entry. The dataset lists some buses twice: the same stops under two names (৬নং and ৬নং মতিঝিল বনানী
+    # ট্রান্সপোর্ট), the same company spelt two ways (Deepan / Dipon), or each direction on its own (শিকড়). Buses run
+    # both ways here, so these become one; the longer list of stops and the fuller name are kept.
+    SAME_BUS = [('Deepan', 'Dipon')]
+    base = lambda en: re.sub(r'\s*\([^)]*\)\s*$', '', en).strip()
+    def same(a, b):
+        # the same stops under a shorter and a fuller form of one name (৬নং / ৬নং মতিঝিল বনানী ট্রান্সপোর্ট); two companies
+        # on the same road (Alif and Bhuiyan) stay two buses
+        if (a[2] == b[2] or a[2] == b[2][::-1]) and (a[0].startswith(b[0]) or b[0].startswith(a[0])):
+            return True
+        if any({a[1], b[1]} == set(p) for p in SAME_BUS):
+            return True
+        return base(a[1]) == base(b[1]) and {a[2][0], a[2][-1]} == {b[2][0], b[2][-1]}
+    merged = []
+    for r in routes:
+        twin = next((m for m in merged if same(m, r)), None)
+        if not twin:
+            merged.append(r)
+            continue
+        # the one kept, name and all: the longer list of stops; with the same stops, the fuller name
+        if len(twin[2]) != len(r[2]):
+            keep = twin if len(twin[2]) > len(r[2]) else r
+        else:
+            keep = twin if len(twin[0]) >= len(r[0]) else r
+        if base(twin[1]) == base(r[1]):            # one company, each direction on its own: drop the direction
+            keep[0] = re.sub(r'\s*\([^)]*\)\s*$', '', keep[0]).strip()
+            keep[1] = base(keep[1])
+        merged[merged.index(twin)] = keep
+        print('merged:', twin[1], '+', r[1], '->', keep[0])
+    routes = merged
 
     # Several buses share a name (BRTC, Alif, Trust…): tell them apart by their two ends.
     seen = {}
