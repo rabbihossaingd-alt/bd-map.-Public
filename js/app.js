@@ -242,8 +242,18 @@ function revealOnScroll(root) {
   }
 }
 
+// Links that open something inside a page, so they can be shared: #/trip?from=lat,lon,name&to=lat,lon,name opens that
+// route, #/district/<id> that district's card.
+const placeParam = v => { const [lat, lon, ...rest] = String(v || '').split(','); const p = { lat: Number(lat), lon: Number(lon), label: decodeURIComponent(rest.join(',')) || '' }; return isFinite(p.lat) && isFinite(p.lon) && p.lat && p.lon ? p : null; };
+const placeToParam = p => `${(+p.lat).toFixed(5)},${(+p.lon).toFixed(5)},${encodeURIComponent(p.label || '')}`;
+const tripLink = () => trip.from && trip.to ? `${location.origin}/#/trip?from=${placeToParam(trip.from)}&to=${placeToParam(trip.to)}` : location.origin + '/#/trip';
 function route() {
   let name = location.hash.replace(/^#\/?/, '') || 'home';
+  let deep = null;
+  { const [base, query] = name.split('?');
+    if (base.startsWith('district/')) { deep = { district: base.slice(9) }; name = 'districts'; }
+    else if (base === 'trip' && query) { const q = new URLSearchParams(query); deep = { from: placeParam(q.get('from')), to: placeParam(q.get('to')) }; name = 'trip'; }
+    else name = base; }
   if (name === 'intercity') name = 'districts';   // old link
   if (name === 'tour') { try { localStorage.setItem('bdmap.rb', 'tour'); } catch { /* storage off */ } history.replaceState(null, '', '#/districts'); name = 'districts'; }   // now a tab of রূপসী বাংলা
   let scrollToSel = '';
@@ -257,6 +267,8 @@ function route() {
   scrollTo(0, 0);
   if (enter[current]) enter[current]();
   requestAnimationFrame(() => revealOnScroll($('page-' + current)));
+  if (deep && deep.from && deep.to) { trip.from = deep.from; setTimeout(() => setPlace('to', deep.to), 0); }
+  if (deep && deep.district) { const d = districtById(deep.district); if (d) setTimeout(() => { if (window.openDistrictGuide) window.openDistrictGuide(d); }, 300); }
   if (scrollToSel) setTimeout(() => { const t = document.querySelector('#page-' + current + ' ' + scrollToSel); if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 250);
 }
 
@@ -1050,7 +1062,8 @@ async function createMap() {
   // Badges are registered as soon as the style is in, before the first tiles ask for them.
   map.once('styledata', () => { for (const b of badges) if (!map.hasImage(b.name)) map.addImage(b.name, b.img, { pixelRatio: 2 }); });
   // The "loading" note goes as soon as the first frame is drawn; tiles then fill in as they come, as in Google Maps.
-  map.once('render', () => { $('map-loading').hidden = true; });
+  // After the first frame the note becomes a small pill with a spinner at the top until the first tiles are in.
+  map.once('render', () => { const n = $('map-loading'); n.classList.add('pill'); n.textContent = 'ম্যাপ আসছে…'; });
   await new Promise(resolve => map.once('load', resolve));
   $('map-loading').hidden = true;
   if (pendingHills && !map.getSource('hills')) {
@@ -2072,3 +2085,13 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catc
   }, { passive: true });
   addEventListener('hashchange', () => { document.body.classList.remove('nav-away'); lastY = scrollY; });
 })();
+
+// Share the route on the map: a link that opens the same route, with the place names, on any phone.
+$('trip-share').addEventListener('click', async () => {
+  if (!trip.from || !trip.to) return;
+  const url = tripLink(), text = `${tr(trip.from.label)} → ${tr(trip.to.label)} — Manzeela`;
+  try {
+    if (navigator.share) await navigator.share({ title: text, text, url });
+    else { await navigator.clipboard.writeText(url); setStatus('লিংক কপি হয়েছে'); setTimeout(() => setStatus(''), 2000); }
+  } catch { /* the share sheet was closed */ }
+});

@@ -1074,6 +1074,7 @@ function openQuickPost() {
     busy = true;
     let posts = [];
     try { posts = (await exploreApi(`feed?seed=${seed}&o=${offset}`)).posts; } catch { /* shows what is there */ }
+    for (const g of feed.querySelectorAll('.fc-ghost')) g.remove();
     for (const p of posts) feed.appendChild(feedCard(p, start));
     offset += posts.length;
     if (posts.length) last = posts[posts.length - 1].id;
@@ -1093,7 +1094,9 @@ function openQuickPost() {
   }
   function start() {
     last = 0; offset = 0; done = false; busy = false; seed = newSeed();
-    feed.replaceChildren();
+    // two grey cards in the shape of posts while the first ones come
+    const ghost = () => { const g = el('div', 'fc fc-ghost'); g.append(el('div', 'gh-head'), el('div', 'gh-media'), el('div', 'gh-line')); return g; };
+    feed.replaceChildren(ghost(), ghost());
     if (typeof liveIntoFeed === 'function') liveIntoFeed(feed);     // who is live now, at the top (live.js)
     more();
   }

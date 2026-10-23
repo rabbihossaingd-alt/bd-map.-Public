@@ -4389,3 +4389,15 @@ button.dg-wiki { background: none; border: 0; padding: 0; cursor: pointer; font:
 .feed-end .fe-ic { width: 48px; height: 48px; margin-bottom: 6px; border-radius: 50%; display: grid; place-items: center; color: #fff; background: linear-gradient(135deg, #f58529, #dd2a7b 50%, #8134af); }
 .feed-end .fe-ic svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
 .feed-end > span:last-child { max-width: 260px; }
+
+/* H6: while the map's first tiles come, a small pill with a spinner; while the feed's first posts come, grey cards */
+.map-loading.pill { inset: auto; top: calc(14px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); display: flex; gap: 8px; align-items: center;
+  padding: 8px 14px; border-radius: 999px; font-size: 13.5px; color: var(--ink); background: color-mix(in srgb, var(--surface) 88%, transparent); box-shadow: var(--shadow-1); z-index: 5; }
+#page-trip .map-loading.pill { top: calc(124px + env(safe-area-inset-top)); }
+.map-loading.pill::before { content: ''; width: 14px; height: 14px; border-radius: 50%; border: 2px solid color-mix(in srgb, var(--ink) 20%, transparent); border-top-color: var(--accent); animation: spin .8s linear infinite; }
+.fc-ghost { pointer-events: none; }
+.fc-ghost > div { background: var(--raised); border-radius: 10px; animation: ghost 1.4s ease-in-out infinite; }
+.fc-ghost .gh-head { height: 40px; width: 55%; margin: 6px 12px 10px; border-radius: 20px; }
+.fc-ghost .gh-media { aspect-ratio: 4 / 5; border-radius: 0; }
+.fc-ghost .gh-line { height: 14px; width: 40%; margin: 12px; }
+@keyframes ghost { 50% { opacity: .55; } }
