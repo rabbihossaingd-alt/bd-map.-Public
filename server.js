@@ -2618,7 +2618,22 @@ const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; ch
                 '.webmanifest': 'application/manifest+json', '.png': 'image/png', '.jpg': 'image/jpeg', '.ico': 'image/x-icon' };
 const PRIVATE = ['db', 'tools', 'node_modules'];   // never served
 
-function serveFile(req, res, pathname) {
+// Cache versions: each page names its own scripts and styles as file?v=<hash of the file>, so a phone keeps them for
+// a year and asks again only when one changes — no 30 round trips on every visit. vendor/ files carry their
+// version in the name. The pages themselves stay no-cache, so a new version is seen on the next visit.
+const assetHashes = new Map();     // path -> { key: mtime+size, v }
+function assetVersion(rel) {
+  const file = path.join(ROOT, rel);
+  let st; try { st = fs.statSync(file); } catch { return ''; }
+  const key = st.mtimeMs + ':' + st.size, hit = assetHashes.get(rel);
+  if (hit && hit.key === key) return hit.v;
+  const v = crypto.createHash('sha1').update(fs.readFileSync(file)).digest('hex').slice(0, 10);
+  assetHashes.set(rel, { key, v });
+  return v;
+}
+const versionPage = html => html.replace(/(<(?:script|link)\b[^>]*?\b(?:src|href)=")((?:js|css|data)\/[\w./-]+\.(?:js|css))(")/g,
+  (all, a, rel, b) => { const v = assetVersion(rel); return v ? a + rel + '?v=' + v + b : all; });
+function serveFile(req, res, pathname, versioned) {
   let rel;
   try { rel = decodeURIComponent(pathname); } catch { res.writeHead(400).end(); return; }
   if (rel.endsWith('/')) rel += 'index.html';
@@ -2630,9 +2645,20 @@ function serveFile(req, res, pathname) {
   if (blocked) { res.writeHead(404).end('Not found'); return; }
   fs.stat(file, (err, stat) => {
     if (err || !stat.isFile()) { res.writeHead(404).end('Not found'); return; }
+    const type = TYPES[path.extname(file)] || 'application/octet-stream';
+    if (path.extname(file) === '.html') {
+      fs.readFile(file, 'utf8', (e, html) => {
+        if (e) { res.writeHead(500).end(); return; }
+        const body = Buffer.from(versionPage(html));
+        res.writeHead(200, { 'Content-Type': type, 'Content-Length': body.length, 'Cache-Control': 'no-cache' });
+        res.end(req.method === 'HEAD' ? undefined : body);
+      });
+      return;
+    }
+    const forever = versioned || parts[0] === 'vendor';
     // no-cache: the browser keeps a copy but checks it is current, so app updates show up on refresh.
-    res.writeHead(200, { 'Content-Type': TYPES[path.extname(file)] || 'application/octet-stream',
-                         'Content-Length': stat.size, 'Cache-Control': 'no-cache' });
+    res.writeHead(200, { 'Content-Type': type, 'Content-Length': stat.size,
+                         'Cache-Control': forever ? 'public, max-age=31536000, immutable' : 'no-cache' });
     if (req.method === 'HEAD') res.end(); else fs.createReadStream(file).pipe(res);
   });
 }
@@ -2932,7 +2958,7 @@ const server = http.createServer((req, res) => {
   if (pathname.startsWith('/api/auth/')) return authApi(req, res, pathname.slice(10)).catch(() => json(res, 500, { error: 'server error' }));
   if (pathname.startsWith('/api/')) return json(res, 404, { error: 'not found' });
   if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405).end(); return; }
-  serveFile(req, res, pathname);
+  serveFile(req, res, pathname, searchParams.has('v'));
 });
 server.requestTimeout = 0;           // uploads of big videos; idle sockets are still closed by keepAliveTimeout
 server.headersTimeout = 60_000;

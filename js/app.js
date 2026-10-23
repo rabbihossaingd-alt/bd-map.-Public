@@ -725,6 +725,7 @@ async function buildStyle() {
   // Hand the map the tile index directly so it does not fetch it again.
   for (const src of Object.values(style.sources)) {
     if (src.url !== TILEJSON_URL) continue;
+    if (!tiles) await loadMapLib().catch(() => {});
     if (tiles) { delete src.url; Object.assign(src, { tiles: tiles.tiles, minzoom: tiles.minzoom, maxzoom: tiles.maxzoom, attribution: tiles.attribution }); }
     else if (window.pmtiles) { if (!pmtilesOn) { maplibregl.addProtocol('pmtiles', new pmtiles.Protocol().tile); pmtilesOn = true; } src.url = 'pmtiles://' + BD_TILES; src.attribution = '<a href="https://openmaptiles.org" target="_blank" rel="noopener">© OpenMapTiles</a> <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a>'; }
   }
@@ -1054,7 +1055,21 @@ function mapPadding() {
 let stylePromise = null;
 const getMapStyle = () => stylePromise || (stylePromise = buildStyle().catch(e => { stylePromise = null; throw e; }));
 
+// MapLibre (800 kB) and PMTiles load the first time a map is shown, not with Home; they are served from this site
+// (vendor/), so the map does not depend on another CDN, and the service worker keeps them for offline use.
+let mapLib = null;
+function loadMapLib() {
+  if (window.maplibregl && window.pmtiles) return Promise.resolve();
+  if (mapLib) return mapLib;
+  const css = document.createElement('link');
+  css.rel = 'stylesheet'; css.href = 'vendor/maplibre-gl-4.7.1.css';
+  document.head.appendChild(css);
+  const script = src => new Promise((ok, bad) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => bad(new Error('could not load ' + src)); document.head.appendChild(s); });
+  return (mapLib = Promise.all([script('vendor/maplibre-gl-4.7.1.js'), script('vendor/pmtiles-3.2.1.js')]).catch(e => { mapLib = null; throw e; }));
+}
+
 async function createMap() {
+  await loadMapLib();
   const [style, badges] = await Promise.all([getMapStyle(), poiImages()]);
   const dark = isDark();
   map = new maplibregl.Map({ container: 'map', style, bounds: BD_LNGLAT, fitBoundsOptions: { padding: mapPadding() },
