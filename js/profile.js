@@ -30,7 +30,7 @@ function followButton(p, onChange, big) {
   paint();
   b.addEventListener('click', async e => {
     e.stopPropagation();
-    if (!ME) { openLogin(); return; }
+    if (!ME) { needLogin('ফলো করতে লগইন করুন'); return; }
     b.disabled = true;
     const follow = p.relation === 'none' || p.relation === 'follower';
     try {
@@ -63,7 +63,7 @@ async function openPeopleList(id, kind) {
 
 // Find people by name, the way a social app does.
 function openPeopleSearch() {
-  if (!ME) { openLogin(); return; }
+  if (!ME) { needLogin('মানুষ খুঁজতে লগইন করুন'); return; }
   const input = el('input', 'people-q');
   Object.assign(input, { type: 'search', placeholder: 'নাম লিখুন', autocomplete: 'off', maxLength: 40 });
   const box = el('label', 'filter people-search');

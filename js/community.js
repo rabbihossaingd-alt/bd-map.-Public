@@ -112,7 +112,7 @@ async function loadRecentFares() {
   const ERR = { place: 'দুটি জায়গাই তালিকা থেকে বেছে নিন।', fare: 'ভাড়া ৫ থেকে ২০,০০০ টাকার মধ্যে একটি সংখ্যা হতে হবে।', same: 'দুটি আলাদা জায়গা বেছে নিন।',
                 odd: 'এই দূরত্বের জন্য ভাড়াটি অস্বাভাবিক মনে হচ্ছে। সংখ্যাটি আবার দেখে নিন।', slow: 'আজ অনেকগুলো ভাড়া জানিয়েছেন — ধন্যবাদ! কাল আবার জানাতে পারবেন।' };
   send.addEventListener('click', async () => {
-    if (!ME) { openLogin(); return; }
+    if (!ME) { needLogin('ভাড়া জানাতে ও পয়েন্ট পেতে লগইন করুন'); return; }
     if (!picked.from || !picked.to) { say(ERR.place, true); return; }
     send.disabled = true;
     try {

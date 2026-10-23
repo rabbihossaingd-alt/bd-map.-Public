@@ -315,7 +315,7 @@ function ratingStars(key, onChange) {
   for (let n = 1; n <= 5; n++) {
     const b = el('button');
     b.innerHTML = svg('star');
-    b.setAttribute('aria-label', `${n} তারা`);
+    b.setAttribute('aria-label', `${num(n)} তারা`);
     b.addEventListener('click', async e => {
       e.stopPropagation();
       const done = setRating(key, getRating(key) === n ? 0 : n);

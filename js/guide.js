@@ -408,7 +408,7 @@ const coverStyle = (img, division) => {
   }
 
   function openGemForm(d0) {
-    if (!ME) { openLogin(); return; }
+    if (!ME) { needLogin('জায়গার খোঁজ দিতে লগইন করুন'); return; }
     const box = el('div', 'gm-sheet');
     const card = el('div', 'gm-form');
     const close = () => { box.classList.add('out'); setTimeout(() => box.remove(), 260); };
@@ -577,7 +577,7 @@ const coverStyle = (img, division) => {
   window.openMethopath = openMethopath;
   // "share a photo": choose the district and the place, then the place's own photo flow opens
   function pickPlaceForPhoto() {
-    if (!ME) { openLogin(); return; }
+    if (!ME) { needLogin('ছবি দিতে লগইন করুন'); return; }
     const box = el('div', 'gm-sheet'), card = el('div', 'gm-form');
     const close = () => { box.classList.add('out'); setTimeout(() => box.remove(), 260); };
     box.addEventListener('click', e => { if (e.target === box) close(); });
@@ -768,7 +768,7 @@ const coverStyle = (img, division) => {
     const chooser = Object.assign(el('input'), { type: 'file', accept: 'image/jpeg,image/png,image/webp', multiple: true, hidden: true });
     giveBox.append(pick, chooser, givenote);
     body.appendChild(giveBox);
-    const askPhoto = () => { if (!ME) { openLogin(); return; } chooser.click(); };
+    const askPhoto = () => { if (!ME) { needLogin('ছবি দিতে লগইন করুন'); return; } chooser.click(); };
     pick.addEventListener('click', askPhoto); give.addEventListener('click', () => { giveBox.scrollIntoView({ behavior: 'smooth', block: 'center' }); setTimeout(askPhoto, 350); });
     chooser.addEventListener('change', async () => {
       const files = [...chooser.files].slice(0, 3);
@@ -820,7 +820,7 @@ const coverStyle = (img, division) => {
       write.querySelector('.lbl').textContent = data && data.mine && data.mine.review ? tl2('আমার রিভিউ বদলান', 'Edit my review') : tl2('রিভিউ লিখুন', 'Write a review');
     };
     write.addEventListener('click', () => {
-      if (!ME) { openLogin(); return; }
+      if (!ME) { needLogin('রিভিউ লিখতে লগইন করুন'); return; }
       if (rev.querySelector('.pl-form')) return;
       const mine = (data && data.mine && data.mine.review) || { stars: 0, body: '' };
       let stars = mine.stars;

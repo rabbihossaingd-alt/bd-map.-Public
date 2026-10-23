@@ -481,7 +481,7 @@ async function openThread(key) {
 }
 // Start (or open) a conversation with someone who may not be in the list yet — from a profile, for example.
 function openThreadWith(person) {
-  if (!ME) { openLogin(); return; }
+  if (!ME) { needLogin('মেসেজ পাঠাতে লগইন করুন'); return; }
   if (!friendById(person.id)) CHAT.friends.push({ id: person.id, name: person.name, bio: person.bio || '', pic: person.pic || 0, verified: !!person.verified, online: false, since: Date.now(), last: null, unread: 0, ok: person.relation === 'mutual', mutual: person.relation === 'mutual' });
   if (!$('modal').hidden) closeModal();
   go('chat');
@@ -712,7 +712,7 @@ function openForward(m) {
 // Pick one person to talk to them, or several to start a group. The list is the people you follow and the
 // people who follow you; typing a name also searches everyone (for a one-to-one message).
 async function openComposer(addTo) {
-  if (!ME) { openLogin(); return; }
+  if (!ME) { needLogin('মেসেজ পাঠাতে লগইন করুন'); return; }
   const picked = new Map();
   const toRow = el('div', 'to-row');
   const input = el('input');

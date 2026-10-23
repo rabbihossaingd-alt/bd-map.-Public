@@ -130,7 +130,7 @@ const liveClock = t0 => { const s = Math.floor((Date.now() - t0) / 1000); return
 
 // ---- go live ----
 async function startStream() {
-  if (!ME) { openLogin(); return; }
+  if (!ME) { needLogin('লাইভে যেতে লগইন করুন'); return; }
   if (LIVE) return;
   const room = liveRoom(true);
   document.body.appendChild(room.box);
@@ -221,7 +221,7 @@ async function startStream() {
 
 // ---- watch: full screen, or inside a page of the Stream pager (`into`) ----
 async function watchLive(card, into) {
-  if (!ME) { openLogin(); return; }
+  if (!ME) { needLogin('লাইভ দেখতে লগইন করুন'); return; }
   if (LIVE && LIVE.host) return;
   if (LIVE && LIVE.close) LIVE.close();
   if (card.user.id === ME.id) return;

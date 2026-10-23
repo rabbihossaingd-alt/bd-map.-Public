@@ -23,7 +23,7 @@ const canvasFilters = (() => { try { const c = document.createElement('canvas').
 
 let studio = null;
 function openNewPost(opts) {
-  if (!ME) { openLogin(); return; }
+  if (!ME) { needLogin('পোস্ট দিতে লগইন করুন'); return; }
   if (!opts || opts instanceof Event) opts = {};
   closeStudio();
   const st = studio = { mode: opts.mode || 'post', file: null, kind: '', url: '', fx: '', music: opts.music || null, orig: !opts.music, stream: null, facing: 'user', box: el('div', 'studio'), preview: null, layers: [] };
@@ -1015,7 +1015,7 @@ async function sendPost(job) {
     if (job.draftId) draftsTx('readwrite', s => s.delete(job.draftId)).catch(() => {});
     uploads.delete(job);
     pill.done(job.later ? (LANG === 'en' ? 'Scheduled' : 'সময় ঠিক হয়েছে') : job.mode === 'story' ? 'স্টোরি দেওয়া হয়েছে' : job.mode === 'reel' ? 'রিল পোস্ট হয়েছে' : 'পোস্ট হয়েছে');
-    if (typeof refreshStoryRings === 'function') refreshStoryRings();
+    if (typeof refreshStoryRings === 'function') refreshStoryRings(true);
     if (current === 'explore') enter.explore(); else if (current === 'profile') drawProfile();
     if (document.hidden && 'Notification' in window && Notification.permission === 'granted') new Notification('Manzeela', { body: 'আপনার পোস্টটি দেওয়া হয়েছে।', icon: 'icon.svg' });
   } catch (e) {

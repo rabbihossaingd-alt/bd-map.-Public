@@ -2779,8 +2779,35 @@ function poisApi(req, res, searchParams) {
   res.end(z);
 }
 
+// The site's own address. The old one (bd-map.onrender.com) sends pages there, so search engines and shared links see
+// one site; the API stays answering on both, for apps still open on the old address.
+const SITE = (process.env.SITE_URL || 'https://manzeela.com').replace(/\/+$/, '');
+// Headers every answer carries: HTTPS only from now on (HSTS), no guessing of file types, no showing the site inside
+// someone else's frame, only the origin as referrer, and the camera, microphone and location for this site alone.
+// (A full allowlist CSP would have to name every map, search and music host; these four lines are the part that
+// cannot break anything.)
+const SECURITY_HEADERS = {
+  'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
+  'Permissions-Policy': 'camera=(self), microphone=(self), geolocation=(self), display-capture=(self)',
+  'Content-Security-Policy': "frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'"
+};
+const ROBOTS = `User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /admin.html\nSitemap: ${SITE}/sitemap.xml\n`;
+const sitemap = () => `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${['/', '/privacy.html', '/terms.html', '/delete-account.html']
+  .map(p => `  <url><loc>${SITE}${p}</loc><changefreq>${p === '/' ? 'daily' : 'monthly'}</changefreq></url>`).join('\n')}\n</urlset>\n`;
+
 const server = http.createServer((req, res) => {
   const { pathname, searchParams } = new URL(req.url, 'http://localhost');
+  for (const [k, v] of Object.entries(SECURITY_HEADERS)) res.setHeader(k, v);
+  const host = String(req.headers.host || '').toLowerCase();
+  if (host.endsWith('.onrender.com') && (req.method === 'GET' || req.method === 'HEAD') && !pathname.startsWith('/api/') && !pathname.startsWith('/media/')) {
+    res.writeHead(301, { Location: SITE + req.url, 'Cache-Control': 'public, max-age=86400' });
+    return res.end();
+  }
+  if (pathname === '/robots.txt') { res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'public, max-age=86400' }); return res.end(req.method === 'HEAD' ? '' : ROBOTS); }
+  if (pathname === '/sitemap.xml') { res.writeHead(200, { 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': 'public, max-age=86400' }); return res.end(req.method === 'HEAD' ? '' : sitemap()); }
   if (pathname === '/api/ratings') return api(req, res).catch(() => json(res, 500, { error: 'server error' }));
   if (pathname === '/api/fares') return faresApi(req, res).catch(() => json(res, 500, { error: 'server error' }));
   if (pathname.startsWith('/api/chat/')) return chatApi(req, res, pathname.slice(10), searchParams).catch(e => { console.error(e); if (!res.headersSent) json(res, 500, { error: 'server error' }); });

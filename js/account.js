@@ -200,6 +200,9 @@ function authInput(label, attrs, icon) {
 }
 const linkBtn = (text, fn) => { const b = el('button', 'auth-link', text); b.type = 'button'; b.addEventListener('click', fn); return b; };
 
+// Something needs an account (a like, a comment, a follow…): the login opens saying so.
+let authWhy = '';
+function needLogin(why) { authWhy = why || ''; openLogin(); }
 function openLogin(mode = 'login', presetEmail = '') {
   if (mode === 'signup') return openSignup(presetEmail);
   const [emailBox, email] = authInput('ই-মেইল ঠিকানা', { type: 'email', autocomplete: 'email', inputMode: 'email', maxLength: 120, value: presetEmail }, 'send');
@@ -226,6 +229,7 @@ function openLogin(mode = 'login', presetEmail = '') {
   const divider = el('div', 'auth-or', 'অথবা');
   const create = el('button', 'auth-btn ghost', 'নতুন অ্যাকাউন্ট খুলুন');
   create.addEventListener('click', () => openSignup(email.value));
+  if (authWhy) { form.prepend(el('div', 'auth-why', authWhy)); authWhy = ''; }
   authShell([form, divider, create], [legalLine()]);
   email.focus();
 }

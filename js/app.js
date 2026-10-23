@@ -423,7 +423,11 @@ function renderRecent() {
   const [fId, fSight, fName, fFile] = FEATURED[Math.floor(Date.now() / 864e5) % FEATURED.length];
   const fImg = $('hm-feature-img');
   fImg.addEventListener('load', () => $('hm-feature').classList.add('in'));
-  fImg.src = `https://upload.wikimedia.org/wikipedia/commons/thumb/${fFile}/960px-${fFile.split('/').pop()}`;
+  // the size the screen needs: a phone takes the 500 px picture, a wide screen the 960 or 1280 one (Wikimedia's standard widths)
+  const fUrl = w => `https://upload.wikimedia.org/wikipedia/commons/thumb/${fFile}/${w}px-${fFile.split('/').pop()}`;
+  fImg.sizes = '(max-width: 760px) calc(100vw - 32px), 720px';
+  fImg.srcset = [500, 960, 1280].map(w => `${fUrl(w)} ${w}w`).join(', ');
+  fImg.src = fUrl(960);
   fImg.alt = fName;
   $('hm-feature-name').textContent = fName;
   $('hm-feature-sub').textContent = `${districtById(fId).bn} জেলা · ${districtById(fId).division} বিভাগ`;

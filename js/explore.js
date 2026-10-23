@@ -30,7 +30,7 @@ async function sharePost(p) {
   } catch { /* the share sheet was closed */ }
 }
 async function toggleSave(p, repaint) {
-  if (!ME) { openLogin(); return; }
+  if (!ME) { needLogin('পোস্ট সেভ করতে লগইন করুন'); return; }
   p.saved = !p.saved;
   repaint();
   try { Object.assign(p, await exploreApi('save', { id: p.id })); repaint(); if (p.saved) exploreNote('সেভ করা হয়েছে — প্রোফাইলে পাবেন।'); } catch { /* keeps what was shown */ }
@@ -38,7 +38,7 @@ async function toggleSave(p, repaint) {
 
 // Like or unlike. The heart and the count change at once; the server's answer then settles the number.
 async function toggleLike(p, repaint) {
-  if (!ME) { openLogin(); return; }
+  if (!ME) { needLogin('লাইক দিতে লগইন করুন'); return; }
   p.liked = !p.liked;
   if (p.likes !== null) p.likes += p.liked ? 1 : -1;      // null: the owner hid the count
   repaint(true);
@@ -406,7 +406,7 @@ function openComments(p, onCount) {
   }
   form.addEventListener('submit', async e => {
     e.preventDefault();
-    if (!ME) { openLogin(); return; }
+    if (!ME) { needLogin('মন্তব্য করতে লগইন করুন'); return; }
     const text = input.value.trim();
     if (!text) return;
     input.value = ''; send.disabled = true;
@@ -497,7 +497,7 @@ async function openPost(id, onGone) {
   form.append(input, el('button', 'send-cmt', 'পাঠান'));
   form.addEventListener('submit', async e => {
     e.preventDefault();
-    if (!ME) { openLogin(); return; }
+    if (!ME) { needLogin('মন্তব্য করতে লগইন করুন'); return; }
     const text = input.value.trim();
     if (!text) return;
     input.value = '';
@@ -591,7 +591,7 @@ function openAudioSheet(p) {
 function useAudioOf(p) {
   const music = audioOf(p);
   if (!music) return;
-  if (!ME) { openLogin(); return; }
+  if (!ME) { needLogin('এই অডিও দিয়ে রিল বানাতে লগইন করুন'); return; }
   openNewPost({ music, mode: 'reel' });
 }
 const audioName = p => p.music ? soundLabel(p) : p.aname || `${p.user.name} · ${LANG === 'en' ? 'Original audio' : 'মূল অডিও'}`;
@@ -664,7 +664,7 @@ async function openReels(startId, user) {
     if (!ME || p.user.id !== ME.id) {
       const follow = el('button', 'reel-follow', 'ফলো করুন');
       follow.addEventListener('click', async () => {
-        if (!ME) { openLogin(); return; }
+        if (!ME) { needLogin('ফলো করতে লগইন করুন'); return; }
         follow.disabled = true;
         try { await chatApi('friend', { id: p.user.id }); follow.textContent = 'ফলো করছেন'; follow.classList.add('done'); } catch { follow.disabled = false; }
       });
@@ -761,8 +761,18 @@ function storyClass(id) {
   if (i == null) return '';
   return (seenStories()[id] || 0) >= STORY.groups[i].items.at(-1).id ? 'st-ring st-seen' : 'st-ring';
 }
-async function refreshStoryRings() {
-  try { STORY.groups = (await exploreApi('stories')).stories; } catch { return; }
+// One request serves the rings and the row above the feed (they used to ask twice as the page opened); 'fresh' after
+// posting a story and on the three-minute refresh.
+let storiesReq = null, storiesAt = 0;
+function fetchStories(fresh) {
+  if (!fresh && storiesReq && Date.now() - storiesAt < 20_000) return storiesReq;
+  storiesAt = Date.now();
+  storiesReq = exploreApi('stories').then(d => d.stories);
+  storiesReq.catch(() => { storiesReq = null; });
+  return storiesReq;
+}
+async function refreshStoryRings(fresh) {
+  try { STORY.groups = await fetchStories(fresh); } catch { return; }
   STORY.by = new Map(STORY.groups.map((g, i) => [g.user.id, i]));
   paintRings();
 }
@@ -783,11 +793,11 @@ document.addEventListener('click', e => {
   openStories(STORY.groups, i, paintRings);
 }, true);
 refreshStoryRings();
-setInterval(() => { if (!document.hidden) refreshStoryRings(); }, 180_000);
+setInterval(() => { if (!document.hidden) refreshStoryRings(true); }, 180_000);
 
 async function loadStories(row) {
   let groups = [];
-  try { groups = (await exploreApi('stories')).stories; } catch { /* the row still offers to add one */ }
+  try { groups = await fetchStories(); } catch { /* the row still offers to add one */ }
   STORY.groups = groups;
   STORY.by = new Map(groups.map((g, i) => [g.user.id, i]));
   const seen = seenStories();
@@ -805,7 +815,7 @@ async function loadStories(row) {
   row.hidden = false;
 }
 function addStory() {
-  if (!ME) { openLogin(); return; }
+  if (!ME) { needLogin('স্টোরি দিতে লগইন করুন'); return; }
   openNewPost({ mode: 'story' });
 }
 // The viewer: one story at a time, bars across the top, tap the right side for the next and the left for the last.
@@ -915,7 +925,7 @@ function uploadMedia(blob, type, onProgress, hold) {
 }
 
 function openQuickPost() {
-  if (!ME) { openLogin(); return; }
+  if (!ME) { needLogin('পোস্ট দিতে লগইন করুন'); return; }
   let file = null, place = null;
   const pick = el('button', 'post-pick');
   pick.append(ic('image'), el('b', null, 'ছবি বা ভিডিও বেছে নিন'), el('span', null, 'অথবা কিছু না বেছে শুধু লেখা পোস্ট করুন'));
@@ -1002,6 +1012,12 @@ function openQuickPost() {
     offset += posts.length;
     if (posts.length) last = posts[posts.length - 1].id;
     done = posts.length < 30;
+    // the end of the feed says so, as Instagram's 'You're all caught up'
+    if (done && feed.querySelector('.fc:not(.fc-live)') && !feed.querySelector('.feed-end')) {
+      const end = el('div', 'feed-end');
+      end.append(Object.assign(el('span', 'fe-ic'), { innerHTML: svg('check') }), el('b', null, 'সব দেখে ফেলেছেন'), el('span', null, 'নতুন পোস্ট এলে এখানে দেখাবে।'));
+      feed.appendChild(end);
+    }
     if (!feed.querySelector('.fc:not(.fc-live)')) {
       const none = el('div', 'prof-none');
       none.append(ic('image'), el('b', null, 'এখনো কেউ কিছু পোস্ট করেননি। প্রথম পোস্টটি আপনার হোক।'), button('plus', 'নতুন পোস্ট', () => openNewPost()));
@@ -1148,7 +1164,7 @@ const NOTIFY_TEXT = {
   tag: ['আপনাকে একটি পোস্টে ট্যাগ করেছেন।', 'tagged you in a post.']
 };
 async function openNotifications() {
-  if (!ME) { openLogin(); return; }
+  if (!ME) { needLogin('নোটিফিকেশন দেখতে লগইন করুন'); return; }
   const box = el('div', 'notif');
   const head = el('header', 'notif-head');
   const back = el('button', 'icon-btn');

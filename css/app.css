@@ -4371,3 +4371,21 @@ button.dg-wiki { background: none; border: 0; padding: 0; cursor: pointer; font:
 .dg-found { margin: 4px 2px 12px; font-size: 14px; font-weight: 600; color: var(--ink-2); }
 /* a field the keyboard brings into view stays clear of the sticky bars above it */
 .page input, .page textarea { scroll-margin-top: 96px; }
+/* contrast: the quiet grey text reads in sunlight (4.5:1 on the page and on cards, WCAG AA) */
+:root:not([data-theme=dark]) { --muted: #5f6875; }
+/* touch targets of at least 44 px: footer links, chips, the login pill */
+.site-foot nav a { display: inline-flex; align-items: center; min-height: 44px; }
+.chip, .hm-chips .chip, .chips .chip { min-height: 44px; display: inline-flex; align-items: center; }
+.hm-acct { min-height: 44px; }
+/* why the login opened ("লাইক দিতে লগইন করুন") */
+.auth-why { display: inline-flex; align-items: center; gap: 8px; margin: 0 auto 14px; padding: 8px 14px; border-radius: 999px; background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); font-weight: 700; font-size: 14px; }
+/* the login field's icon was near-white on the white light-theme field: it shows now, darker once something is typed */
+:root[data-theme=light] .auth-field .fic { color: #8a93a1; }
+:root[data-theme=light] .auth-field input:not(:placeholder-shown) ~ .fic { color: #48505c; }
+:root[data-theme=light] .auth-field input:focus ~ .fic { color: #0095f6; }
+/* the end of the feed */
+.feed-end { display: grid; justify-items: center; gap: 4px; padding: 34px 16px 120px; text-align: center; color: var(--muted); font-size: 14px; }
+.feed-end b { color: var(--ink); font-size: 16px; }
+.feed-end .fe-ic { width: 48px; height: 48px; margin-bottom: 6px; border-radius: 50%; display: grid; place-items: center; color: #fff; background: linear-gradient(135deg, #f58529, #dd2a7b 50%, #8134af); }
+.feed-end .fe-ic svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.feed-end > span:last-child { max-width: 260px; }
