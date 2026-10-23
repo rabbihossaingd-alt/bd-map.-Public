@@ -910,10 +910,34 @@ function videoPoster(file, at) {
     setTimeout(() => done(''), 8000);
   });
 }
-function uploadMedia(blob, type, onProgress, hold) {
+// Upload a photo or video for a post. A video is first made light on the phone (transcode.js: 720 p, about 2 Mbit/s);
+// then anything over 8 MB goes up in 4 MB pieces, each tried again after a lost connection, going on from where the
+// server says it got to — a weak mobile signal no longer means starting again. onProgress(fraction, sent, total, phase)
+// where phase is 'make' while the video is made and 'send' while it goes up. hold.xhr.abort() stops it.
+const PIECE = 4 * 1024 * 1024, PIECES_FROM = 8 * 1024 * 1024;
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const waitOnline = () => navigator.onLine === false ? new Promise(r => addEventListener('online', r, { once: true })) : Promise.resolve();
+function uploadMedia(blob, type, onProgress = () => {}, hold) {
+  return (async () => {
+    const h = hold || {};
+    let file = blob;
+    if (/^video\//.test(type) && typeof shrinkVideo === 'function') {
+      h.xhr = { abort() { h.stopped = true; } };
+      try {
+        const small = await shrinkVideo(blob, f => onProgress(f * 0.4, 0, 0, 'make'), h);
+        if (small) { file = small; type = 'video/mp4'; }
+      } catch (e) { if (!h.stopped) console.warn('video kept as it is:', e && e.message); }
+      if (h.stopped) throw new Error('stopped');
+    }
+    const base = file !== blob ? 0.4 : 0;
+    const prog = (f, sent, total) => onProgress(base + f * (1 - base), sent, total, 'send');
+    return file.size > PIECES_FROM ? sendPieces(file, type, prog, h) : sendWhole(file, type, prog, h);
+  })();
+}
+function sendWhole(blob, type, onProgress, hold) {
   return new Promise((resolve, reject) => {
     const x = new XMLHttpRequest();
-    if (hold) hold.xhr = x;                              // lets the caller stop it
+    hold.xhr = { abort() { hold.stopped = true; x.abort(); } };
     x.onabort = () => reject(new Error('stopped'));
     x.open('POST', 'api/explore/media');
     x.setRequestHeader('Content-Type', type);
@@ -922,6 +946,48 @@ function uploadMedia(blob, type, onProgress, hold) {
     x.onerror = () => reject(new Error('server'));
     x.send(blob);
   });
+}
+function sendPiece(piece, type, id, offset, total, onLoaded, hold) {
+  return new Promise((resolve, reject) => {
+    const x = new XMLHttpRequest();
+    hold.xhr = { abort() { hold.stopped = true; x.abort(); } };
+    x.onabort = () => reject(new Error('stopped'));
+    x.open('POST', `api/explore/chunk?id=${id}&offset=${offset}&size=${total}`);
+    x.setRequestHeader('Content-Type', type);
+    x.upload.onprogress = e => { if (e.lengthComputable) onLoaded(e.loaded); };
+    x.onload = () => {
+      let d = {};
+      try { d = JSON.parse(x.responseText); } catch { return reject(new Error('net')); }
+      if (x.status === 200) resolve(d);
+      else if (x.status === 409) resolve({ conflict: true, size: d.size });
+      else reject(new Error(d.error || (x.status >= 500 ? 'net' : 'server')));
+    };
+    x.onerror = () => reject(new Error('net'));
+    x.timeout = 120_000; x.ontimeout = () => reject(new Error('net'));
+    x.send(piece);
+  });
+}
+async function sendPieces(file, type, onProgress, hold) {
+  const id = [...crypto.getRandomValues(new Uint8Array(12))].map(b => b.toString(16).padStart(2, '0')).join('');
+  let offset = 0, tries = 0;
+  for (;;) {
+    if (hold.stopped) throw new Error('stopped');
+    const end = Math.min(file.size, offset + PIECE), at = offset;
+    let r;
+    try { r = await sendPiece(file.slice(at, end), type, id, at, file.size, l => onProgress((at + l) / file.size, at + l, file.size), hold); }
+    catch (e) {
+      if (e.message !== 'net') throw e;                          // a real answer (too big, too many today, …): stop
+      if (++tries > 20) throw new Error('server');
+      await waitOnline();
+      await sleep(Math.min(15_000, 700 * 2 ** Math.min(tries, 5)));
+      try { const st = await (await fetch('api/explore/chunk?id=' + id)).json(); offset = Number(st.size) || 0; } catch { /* ask again next time */ }
+      continue;
+    }
+    tries = 0;
+    if (r.media) { onProgress(1, file.size, file.size); return r.media; }
+    if (r.conflict) { if (r.size >= 0) offset = r.size; else await sleep(800); continue; }
+    offset = r.size;
+  }
 }
 
 function openQuickPost() {

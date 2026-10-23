@@ -130,7 +130,7 @@ async function takeFile(file, baked) {
 // only waits for what is left.
 function startUpload(file) {
   const pre = { file, f: 0, sent: 0, total: file.size, on: null };
-  pre.promise = uploadMedia(file, videoType(file), (f, sent, total) => { Object.assign(pre, { f, sent, total }); if (pre.on) pre.on(f, sent, total); }, pre);
+  pre.promise = uploadMedia(file, videoType(file), (f, sent, total, phase) => { Object.assign(pre, { f, sent, total, phase }); if (pre.on) pre.on(f, sent, total, phase); }, pre);
   pre.promise.then(() => { pre.done = true; }, () => {});
   return pre;
 }
@@ -1001,9 +1001,9 @@ async function sendPost(job) {
   try {
     const sent = [];
     for (const [i, part] of job.parts.entries()) {
-      const step = (f, done, total) => pill.progress((i + f) / n, n === 1 ? done : 0, n === 1 ? total : 0);
+      const step = (f, done, total, phase) => pill.progress((i + f) / n, n === 1 ? done : 0, n === 1 ? total : 0, phase);
       let m = null;
-      if (part.pre) { part.pre.on = step; step(part.pre.f, part.pre.sent, part.pre.total); try { m = await part.pre.promise; } catch { m = null; } }
+      if (part.pre) { part.pre.on = step; step(part.pre.f, part.pre.sent, part.pre.total, part.pre.phase); try { m = await part.pre.promise; } catch { m = null; } }
       if (!m) m = await uploadMedia(part.blob, part.type, step);
       sent.push({ ...part, media: m });
     }
@@ -1043,9 +1043,11 @@ function uploadPill(job) {
   const mb = n => n >= 1e9 ? (n / 1e9).toFixed(2) + ' GB' : Math.max(.1, n / 1e6).toFixed(1) + ' MB';
   const out = () => { pill.classList.remove('in'); setTimeout(() => pill.remove(), 400); };
   return {
-    progress(f, done, total) {
+    progress(f, done, total, phase) {
       fill.style.width = Math.round(f * 100) + '%';
-      sub.textContent = (LANG === 'en' ? Math.floor(f * 100) : num(Math.floor(f * 100))) + '%' + (total ? ` · ${mb(done)} / ${mb(total)}` : '');
+      const pct = (LANG === 'en' ? Math.floor(f * 100) : num(Math.floor(f * 100))) + '%';
+      // while the video is being made light on the phone, say so (then the upload's own numbers)
+      sub.textContent = phase === 'make' ? (LANG === 'en' ? `Preparing the video · ${pct}` : `ভিডিও তৈরি হচ্ছে · ${pct}`) : pct + (total ? ` · ${mb(done)} / ${mb(total)}` : '');
     },
     done(t) { pill.classList.add('ok'); title.textContent = t; sub.textContent = 'সবাই দেখতে পাবে'; fill.style.width = '100%'; setTimeout(out, 2600); },
     fail(t, retry) {

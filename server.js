@@ -1291,6 +1291,10 @@ async function supportApi(req, res, action, query) {
 // served from /media/<name>. A photo is shrunk in the browser before it is sent; a video is sent as it is and
 // may be up to 3 GB (streamed to disk as it arrives, never held in memory). An upload not turned into a post within an hour is removed.
 const MEDIA_DIR = path.join(DATA_DIR, 'media');
+const PARTIAL_DIR = path.join(DATA_DIR, 'partial');   // uploads arriving in pieces (see 'chunk')
+fs.rmSync(PARTIAL_DIR, { recursive: true, force: true });   // pieces from before a restart cannot be finished
+const partials = new Map();                        // `${user}-${id}` -> { file, total, ext, kind, made, busy }
+setInterval(() => { for (const [k, p] of partials) if (!p.busy && Date.now() - p.made > 6 * 3600e3) { fs.rmSync(p.file, { force: true }); partials.delete(k); } }, 30 * 60_000).unref();
 fs.mkdirSync(MEDIA_DIR, { recursive: true });
 const MEDIA_TYPES = { 'image/jpeg': ['.jpg', 'photo', 4e6], 'image/png': ['.png', 'photo', 4e6], 'image/webp': ['.webp', 'photo', 4e6],
                       'video/mp4': ['.mp4', 'video', 3e9], 'video/webm': ['.webm', 'video', 3e9], 'video/quicktime': ['.mov', 'video', 3e9], 'video/x-m4v': ['.mp4', 'video', 3e9],
@@ -1610,6 +1614,13 @@ async function exploreApi(req, res, action, query) {
       const comments = db.prepare('SELECT c.id, c.body, c.created, u.id AS uid, u.name, u.pic_v FROM post_comments c JOIN users u ON u.id = c.user WHERE c.post = ? ORDER BY c.id DESC LIMIT 60').all(p.id);
       return json(res, 200, { post: forViewer(shownPost(p), meId), comments: comments.reverse().map(c => ({ id: c.id, body: c.body, created: c.created, user: { id: c.uid, name: c.name, pic: c.pic_v } })) });
     }
+    if (action === 'chunk') {                          // how much of an upload in pieces has arrived (to go on after a break)
+      if (!me) return json(res, 401, { error: 'login' });
+      const id = String(query.get('id') || ''), part = partials.get(me.id + '-' + id);
+      if (!/^[a-f0-9]{24}$/.test(id) || !part) return json(res, 200, { size: 0 });
+      let size = 0; try { size = fs.statSync(part.file).size; } catch { /* nothing yet */ }
+      return json(res, 200, { size, total: part.total });
+    }
     return json(res, 404, { error: 'not found' });
   }
   if (req.method !== 'POST') return json(res, 405, { error: 'method not allowed' });
@@ -1626,6 +1637,55 @@ async function exploreApi(req, res, action, query) {
     return json(res, 200, { ok: true });
   }
   if (!me) { req.resume(); return json(res, 401, { error: 'login' }); }
+
+  // A big file in pieces (a few MB each): ?id=<24 hex, chosen by the app>&offset=<bytes so far>&size=<whole size>,
+  // the piece as the body. A piece that does not start where the last one ended is refused with the size there is,
+  // so the app goes on from there after a lost connection; the last piece makes the upload, as 'media' does.
+  if (action === 'chunk') {
+    const id = String(query.get('id') || ''), offset = Number(query.get('offset')), total = Number(query.get('size'));
+    const type = MEDIA_TYPES[(req.headers['content-type'] || '').split(';')[0].trim()];
+    if (!/^[a-f0-9]{24}$/.test(id) || !Number.isInteger(offset) || offset < 0 || !Number.isInteger(total) || total < 200 || !type || type[1] === 'audio') { req.resume(); return json(res, 400, { error: 'bad request' }); }
+    const [ext, kind, limit] = type;
+    if (total > limit) { req.resume(); return json(res, 413, { error: 'big' }); }
+    const key = me.id + '-' + id;
+    let part = partials.get(key);
+    if (!part) {
+      if (offset !== 0) { req.resume(); return json(res, 409, { size: 0 }); }
+      if (count('SELECT COUNT(*) AS n FROM uploads WHERE user = ? AND created > ?', me.id, now - 864e5) >= 40) { req.resume(); return json(res, 429, { error: 'slow' }); }
+      try { const f = fs.statfsSync(MEDIA_DIR); if (f.bavail * f.bsize < total + 300e6) { req.resume(); return json(res, 507, { error: 'space' }); } } catch { /* no statfs here */ }
+      fs.mkdirSync(PARTIAL_DIR, { recursive: true });
+      part = { file: path.join(PARTIAL_DIR, key + '.part'), total, ext, kind, made: now, busy: false };
+      fs.rmSync(part.file, { force: true });
+      partials.set(key, part);
+    }
+    if (part.total !== total || part.ext !== ext) { req.resume(); return json(res, 400, { error: 'bad request' }); }
+    if (part.busy) { req.resume(); return json(res, 409, { size: -1 }); }
+    let have = 0; try { have = fs.statSync(part.file).size; } catch { /* a first piece */ }
+    if (offset !== have) { req.resume(); return json(res, 409, { size: have }); }
+    part.busy = true; part.made = now;
+    const out = fs.createWriteStream(part.file, { flags: 'a' });
+    let got = 0, failed = false;
+    const fail = (status, body) => { if (failed) return; failed = true; part.busy = false; out.destroy(); req.resume(); if (!res.headersSent) json(res, status, body); };
+    req.on('data', c => { got += c.length; if (got > 9 * 1024 * 1024 || have + got > total) return fail(413, { error: 'big' }); if (!out.write(c)) { req.pause(); out.once('drain', () => req.resume()); } });
+    req.on('aborted', () => fail(400, { error: 'bad request' }));
+    req.on('error', () => fail(400, { error: 'bad request' }));
+    out.on('error', () => fail(507, { error: 'space' }));
+    req.on('end', () => {
+      if (failed) return;
+      out.end(() => {
+        part.busy = false;
+        const size = have + got;
+        if (size < total) return json(res, 200, { size });
+        partials.delete(key);
+        const name = crypto.randomBytes(12).toString('hex') + ext, file = path.join(MEDIA_DIR, name);
+        try { fs.renameSync(part.file, file); } catch { try { fs.copyFileSync(part.file, file); fs.rmSync(part.file, { force: true }); } catch { return json(res, 507, { error: 'space' }); } }
+        db.prepare('INSERT INTO uploads (name, user, kind, created) VALUES (?, ?, ?, ?)').run(name, me.id, kind, Date.now());
+        json(res, 200, { media: name, size });
+        if (kind === 'video' && /\.(mp4|mov)$/.test(name)) mp4Faststart(file).catch(e => console.warn('faststart', name, e.message));
+      });
+    });
+    return;
+  }
 
   if (action === 'media') {
     const type = MEDIA_TYPES[(req.headers['content-type'] || '').split(';')[0].trim()];
