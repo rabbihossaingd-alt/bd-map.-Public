@@ -79,6 +79,12 @@ const coverStyle = (img, division) => {
   function renderList() {
     const q = filter.value.trim();
     list.replaceChildren();
+    // while searching, what stands between the box and the districts steps aside, and the count shows under the box
+    $('rb-guide').classList.toggle('searching', !!q);
+    if (q) {
+      const n = DISTRICTS.filter(d => matches(d, q)).length;
+      if (n) list.appendChild(el('p', 'dg-found', tl2(`${num(n)}টি জেলা পাওয়া গেছে`, `${n} district${n > 1 ? 's' : ''} found`)));
+    }
     const been = visited();
     for (const div of [...new Set(DISTRICTS.map(d => d.division))]) {
       if (division && division !== '__been' && div !== division) continue;
@@ -88,7 +94,7 @@ const coverStyle = (img, division) => {
       const head = el('div', 'dg-dhead');
       const dot = el('i');
       dot.style.background = `linear-gradient(145deg, ${(DIVISION_TINT[div] || [])[0]}, ${(DIVISION_TINT[div] || [])[1]})`;
-      head.append(dot, el('b', null, tl2(`${div} বিভাগ`, div)), el('small', null, tl2(`${num(ds.length)} জেলা`, `${ds.length} districts`)));
+      head.append(dot, el('b', null, tl2(`${div} বিভাগ`, tr(div))), el('small', null, tl2(`${num(ds.length)} জেলা`, `${ds.length} districts`)));
       // the whole country at once: one sliding row per division; one division, a search or 'been': a grid
       const rail = !division && !q;
       if (rail) { const all = el('button', 'dg-dall', tl2('সব দেখুন', 'See all')); all.addEventListener('click', () => { division = div; renderDivisions(); renderList(); $('dg-divs').scrollIntoView({ behavior: 'smooth', block: 'start' }); }); head.appendChild(all); }
@@ -228,7 +234,7 @@ const coverStyle = (img, division) => {
     badge.append(el('span', null, tl2(`জিআই জার্নাল নং ${num(p.no)}`, `GI journal no. ${p.no}`)));
     title.append(badge, el('h2', null, LANG === 'en' ? p.en : p.bn));
     const go = el('button', 'gi-district');
-    go.append(ic('pin'), el('span', null, tl2(`${d.bn} জেলা · ${p.kind === 'f' ? 'খাবার' : 'পণ্য'}`, `${d.bn} · ${p.kind === 'f' ? 'food' : 'goods'}`)), ic('chev'));
+    go.append(ic('pin'), el('span', null, tl2(`${d.bn} জেলা · ${p.kind === 'f' ? 'খাবার' : 'পণ্য'}`, `${d.en} · ${p.kind === 'f' ? 'food' : 'goods'}`)), ic('chev'));
     title.appendChild(go);
     hero.append(x, title);
     if (story && (story.src || story.file)) { const cr = el('a', 'dg-credit', tl2('ছবি', 'Photo')); cr.href = story.src || commonsLink(story.file); cr.title = story.credit || ''; cr.target = '_blank'; cr.rel = 'noopener'; hero.appendChild(cr); }
@@ -242,13 +248,13 @@ const coverStyle = (img, division) => {
       if (general) body.appendChild(el('p', 'dg-note gi-general', tl2(`এই জেলার পণ্যটি নিয়ে উইকিপিডিয়ায় আলাদা নিবন্ধ নেই — নিচে «${story.page}» নিয়ে যা লেখা আছে।`, `Wikipedia has no article on this district's product itself — below is what it says about «${story.page}».`)));
       for (const para of story.text.split('\n').filter(Boolean)) body.appendChild(el('p', 'gi-text no-tr', para));
       const more = el('button', 'dg-wiki', tl2('পুরোটা পড়ুন', 'Read it all'));
-      more.addEventListener('click', () => openArticle(story.page, { title: LANG === 'en' ? p.en : p.bn, img: story.img, file: story.file, sub: tl2(`${d.bn} জেলা`, d.bn) }));
+      more.addEventListener('click', () => openArticle(story.page, { title: LANG === 'en' ? p.en : p.bn, img: story.img, file: story.file, sub: tl2(`${d.bn} জেলা`, d.en) }));
       body.appendChild(more);
     } else body.appendChild(el('p', 'gi-text', tl2('এই পণ্যটি নিয়ে বাংলা উইকিপিডিয়ায় এখনো কোনো নিবন্ধ নেই। এটি সরকারের জিআই তালিকায় নিবন্ধিত — অর্থাৎ এর নাম, স্বাদ বা গুণ এই এলাকার সাথেই জড়িয়ে আছে।', 'Bangla Wikipedia has no article on this yet. It is registered as a GI — its name and quality belong to this place.')));
     // the same district's other famous things
     const others = giOf(p.id).filter(o => o.bn !== p.bn);
     if (others.length) {
-      body.appendChild(el('h3', 'dg-h', tl2(`${d.bn}-এর আরও`, `More from ${d.bn}`)));
+      body.appendChild(el('h3', 'dg-h', tl2(`${d.bn}-এর আরও`, `More from ${d.en}`)));
       const row = el('div', 'dg-famous');
       for (const o of others) { const b = el('button', 'dg-fam ' + o.kind); b.append(Object.assign(el('span', 'fi'), { innerHTML: svg(o.kind === 'f' ? 'fork' : 'bag') }), el('b', null, LANG === 'en' ? o.en : o.bn)); b.addEventListener('click', () => { close(); openStory({ id: p.id, ...o }); }); row.appendChild(b); }
       body.appendChild(row);
@@ -411,7 +417,7 @@ const coverStyle = (img, division) => {
     const field = (label, input, hint) => { const f = el('label', 'gm-field'); f.append(el('span', null, label), input); if (hint) f.appendChild(el('small', null, hint)); return f; };
     const district = el('select');
     for (const div of [...new Set(DISTRICTS.map(d => d.division))]) {
-      const og = document.createElement('optgroup'); og.label = tl2(`${div} বিভাগ`, div);
+      const og = document.createElement('optgroup'); og.label = tl2(`${div} বিভাগ`, tr(div));
       for (const d of DISTRICTS.filter(d => d.division === div)) og.appendChild(new Option(d.bn, d.id));
       district.appendChild(og);
     }
@@ -577,7 +583,7 @@ const coverStyle = (img, division) => {
     box.addEventListener('click', e => { if (e.target === box) close(); });
     const x = el('button', 'lv-icon gm-x'); x.innerHTML = svg('close'); x.addEventListener('click', close);
     const dSel = el('select'), pSel = el('select');
-    for (const div of [...new Set(DISTRICTS.map(d => d.division))]) { const og = document.createElement('optgroup'); og.label = tl2(`${div} বিভাগ`, div); for (const d of DISTRICTS.filter(d => d.division === div)) og.appendChild(new Option(d.bn, d.id)); dSel.appendChild(og); }
+    for (const div of [...new Set(DISTRICTS.map(d => d.division))]) { const og = document.createElement('optgroup'); og.label = tl2(`${div} বিভাগ`, tr(div)); for (const d of DISTRICTS.filter(d => d.division === div)) og.appendChild(new Option(d.bn, d.id)); dSel.appendChild(og); }
     const fill = () => { pSel.replaceChildren(...(((GUIDE || {})[dSel.value] || {}).sights || []).map((s, i) => new Option(s.name, String(i)))); };
     dSel.addEventListener('change', fill); fill();
     const go = el('button', 'btn gm-send', tl2('এগোন — ছবি বেছে নিন', 'Next — choose photos'));
@@ -640,7 +646,7 @@ const coverStyle = (img, division) => {
     const body = el('div', 'pl-body');
     // title
     const head = el('div', 'pl-head');
-    head.appendChild(el('small', null, tl2(`${s.gemWhere ? s.gemWhere + ', ' : ''}${d.bn} জেলা · ${d.division} বিভাগ`, `${s.gemWhere ? s.gemWhere + ', ' : ''}${d.bn} · ${d.division} division`)));
+    head.appendChild(el('small', null, tl2(`${s.gemWhere ? s.gemWhere + ', ' : ''}${d.bn} জেলা · ${d.division} বিভাগ`, `${s.gemWhere ? s.gemWhere + ', ' : ''}${d.en} · ${tr(d.division)} division`)));
     head.appendChild(el('h2', 'no-tr', s.name));
     const badges = el('div', 'pl-badges');
     const rank = (g.sights || []).filter(t => (t.views || 0) > (s.views || 0)).length;
@@ -709,7 +715,7 @@ const coverStyle = (img, division) => {
         const c = el('button', 'pl-mini');
         const ph = el('span', 'ph');
         photo(ph, t.img, d.division, 400, kindArt(t.name) || 'pin');
-        c.append(ph, el('b', 'no-tr', t.name), el('small', null, km != null ? kmText(km) : tl2(`${d.bn} জেলায়`, `in ${d.bn}`)));
+        c.append(ph, el('b', 'no-tr', t.name), el('small', null, km != null ? kmText(km) : tl2(`${d.bn} জেলায়`, `in ${d.en}`)));
         c.addEventListener('click', () => { box.remove(); openPlace(d, t); });
         rail.appendChild(c);
       }
@@ -873,7 +879,7 @@ const coverStyle = (img, division) => {
     x.innerHTML = svg('close');
     x.setAttribute('aria-label', tl2('বন্ধ করুন', 'Close'));
     const title = el('div', 'dg-title');
-    title.append(el('small', null, tl2(`${d.division} বিভাগ`, `${d.division} division`)), el('h2', null, d.bn));
+    title.append(el('small', null, tl2(`${d.division} বিভাগ`, `${tr(d.division)} division`)), el('h2', null, tl2(d.bn, d.en)));
     const chips = el('div', 'dg-facts');
     const been = el('button', 'dg-been-btn');
     const paintBeen = () => { const on = visited().has(d.id); been.classList.toggle('on', on); been.replaceChildren(Object.assign(el('i'), { innerHTML: svg(on ? 'check' : 'plus') }), el('span', null, on ? tl2('গিয়েছি', 'Been there') : tl2('গিয়েছি?', 'Been here?'))); };
@@ -897,7 +903,7 @@ const coverStyle = (img, division) => {
       body.append(p, more);
     }
     if (gi.length) {
-      body.appendChild(el('h3', 'dg-h', tl2(`${d.bn}-এর বিখ্যাত`, `${d.bn} is famous for`)));
+      body.appendChild(el('h3', 'dg-h', tl2(`${d.bn}-এর বিখ্যাত`, `${d.en} is famous for`)));
       const row = el('div', 'dg-famous');
       for (const p of gi) {
         const c = el('button', 'dg-fam ' + p.kind);
@@ -949,7 +955,7 @@ const coverStyle = (img, division) => {
     const gemRail = el('div', 'dg-rail');
     const gemAdd = el('button', 'dg-place gm-add');
     gemAdd.append(Object.assign(el('span', 'ph'), { innerHTML: '<span class="gm-plus">+</span>' }), el('span', 't'));
-    gemAdd.querySelector('.t').append(el('b', null, tl2(`${d.bn}-এর কোনো জায়গা জানেন?`, `Know a place in ${d.bn}?`)), el('small', null, tl2('খোঁজ দিন · অনুমোদন হলে ৫ পয়েন্ট', 'Share it · 5 points once approved')));
+    gemAdd.querySelector('.t').append(el('b', null, tl2(`${d.bn}-এর কোনো জায়গা জানেন?`, `Know a place in ${d.en}?`)), el('small', null, tl2('খোঁজ দিন · অনুমোদন হলে ৫ পয়েন্ট', 'Share it · 5 points once approved')));
     gemAdd.addEventListener('click', () => openGemForm(d));
     gemRail.appendChild(gemAdd);
     gemSec.appendChild(gemRail);

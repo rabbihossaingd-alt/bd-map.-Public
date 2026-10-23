@@ -232,6 +232,8 @@ function route() {
   let name = location.hash.replace(/^#\/?/, '') || 'home';
   if (name === 'intercity') name = 'districts';   // old link
   if (name === 'tour') { try { localStorage.setItem('bdmap.rb', 'tour'); } catch { /* storage off */ } history.replaceState(null, '', '#/districts'); name = 'districts'; }   // now a tab of রূপসী বাংলা
+  let scrollToSel = '';
+  if (name === 'leaderboard') { scrollToSel = '.lead-card'; name = 'community'; }   // the fare tab, at the leaderboard
   if (name === 'community') { try { localStorage.setItem('bdmap.cx', 'fare'); } catch { /* storage off */ } history.replaceState(null, '', '#/buses'); name = 'buses'; }   // now a tab of নগরপথ
   current = PAGES.includes(name) ? name : 'home';
   for (const p of PAGES) $('page-' + p).classList.toggle('on', p === current);
@@ -241,6 +243,7 @@ function route() {
   scrollTo(0, 0);
   if (enter[current]) enter[current]();
   requestAnimationFrame(() => revealOnScroll($('page-' + current)));
+  if (scrollToSel) setTimeout(() => { const t = document.querySelector('#page-' + current + ' ' + scrollToSel); if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 250);
 }
 
 function go(name) {
@@ -309,10 +312,10 @@ function createSearch(root) {
     <div class="od">
       <div class="dots"><i class="a"></i><i class="l"></i><i class="b"></i></div>
       <div class="inputs">
-        <div class="field"><input data-w="from" autocomplete="off" placeholder="কোথা থেকে" aria-label="কোথা থেকে">
+        <div class="field"><input data-w="from" autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off" enterkeyhint="next" placeholder="কোথা থেকে" aria-label="কোথা থেকে">
           <button class="icon-btn" data-act="locate" title="আমার লোকেশন" aria-label="আমার লোকেশন">${svg('locate')}</button>
           <div class="suggest" hidden></div></div>
-        <div class="field"><input data-w="to" autocomplete="off" placeholder="কোথায় যাবেন" aria-label="কোথায় যাবেন">
+        <div class="field"><input data-w="to" autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off" enterkeyhint="search" placeholder="কোথায় যাবেন" aria-label="কোথায় যাবেন">
           <button class="icon-btn" data-act="swap" title="অদলবদল" aria-label="অদলবদল">${svg('swap')}</button>
           <div class="suggest" hidden></div></div>
       </div>
@@ -323,7 +326,13 @@ function createSearch(root) {
   for (const input of root.querySelectorAll('input')) {
     const which = input.dataset.w, box = input.parentNode.querySelector('.suggest');
     inputs[which] = input;
-    wireSuggest(input, box, place => setPlace(which, place), () => { trip[which] = null; });
+    // after 'from', the cursor goes on to 'to'
+    wireSuggest(input, box, place => { setPlace(which, place); if (which === 'from' && !trip.to && inputs.to && current !== 'trip') setTimeout(() => inputs.to.focus(), 0); }, () => { trip[which] = null; });
+    // on a phone the home page's search moves up to the top, so the list of places has room above the keyboard
+    if (root.id === 'home-search') input.addEventListener('focus', () => {
+      if (!matchMedia('(max-width: 760px)').matches) return;
+      setTimeout(() => { const y = root.getBoundingClientRect().top + scrollY - 12; if (Math.abs(scrollY - y) > 8) scrollTo({ top: y, behavior: 'smooth' }); }, 60);
+    });
   }
 
   root.querySelector('[data-act=swap]').addEventListener('click', () => {
@@ -1606,7 +1615,12 @@ for (const b of $('seg').children) b.addEventListener('click', () => showPane(b.
 
     // 1) a bus or stop name, 2) a known place, 3) anything else through the online search.
     const direct = pool.filter(r => matches(r, q) || r.stops.some(id => matches(STOPS[id], q)));
-    if (direct.length) { show(direct); return; }
+    if (direct.length) {
+      // a stop's name: say how many buses pass it; a bus's name: how many were found
+      const byStop = !pool.some(r => matches(r, q));
+      show(direct, byStop ? `${tr(q)} দিয়ে যায়: ${num(direct.length)}টি বাস` : `${num(direct.length)}টি বাস পাওয়া গেছে`);
+      return;
+    }
     const place = searchLocal(q).find(p => p.icon === 'pin');
     if (place) { showNear(place, pool); return; }
     if (q.length < 3) { show([], 'কোনো বাস পাওয়া যায়নি।'); return; }

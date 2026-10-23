@@ -1434,7 +1434,7 @@ body.reels-open { overflow: hidden; }
 }
 
 /* The scene behind Home's headline (drawn by js/scene.js), fading out towards the content below */
-.hero > .hero-scene { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none;
+.hero > .hero-scene, .hero-bg > .hero-scene { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none;
   -webkit-mask-image: radial-gradient(120% 90% at 50% 30%, #000 35%, transparent 85%); mask-image: radial-gradient(120% 90% at 50% 30%, #000 35%, transparent 85%); animation: fade 1.6s var(--ease); }
 .hero { min-height: min(86vh, 760px); display: grid; align-content: center; justify-items: center; }
 .hero > :not(.blob):not(.hero-scene) { width: 100%; }
@@ -4358,3 +4358,16 @@ button.dg-wiki { background: none; border: 0; padding: 0; cursor: pointer; font:
 .reels-wait { display: grid; place-items: center; }
 .reels-spin, .reel.buffering::after { width: 38px; height: 38px; border-radius: 50%; border: 3px solid rgba(255, 255, 255, .3); border-top-color: #fff; animation: spin .8s linear infinite; }
 .reel.buffering::after { content: ""; position: absolute; left: 50%; top: 50%; margin: -19px 0 0 -19px; z-index: 4; pointer-events: none; }
+/* H1: the home search's list of places is no longer cut off. The hero's moving background (canvas and soft blobs) is
+   clipped in a layer of its own; the hero itself lets the list hang over the cards below it. */
+.hero { overflow: visible; z-index: 3; }
+.hero > .hero-bg { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; width: auto; }
+.hero-bg > .hero-scene { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.hero-bg > .blob { z-index: 0; }
+.hero-search .suggest { z-index: 40; }
+/* H4: searching the districts brings the results right under the box */
+#rb-guide.searching > .dg-sec:not(#dg-all-sec), #rb-guide.searching > .dx-link { display: none; }
+#rb-guide.searching #dg-all-sec > .dg-head { display: none; }
+.dg-found { margin: 4px 2px 12px; font-size: 14px; font-weight: 600; color: var(--ink-2); }
+/* a field the keyboard brings into view stays clear of the sticky bars above it */
+.page input, .page textarea { scroll-margin-top: 96px; }

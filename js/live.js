@@ -299,7 +299,7 @@ async function openLiveHub() {
   x.innerHTML = svg('close');
   x.setAttribute('aria-label', tl('বন্ধ করুন', 'Close'));
   const title = el('div', 'lh-title');
-  title.append(Object.assign(el('span', 'lh-ic'), { innerHTML: svg('broadcast') }), el('b', null, 'Stream'));
+  title.append(Object.assign(el('span', 'lh-ic'), { innerHTML: svg('broadcast') }), el('b', null, tl('লাইভ', 'Live')));
   const go2 = el('button', 'lv-start small');
   go2.append(svgEl('camera'), el('span', null, tl('স্ট্রিম শুরু', 'Go live')));
   top.append(x, title, go2);
