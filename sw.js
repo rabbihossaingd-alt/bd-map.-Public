@@ -1,7 +1,7 @@
 // Network first, cache as offline fallback — the app shell and data files keep working without a connection.
 // `no-cache` makes the browser revalidate each file, so an updated app shows up on a normal refresh.
 // Only good answers are kept: an error page (a 503 while the server restarts) must never become the offline copy.
-const CACHE = 'bdmap-v5';
+const CACHE = 'bdmap-v6';
 
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', event => event.waitUntil(
@@ -27,4 +27,33 @@ self.addEventListener('fetch', event => {
       return res;
     }).catch(() => caches.match(req).then(hit => hit || (req.mode === 'navigate' ? caches.match('/') : undefined)))
   );
+});
+
+// ---- Push notifications: a message, a missed call, a like, a comment or a new follower (server.js: pushTo) ----
+self.addEventListener('push', event => {
+  let n = {};
+  try { n = event.data ? event.data.json() : {}; } catch { n = { body: event.data ? event.data.text() : '' }; }
+  event.waitUntil(self.registration.showNotification(n.title || 'Manzeela', {
+    body: n.body || '', tag: n.tag || undefined, renotify: !!n.tag, icon: '/img/icon-192.png', badge: '/img/badge-96.png',
+    data: { url: n.url || '/' }, lang: 'bn', timestamp: Date.now()
+  }));
+});
+// A tap opens the app where the notification points: an open window is brought forward, else a new one.
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  const url = new URL((event.notification.data && event.notification.data.url) || '/', self.location.origin).href;
+  event.waitUntil(clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+    const open = list.find(c => new URL(c.url).origin === self.location.origin);
+    if (open) return open.focus().then(c => (c && 'navigate' in c ? c.navigate(url) : c));
+    return clients.openWindow(url);
+  }));
+});
+// The browser renewed its push address: tell the server the new one (the login cookie goes with it).
+self.addEventListener('pushsubscriptionchange', event => {
+  event.waitUntil((async () => {
+    const key = (await (await fetch('/api/push/key')).json()).key;
+    const raw = Uint8Array.from(atob(key.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+    const sub = await self.registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: raw });
+    await fetch('/api/push/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sub.toJSON()) });
+  })().catch(() => {}));
 });

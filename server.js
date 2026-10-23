@@ -375,6 +375,7 @@ setInterval(() => {
 // Everything an account owns goes with it.
 function deleteUser(id) {
   aq.endAll.run(id);
+  db.prepare('DELETE FROM push_subs WHERE user = ?').run(id);
   for (const g of db.prepare('SELECT grp FROM group_members WHERE user = ?').all(id)) leaveGroup(g.grp, id);
   // the files behind it all: photos, videos and files in their chats (both ways), their sounds, place photos, hidden gems, unused uploads
   const jsonOf = t => { try { return JSON.parse(t); } catch { return null; } };
@@ -773,6 +774,7 @@ function notify(user, actor, kind, post = 0, body = '') {
   if (kind !== 'comment') db.prepare('DELETE FROM notifications WHERE user = ? AND actor = ? AND kind = ? AND post = ?').run(user, actor, kind, post);
   db.prepare('INSERT INTO notifications (user, actor, kind, post, body, created) VALUES (?, ?, ?, ?, ?, ?)').run(user, actor, kind, post, body, Date.now());
   push(user, 'notify', {});
+  if (NOTE_TEXT[kind]) pushTo(user, { title: pushName(actor), body: NOTE_TEXT[kind] + (kind === 'comment' && body ? ': ' + body.slice(0, 100) : ''), tag: 'n-' + kind + '-' + (post || actor), url: '/#/explore' });
 }
 const unnotify = (user, actor, kind, post = 0) => db.prepare('DELETE FROM notifications WHERE user = ? AND actor = ? AND kind = ? AND post = ?').run(user, actor, kind, post);
 
@@ -791,6 +793,113 @@ function tellFriends(userId, event, data) {
   for (const l of cq.links.all(userId)) if (l.state === 'friends') push(l.id, event, data);
 }
 setInterval(() => { for (const set of streams.values()) for (const res of set) res.write(': keep-alive\n\n'); }, 25_000).unref();
+
+// ---- Push notifications (Web Push: VAPID + aes128gcm, RFC 8291/8292, no outside library) ----
+// A phone or computer that allowed notifications leaves its push address here, tied to the login it was made in
+// (logging out or ending that login from another device stops them). Messages, missed calls, likes, comments and new
+// followers are sent while none of the person's open apps is in view; the service worker shows them (sw.js).
+//   GET  /api/push/key                          -> { key }   the server's public VAPID key
+//   POST /api/push/subscribe { endpoint, keys } (login)      POST /api/push/unsubscribe { endpoint }
+//   POST /api/push/seen { tab, visible }        an open app says whether it is in view (sent on every change)
+db.exec(`CREATE TABLE IF NOT EXISTS push_subs (endpoint TEXT PRIMARY KEY, user INTEGER NOT NULL, sess TEXT NOT NULL, p256dh TEXT NOT NULL, auth TEXT NOT NULL,
+  created INTEGER NOT NULL, fails INTEGER NOT NULL DEFAULT 0)`);
+db.exec('CREATE INDEX IF NOT EXISTS push_subs_user ON push_subs (user)');
+const b64u = buf => Buffer.from(buf).toString('base64url');
+const VAPID = (() => {
+  let jwk = null;
+  try { jwk = JSON.parse((db.prepare("SELECT value FROM settings WHERE key = 'vapid'").get() || {}).value || 'null'); } catch { /* made below */ }
+  if (!jwk || !jwk.d) {
+    jwk = crypto.generateKeyPairSync('ec', { namedCurve: 'prime256v1' }).privateKey.export({ format: 'jwk' });
+    db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('vapid', ?)").run(JSON.stringify(jwk));
+  }
+  const key = crypto.createPrivateKey({ key: jwk, format: 'jwk' });
+  const pub = Buffer.concat([Buffer.from([4]), Buffer.from(jwk.x, 'base64url'), Buffer.from(jwk.y, 'base64url')]);
+  return { key, pub: b64u(pub) };
+})();
+const vapidJwt = new Map();        // push service origin -> { token, until }
+function vapidAuth(endpoint) {
+  const aud = new URL(endpoint).origin, now = Math.floor(Date.now() / 1000), hit = vapidJwt.get(aud);
+  if (hit && hit.until > now + 600) return hit.token;
+  const head = b64u(JSON.stringify({ typ: 'JWT', alg: 'ES256' })), body = b64u(JSON.stringify({ aud, exp: now + 12 * 3600, sub: 'mailto:help@manzeela.com' }));
+  const sig = crypto.sign('sha256', Buffer.from(head + '.' + body), { key: VAPID.key, dsaEncoding: 'ieee-p1363' });
+  const token = head + '.' + body + '.' + b64u(sig);
+  vapidJwt.set(aud, { token, until: now + 12 * 3600 });
+  return token;
+}
+// RFC 8291: the message is sealed for that one browser (its p256dh key and auth secret); the push service cannot read it.
+function sealPush(sub, text) {
+  const hmac = (k, d) => crypto.createHmac('sha256', k).update(d).digest();
+  const expand = (prk, info, n) => hmac(prk, Buffer.concat([info, Buffer.from([1])])).subarray(0, n);
+  const uaPub = Buffer.from(sub.p256dh, 'base64url'), auth = Buffer.from(sub.auth, 'base64url');
+  const ecdh = crypto.createECDH('prime256v1'); ecdh.generateKeys();
+  const asPub = ecdh.getPublicKey(), shared = ecdh.computeSecret(uaPub);
+  const ikm = expand(hmac(auth, shared), Buffer.concat([Buffer.from('WebPush: info\0'), uaPub, asPub]), 32);
+  const salt = crypto.randomBytes(16), prk = hmac(salt, ikm);
+  const cek = expand(prk, Buffer.from('Content-Encoding: aes128gcm\0'), 16), nonce = expand(prk, Buffer.from('Content-Encoding: nonce\0'), 12);
+  const c = crypto.createCipheriv('aes-128-gcm', cek, nonce);
+  const sealed = Buffer.concat([c.update(Buffer.concat([Buffer.from(text), Buffer.from([2])])), c.final(), c.getAuthTag()]);
+  const rs = Buffer.alloc(4); rs.writeUInt32BE(4096);
+  return Buffer.concat([salt, rs, Buffer.from([asPub.length]), asPub, sealed]);
+}
+// Only the browsers' own push services: Chrome/Android (FCM), Firefox, Safari/iPhone, Edge/Windows.
+const PUSH_HOSTS = ['fcm.googleapis.com', 'android.googleapis.com', 'updates.push.services.mozilla.com', 'push.apple.com', 'notify.windows.com'];
+const pushHostOk = u => { try { const x = new URL(u); return x.protocol === 'https:' && PUSH_HOSTS.some(h => x.hostname === h || x.hostname.endsWith('.' + h)); } catch { return false; } };
+const subsOf = db.prepare('SELECT p.* FROM push_subs p JOIN sessions s ON s.token = p.sess AND s.expires > ? WHERE p.user = ?');
+async function sendPush(sub, note, urgency) {
+  try {
+    const res = await fetch(sub.endpoint, { method: 'POST', body: sealPush(sub, JSON.stringify(note)), signal: AbortSignal.timeout(10_000),
+      headers: { 'Content-Encoding': 'aes128gcm', 'Content-Type': 'application/octet-stream', TTL: '86400', Urgency: urgency,
+                 Topic: (note.tag || '').replace(/[^\w-]/g, '').slice(0, 32) || undefined, Authorization: `vapid t=${vapidAuth(sub.endpoint)}, k=${VAPID.pub}` } });
+    if (res.status === 404 || res.status === 410) db.prepare('DELETE FROM push_subs WHERE endpoint = ?').run(sub.endpoint);       // that browser unsubscribed
+    else if (!res.ok) { db.prepare('UPDATE push_subs SET fails = fails + 1 WHERE endpoint = ?').run(sub.endpoint); console.error('push refused:', res.status, new URL(sub.endpoint).host, (await res.text()).slice(0, 160)); }
+    else if (sub.fails) db.prepare('UPDATE push_subs SET fails = 0 WHERE endpoint = ?').run(sub.endpoint);
+  } catch { db.prepare('UPDATE push_subs SET fails = fails + 1 WHERE endpoint = ?').run(sub.endpoint); }
+}
+setInterval(() => db.prepare('DELETE FROM push_subs WHERE fails >= 20').run(), 3600e3).unref();
+// In view: an open app whose page is visible. Phones hide a page as soon as another app comes up, so a message then
+// goes out as a notification; while the person is looking at Manzeela, it arrives in the app only.
+const tabsInView = new Map();      // user id -> Map(tab -> last time it said it was visible)
+const inView = id => { const t = tabsInView.get(id); if (!t) return false; const now = Date.now(); for (const [k, at] of t) if (now - at > 90_000) t.delete(k); return t.size > 0 && isOnline(id); };
+function pushTo(userId, note, urgency = 'normal') {
+  if (!userId || inView(userId)) return;
+  for (const sub of subsOf.all(Date.now(), userId)) sendPush(sub, note, urgency);
+}
+const pushName = id => (aq.byId.get(id) || {}).name || 'Manzeela';
+function messagePreview(kind, body) {
+  if (kind === 'text') return String(body).slice(0, 140);
+  if (kind === 'photo') return '📷 ছবি';
+  if (kind === 'video') return '🎥 ভিডিও';
+  if (kind === 'audio') return '🎤 ভয়েস মেসেজ';
+  if (kind === 'place') { try { return '📍 ' + JSON.parse(body).label; } catch { return '📍 জায়গা'; } }
+  if (kind === 'call') { try { const c = JSON.parse(body); return c.result === 'missed' ? (c.video ? '📹 মিসড ভিডিও কল' : '📞 মিসড কল') : ''; } catch { return ''; } }
+  if (kind === 'file') return '📎 ফাইল';
+  return 'নতুন মেসেজ';
+}
+const NOTE_TEXT = { like: 'আপনার পোস্টে লাইক দিয়েছেন', comment: 'মন্তব্য করেছেন', follow: 'আপনাকে ফলো করেছেন', followback: 'আপনাকে ফলো ব্যাক করেছেন', tag: 'একটি পোস্টে আপনাকে ট্যাগ করেছেন' };
+async function pushApi(req, res, action) {
+  if (action === 'key' && req.method === 'GET') return json(res, 200, { key: VAPID.pub });
+  if (req.method !== 'POST') return json(res, 405, { error: 'method not allowed' });
+  let body; try { body = JSON.parse(await readBody(req, 4096)) || {}; } catch { body = null; }
+  if (!body) return json(res, 400, { error: 'bad request' });
+  const me = userOf(req);
+  if (action === 'seen') {
+    if (!me) return json(res, 200, { ok: true });
+    const tab = cleanText(body.tab, 40);
+    if (!tabsInView.has(me.id)) tabsInView.set(me.id, new Map());
+    if (tab && body.visible) tabsInView.get(me.id).set(tab, Date.now()); else tabsInView.get(me.id).delete(tab);
+    return json(res, 200, { ok: true });
+  }
+  if (action === 'unsubscribe') { if (typeof body.endpoint === 'string') db.prepare('DELETE FROM push_subs WHERE endpoint = ?').run(body.endpoint); return json(res, 200, { ok: true }); }
+  if (action === 'subscribe') {
+    if (!me) return json(res, 401, { error: 'login' });
+    const ep = body.endpoint, k = body.keys || {};
+    if (typeof ep !== 'string' || ep.length > 1000 || !pushHostOk(ep) || !/^[\w-]{80,100}$/.test(k.p256dh || '') || !/^[\w-]{16,30}$/.test(k.auth || '')) return json(res, 400, { error: 'bad request' });
+    if (count('SELECT COUNT(*) AS n FROM push_subs WHERE user = ?', me.id) >= 10) db.prepare('DELETE FROM push_subs WHERE endpoint = (SELECT endpoint FROM push_subs WHERE user = ? ORDER BY created LIMIT 1)').run(me.id);
+    db.prepare('INSERT OR REPLACE INTO push_subs (endpoint, user, sess, p256dh, auth, created) VALUES (?, ?, ?, ?, ?, ?)').run(ep, me.id, sha(sessionToken(req)), k.p256dh, k.auth, Date.now());
+    return json(res, 200, { ok: true });
+  }
+  return json(res, 404, { error: 'not found' });
+}
 
 // At most 90 messages a minute from one account.
 const sends = new Map();
@@ -1103,6 +1212,7 @@ async function chatApi(req, res, action, query) {
     const message = { ...shown({ id: Number(lastInsertRowid), sender: me.id, kind, body: text, sent: now, seen: 0, grp: 0, reply, reacts: '{}', gone: 0, got }), to: other };
     push(other, 'message', message);
     push(me.id, 'message', message);                 // the sender's other devices
+    { const say = messagePreview(kind, text); if (say && !mutedOf(other, 'u' + me.id)) pushTo(other, { title: me.name, body: say, tag: 'dm-' + me.id, url: '/#/chat' }, 'high'); }
     return json(res, 200, { message });
   }
   if (action === 'signal') {                         // call set-up, passed straight to the other person
@@ -1145,6 +1255,8 @@ function groupAction(res, me, action, body) {
     db.prepare('UPDATE group_members SET last_read = ? WHERE grp = ? AND user = ?').run(id, gid, me.id);
     const message = shown({ id, sender: me.id, kind: body.kind, body: text, sent: now, seen: 0, grp: gid, reply, reacts: '{}', gone: 0 });
     tellGroup(gid, 'message', message);
+    { const say = messagePreview(body.kind, text), g = gq.group.get(gid);
+      if (say) for (const m of gq.members.all(gid)) if (m.id !== me.id && !mutedOf(m.id, groupKey(gid))) pushTo(m.id, { title: (g && g.name) || 'গ্রুপ', body: me.name + ': ' + say, tag: 'g' + gid, url: '/#/chat' }, 'high'); }
     return json(res, 200, { message });
   }
   if (action === 'group-read') {
@@ -3085,6 +3197,7 @@ const server = http.createServer((req, res) => {
     urls: list.flatMap(x => [].concat(x.urls || x.url || [])), withCredentials: list.filter(x => x.username && x.credential).length,
     lastTests: relayTests.slice(0, 8).map(t => ({ ago: Math.round((Date.now() - t.at) / 1000) + 's', ok: t.ok, kinds: t.kinds, ms: t.ms })) }));
   if (pathname.startsWith('/api/live/')) return liveApi(req, res, pathname.slice(10)).catch(e => { console.error(e); if (!res.headersSent) json(res, 500, { error: 'server error' }); });
+  if (pathname.startsWith('/api/push/')) return pushApi(req, res, pathname.slice(10)).catch(e => { console.error(e); if (!res.headersSent) json(res, 500, { error: 'server error' }); });
   if (pathname.startsWith('/api/notify/')) return notifyApi(req, res, pathname.slice(12)).catch(e => { console.error(e); if (!res.headersSent) json(res, 500, { error: 'server error' }); });
   if (pathname.startsWith('/api/creator/')) return creatorApi(req, res, pathname.slice(13)).catch(e => { console.error(e); if (!res.headersSent) json(res, 500, { error: 'server error' }); });
   if (pathname.startsWith('/api/avatar/')) return avatarApi(req, res, pathname.slice(12));

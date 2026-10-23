@@ -4459,3 +4459,13 @@ button.dg-wiki { background: none; border: 0; padding: 0; cursor: pointer; font:
   .map-tools button { background: var(--surface); border-color: transparent; box-shadow: 0 1px 2px rgba(0, 0, 0, .12), 0 4px 14px -4px rgba(0, 0, 0, .22); -webkit-backdrop-filter: none; backdrop-filter: none; }
   .map-tools button:hover { background: color-mix(in srgb, var(--surface) 90%, var(--ink)); }
 }
+
+/* The card above the chat list that offers push notifications */
+.push-ask { display: flex; align-items: center; gap: 12px; margin: 6px 12px 10px; padding: 12px 10px 12px 14px; border-radius: 18px; background: var(--accent-soft); color: var(--ink); }
+.push-ask[hidden] { display: none; }
+.push-ask > .ic, .push-ask > i { flex: none; width: 40px; height: 40px; display: grid; place-items: center; border-radius: 50%; background: var(--surface); color: var(--accent); font-size: 20px; }
+.push-ask > span { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.push-ask b { font-size: 14.5px; }
+.push-ask em { font-style: normal; font-size: 12.5px; color: var(--ink-2); }
+.push-ask .pa-go { flex: none; height: 36px; padding: 0 14px; border-radius: 999px; background: var(--accent); color: #fff; font-weight: 700; font-size: 13.5px; }
+.push-ask .pa-x { flex: none; width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; color: var(--muted); font-size: 16px; }

@@ -292,6 +292,11 @@
           <button class="switch" id="set-active" role="switch" aria-checked="true" aria-label="অ্যাক্টিভিটি স্ট্যাটাস"><i></i></button></div>
         <button id="set-blocked"><i class="mi soft" data-ic="shield"></i><span><b>ব্লক করা মানুষ</b><em>যাঁদের মেসেজ ও কল বন্ধ করেছেন</em></span><i class="chev" data-ic="chev"></i></button>
       </div>
+      <div class="label" data-needs-login>নোটিফিকেশন</div>
+      <div class="card menu" data-needs-login>
+        <div class="row"><i class="mi soft" data-ic="bell"></i><span><b>পুশ নোটিফিকেশন</b><em id="set-push-sub">বন্ধ</em></span>
+          <button class="switch" id="set-push" role="switch" aria-checked="false" aria-label="পুশ নোটিফিকেশন"><i></i></button></div>
+      </div>
       <div class="label">যা দেখেন</div>
       <div class="card menu">
         <div class="row"><i class="mi soft" data-ic="globe"></i><span><b>ভাষা</b><em>বাংলা · English</em></span><button class="lang-btn in-page"></button></div>
@@ -366,6 +371,7 @@
           <button data-tab="requests"><span>রিকোয়েস্ট</span><em></em></button>
         </div>
         <div class="chat-scroll">
+          <div class="push-ask" id="push-ask" hidden><i data-ic="bell"></i><span><b>নতুন মেসেজ এলে ফোনে জানুন</b><em></em></span><button class="btn pa-go" type="button">চালু করুন</button><button class="pa-x" type="button" aria-label="পরে"><i data-ic="close"></i></button></div>
           <div class="notes" id="chat-notes" hidden></div>
           <div id="chat-requests" hidden></div>
           <div id="chat-list"></div>
@@ -751,6 +757,7 @@
 <script src="js/studio.js"></script>
 <script src="js/live.js"></script>
 <script src="js/profile.js"></script>
+<script src="js/push.js"></script>
 <script src="js/back.js"></script>
 </body>
 </html>
