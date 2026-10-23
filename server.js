@@ -107,24 +107,34 @@ if (MAIL.pass && /gmail|google/i.test(MAIL.host || '')) MAIL.pass = MAIL.pass.re
 const BREVO = process.env.BREVO_API_KEY, RESEND = process.env.RESEND_API_KEY;
 const mailReady = !!((MAIL.host && MAIL.user && MAIL.pass) || ((BREVO || RESEND) && MAIL.from));
 
-async function sendByApi(to, subject, text) {
+const MAILS = require('./lib/mail.cjs');               // what each mail says and looks like
+async function sendByApi(to, subject, text, html) {
   const res = BREVO
     ? await fetch('https://api.brevo.com/v3/smtp/email', { method: 'POST', headers: { 'api-key': BREVO, 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ sender: { name: 'BD Map', email: MAIL.from }, to: [{ email: to }], subject, textContent: text }) })
+        body: JSON.stringify({ sender: { name: MAILS.BRAND, email: MAIL.from }, to: [{ email: to }], subject, textContent: text, ...(html ? { htmlContent: html } : {}) }) })
     : await fetch('https://api.resend.com/emails', { method: 'POST', headers: { Authorization: 'Bearer ' + RESEND, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ from: `BD Map <${MAIL.from}>`, to: [to], subject, text }) });
+        body: JSON.stringify({ from: `${MAILS.BRAND} <${MAIL.from}>`, to: [to], subject, text, ...(html ? { html } : {}) }) });
   if (!res.ok) throw new Error(`mail service said ${res.status}: ${(await res.text()).slice(0, 200)}`);
 }
 
-function sendMail(to, subject, text) {
-  if (BREVO || RESEND) return sendByApi(to, subject, text);
+// plain text alone, or plain text and HTML side by side (the mail app shows the one it can)
+const mimeBody = (text, html, b64) => {
+  const part = (type, body) => [`Content-Type: ${type}; charset=UTF-8`, 'Content-Transfer-Encoding: base64', '', b64(body).replace(/(.{76})/g, '$1\r\n')];
+  if (!html) return part('text/plain', text);
+  const edge = 'mz-' + crypto.randomBytes(8).toString('hex');
+  return [`Content-Type: multipart/alternative; boundary="${edge}"`, '', `--${edge}`, ...part('text/plain', text), `--${edge}`, ...part('text/html', html), `--${edge}--`];
+};
+// m: a mail from lib/mail.cjs — { subject, text, html }
+function sendMail(to, m) {
+  const { subject, text, html } = m;
+  if (BREVO || RESEND) return sendByApi(to, subject, text, html);
   return new Promise((resolve, reject) => {
     const socket = MAIL.tls ? require('node:tls').connect(MAIL.port, MAIL.host, { servername: MAIL.host }) : require('node:net').connect(MAIL.port, MAIL.host);
     const b64 = v => Buffer.from(v, 'utf8').toString('base64');
     const message = [
-      `From: =?UTF-8?B?${b64('BD Map')}?= <${MAIL.from}>`, `To: <${to}>`, `Subject: =?UTF-8?B?${b64(subject)}?=`,
-      `Date: ${new Date().toUTCString()}`, `Message-ID: <${crypto.randomUUID()}@bdmap>`, 'MIME-Version: 1.0',
-      'Content-Type: text/plain; charset=UTF-8', 'Content-Transfer-Encoding: base64', '', b64(text).replace(/(.{76})/g, '$1\r\n'), '.'
+      `From: =?UTF-8?B?${b64(MAILS.BRAND)}?= <${MAIL.from}>`, `To: <${to}>`, `Subject: =?UTF-8?B?${b64(subject)}?=`,
+      `Date: ${new Date().toUTCString()}`, `Message-ID: <${crypto.randomUUID()}@${MAIL.from.split('@')[1] || 'manzeela.com'}>`, 'MIME-Version: 1.0',
+      ...mimeBody(text, html, b64), '.'
     ].join('\r\n');
     // Each step: the reply code the server must give, then the line to send next.
     const steps = [[220, `EHLO bdmap`], [250, 'AUTH LOGIN'], [334, b64(MAIL.user)], [334, b64(MAIL.pass)], [235, `MAIL FROM:<${MAIL.from}>`],
@@ -420,7 +430,7 @@ async function authApi(req, res, action) {
       return json(res, 200, { sent: true, devCode: code });
     }
     try {
-      await sendMail(email, `${code} — BD Map কোড`, `আপনার BD Map কোড: ${code}\n\nকোডটি ১০ মিনিট পর্যন্ত চলবে। আপনি না চেয়ে থাকলে এই ই-মেইলটি উপেক্ষা করুন।\n\nYour BD Map code is ${code}. It is valid for 10 minutes. If you did not ask for it, ignore this e-mail.`);
+      await sendMail(email, MAILS.codeMail(code));
     } catch (e) {
       console.error('mail failed:', e.code || '', e.message || String(e));
       aq.dropCode.run(email);
@@ -2294,7 +2304,7 @@ async function adminApi(req, res, action, query) {
       sq.touch.run(body.close ? 'closed' : 'answered', now, 1, t.id);
       push(t.user, 'support', { id: t.id });
       const owner = aq.byId.get(t.user);
-      if (mailReady && owner) sendMail(owner.email, `BD Map সাপোর্ট: ${t.subject}`, `${text}\n\n— BD Map সাপোর্ট\nউত্তর দিতে অ্যাপের "সাহায্য ও সাপোর্ট" পাতায় যান।`).catch(e => console.error('mail failed:', e.message));
+      if (mailReady && owner) sendMail(owner.email, MAILS.supportMail(t.subject, text)).catch(e => console.error('mail failed:', e.message));
       log('reply', 'ticket ' + t.id);
     } else if (['open', 'answered', 'closed'].includes(body.status)) { sq.touch.run(body.status, now, t.unread, t.id); log('ticket ' + body.status, 'ticket ' + t.id); }
     else return json(res, 400, { error: 'bad request' });
@@ -2416,7 +2426,7 @@ async function adminApi(req, res, action, query) {
       db.prepare("UPDATE payouts SET status = 'paid', ref = ?, updated = ? WHERE id = ?").run(ref, now, x.id);
       log('payout paid', 'payout ' + x.id, `${x.amount} ৳ · ${x.method} · ${ref}`);
       const owner = aq.byId.get(x.user);
-      if (mailReady && owner) sendMail(owner.email, `BD Map: ৳${x.amount} পাঠানো হয়েছে`, `আপনার ${x.method} নম্বরে ৳${x.amount} পাঠানো হয়েছে। লেনদেন নম্বর: ${ref}\n\n— BD Map`).catch(e => console.error('mail failed:', e.message));
+      if (mailReady && owner) sendMail(owner.email, MAILS.payoutMail(x.amount, x.method, ref)).catch(e => console.error('mail failed:', e.message));
     } else if (body.do === 'reject') {
       db.prepare("UPDATE payouts SET status = 'rejected', note = ?, updated = ? WHERE id = ?").run(cleanText(body.note, 200) || 'বাতিল', now, x.id);
       log('payout rejected', 'payout ' + x.id, cleanText(body.note, 200));
