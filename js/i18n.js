@@ -558,7 +558,7 @@ const EXACT = {
   'যাঁদের আপনি ফলো করেন না, তাঁদের প্রথম মেসেজ এখানে আসবে। নতুন ফলোয়ারের খবর এক্সপ্লোরের ❤️-তে।': 'First messages from people you don’t follow arrive here. New followers show up under the ❤️ in Explore.',
   'ফাইল, ছবি বা ভিডিও': 'File, photo or video',
   'ফোন থেকে বেছে নিন': 'Choose from your phone',
-  'জায়গা': 'Place',
+  'জায়গা': 'Place', 'জেলা গাইড': 'District guide', 'এই জায়গার কোনো পোস্ট নেই।': 'No posts from this place yet.',
   'আপনার লোকেশন বা ম্যাপে খোলা জায়গা': 'Your location or the place open on the map',
   // Studio
   'নতুন স্টোরি': 'New story',

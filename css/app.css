@@ -4401,3 +4401,33 @@ button.dg-wiki { background: none; border: 0; padding: 0; cursor: pointer; font:
 .fc-ghost .gh-media { aspect-ratio: 4 / 5; border-radius: 0; }
 .fc-ghost .gh-line { height: 14px; width: 40%; margin: 12px; }
 @keyframes ghost { 50% { opacity: .55; } }
+
+/* Feed top bar on phones: solid, like Instagram's, with a hairline under it. A see-through blur over bright photos
+   turned into a muddy grey-pink block (audit: "ফিড হেডার ধূসর ব্লক"). */
+@media (max-width: 760px) {
+  #page-explore .ex-top { background: var(--bg); -webkit-backdrop-filter: none; backdrop-filter: none; box-shadow: 0 .5px 0 var(--line); }
+}
+
+/* Back button at the top of inner pages, on phones (audit: "পেজে ব্যাক বাটন নেই") */
+.pg-back { display: none; }
+@media (max-width: 760px) {
+  .pg-back { display: grid; place-items: center; width: 44px; height: 44px; margin: calc(6px + env(safe-area-inset-top)) 0 -4px 8px; border-radius: 50%;
+    color: var(--ink); background: transparent; font-size: 22px; position: relative; z-index: 5; }
+  .pg-back:active { background: var(--line); }
+}
+@media (max-width: 760px) {
+  /* রূপসী বাংলা has a fixed bar at the top: the back button sits in it, at the left of the tabs */
+  #page-districts .pg-back { position: fixed; top: 0; left: 0; z-index: 901; margin: calc(8px + env(safe-area-inset-top)) 0 0 4px; width: 40px; height: 40px; }
+}
+@media (max-width: 760px) { body.reels-open .pg-back, body.studio-open .pg-back { visibility: hidden; } }
+
+/* Explore search: places (districts and tagged places) above people and posts */
+.found-places { display: grid; gap: 2px; margin: 0 0 14px; }
+.found-place { display: flex; align-items: center; gap: 12px; width: 100%; padding: 8px 4px; border-radius: 12px; text-align: left; color: var(--ink); background: none; }
+.found-place:active { background: var(--line); }
+.found-place > .ic { flex: none; width: 44px; height: 44px; display: grid; place-items: center; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-size: 20px; }
+.fp-t { display: grid; min-width: 0; }
+.fp-t b { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fp-t em { font-style: normal; font-size: 13px; color: var(--muted); }
+.fp-head { display: flex; align-items: center; gap: 6px; }
+.fp-back { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 50%; color: var(--ink); background: none; font-size: 20px; }

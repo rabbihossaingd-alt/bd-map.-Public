@@ -2115,3 +2115,16 @@ $('trip-share').addEventListener('click', async () => {
     else { await navigator.clipboard.writeText(url); setStatus('লিংক কপি হয়েছে'); setTimeout(() => setStatus(''), 2000); }
   } catch { /* the share sheet was closed */ }
 });
+
+// The back button at the top of inner pages (phones). Each page visit remembers where it came from in its own
+// history entry, so the button goes back exactly there; a page opened from a link goes up to where it lives.
+const PAGE_PARENT = { insights: 'more', settings: 'more', support: 'more' };
+addEventListener('hashchange', e => {
+  const from = new URL(e.oldURL).hash || '#/';
+  if (!(history.state && typeof history.state.mz === 'number')) history.replaceState({ ...(history.state || {}), pgFrom: from }, '');
+});
+document.addEventListener('click', e => {
+  if (!e.target.closest('.pg-back')) return;
+  if (history.state && history.state.pgFrom) history.back();
+  else location.hash = '#/' + (PAGE_PARENT[document.body.dataset.page] || '');
+});

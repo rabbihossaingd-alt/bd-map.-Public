@@ -338,14 +338,14 @@ function postTile(p, onGone, user) {
 }
 
 // A grid of one person's posts (or of a search), a page at a time.
-function postGrid(box, user, emptyText, query, saved) {
+function postGrid(box, user, emptyText, query, saved, place) {
   const grid = el('div', 'post-grid'), more = el('button', 'btn quiet more-posts', 'আরও দেখুন');
   let last = 0, busy = false;
   async function load() {
     if (busy) return;
     busy = true;
     let posts = [];
-    try { posts = (await exploreApi(`feed?user=${user}${last ? '&before=' + last : ''}${query ? '&q=' + encodeURIComponent(query) : ''}${saved ? '&saved=1' : ''}`)).posts; } catch { /* shows what is there */ }
+    try { posts = (await exploreApi(`feed?user=${user}${last ? '&before=' + last : ''}${query ? '&q=' + encodeURIComponent(query) : ''}${saved ? '&saved=1' : ''}${place ? '&place=' + encodeURIComponent(place) : ''}`)).posts; } catch { /* shows what is there */ }
     for (const p of posts) grid.appendChild(postTile(p, reload, user));
     if (posts.length) last = posts[posts.length - 1].id;
     more.hidden = posts.length < 30;
@@ -1116,7 +1116,32 @@ function openQuickPost() {
     people.hidden = !top.length;
   }
 
-  // Search: people by name, posts by caption or place.
+  // Search: places (districts, and places people tagged), people by name, posts by caption or place.
+  const placeRow = (icon, title, sub, onClick) => {
+    const b = el('button', 'found-place');
+    const t = el('span', 'fp-t'); t.append(el('b', null, title), el('em', null, sub));
+    b.append(ic(icon), t); b.addEventListener('click', onClick); return b;
+  };
+  function showPlacePosts(name, text) {
+    const grid = el('div'), head = el('div', 'label fp-head');
+    const back = el('button', 'fp-back'); back.append(ic('back')); back.setAttribute('aria-label', 'ফিরে যান');
+    back.addEventListener('click', () => { q.value = text; q.dispatchEvent(new Event('input')); });
+    head.append(back, el('span', 'no-tr', name));
+    results.replaceChildren(head, grid);
+    postGrid(grid, 0, 'এই জায়গার কোনো পোস্ট নেই।', '', false, name);
+  }
+  async function findPlaces(text, box, label, mine) {
+    const latin = text.toLowerCase().replace(/[^a-z]/g, '');     // 'cox' finds Cox's Bazar
+    const ds = (typeof DISTRICTS !== 'undefined' ? DISTRICTS : [])
+      .filter(d => d.bn.includes(text) || (latin.length >= 2 && d.en.toLowerCase().replace(/[^a-z]/g, '').includes(latin))).slice(0, 4);
+    const rows = ds.map(d => placeRow('compass', LANG === 'en' ? d.en : d.bn, (LANG === 'en' ? tr(d.division) + ' division · District guide' : d.division + ' বিভাগ · জেলা গাইড'), () => window.openDistrictGuide && window.openDistrictGuide(d)));
+    let tagged = [];
+    try { tagged = (await exploreApi('places?q=' + encodeURIComponent(text) + (ds.length ? '&near=' + ds.map(d => d.lat + ',' + d.lon).join(';') : ''))).places; } catch { /* districts still show */ }
+    if (mine !== seq) return;
+    for (const p of tagged) rows.push(placeRow('pin', p.name, LANG === 'en' ? p.n + (p.n === 1 ? ' post' : ' posts') : num(p.n) + 'টি পোস্ট', () => showPlacePosts(p.name, text)));
+    box.replaceChildren(...rows);
+    box.hidden = label.hidden = !rows.length;
+  }
   let timer = null, seq = 0;
   q.addEventListener('input', () => {
     clearTimeout(timer);
@@ -1127,8 +1152,10 @@ function openQuickPost() {
     people.hidden = searching || !people.children.length;
     if (!searching) return;
     timer = setTimeout(async () => {
-      const who = el('div', 'found-people'), grid = el('div');
-      results.replaceChildren(el('div', 'label', 'মানুষ'), who, el('div', 'label', 'পোস্ট'), grid);
+      const who = el('div', 'found-people'), grid = el('div'), where = el('div', 'found-places'), whereLabel = el('div', 'label', 'জায়গা');
+      where.hidden = whereLabel.hidden = true;
+      results.replaceChildren(whereLabel, where, el('div', 'label', 'মানুষ'), who, el('div', 'label', 'পোস্ট'), grid);
+      findPlaces(text, where, whereLabel, mine);
       postGrid(grid, 0, 'এই খোঁজে কোনো পোস্ট পাওয়া যায়নি।', text);
       if (!ME) { who.appendChild(el('div', 'empty', 'মানুষ খুঁজতে লগইন করুন।')); return; }
       try {

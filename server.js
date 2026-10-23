@@ -1587,9 +1587,22 @@ async function exploreApi(req, res, action, query) {
       const kind = query.get('kind') === 'video' ? 'video' : '', q = (query.get('q') || '').trim().toLowerCase().replace(/[%_]/g, '');
       const rows = db.prepare(`${POST_SELECT} AND p.id < ?2 AND (?3 = 0 OR p.user = ?3) AND (?4 = '' OR (p.kind = ?4 AND p.more = ''))
                                AND (?5 = '' OR lower(p.caption) LIKE ?5 OR lower(p.place) LIKE ?5)
-                               AND (?6 = 0 OR EXISTS (SELECT 1 FROM post_saves s WHERE s.post = p.id AND s.user = ?1)) ORDER BY p.id DESC LIMIT 30`)
-        .all(meId, before, user, kind, q ? '%' + q + '%' : '', query.get('saved') && meId ? 1 : 0);
+                               AND (?6 = 0 OR EXISTS (SELECT 1 FROM post_saves s WHERE s.post = p.id AND s.user = ?1)) AND (?7 = '' OR p.place = ?7) ORDER BY p.id DESC LIMIT 30`)
+        .all(meId, before, user, kind, q ? '%' + q + '%' : '', query.get('saved') && meId ? 1 : 0, (query.get('place') || '').trim().slice(0, 120));
       return json(res, 200, { posts: rows.map(p => forViewer(shownPost(p), meId)) });
+    }
+    // Places people have tagged in public posts, for the search box: { places: [{ name, n }] }, the most posted first.
+    // ?q= matches the name; ?near=lat,lon;… (up to 4, a district's town) adds places tagged within about 30 km of it,
+    // so 'cox' finds 'কক্সবাজার সমুদ্র সৈকত' through the district Cox's Bazar.
+    if (action === 'places') {
+      const q = (query.get('q') || '').trim().toLowerCase().replace(/[%_]/g, '');
+      if (q.length < 2) return json(res, 200, { places: [] });
+      const near = String(query.get('near') || '').split(';').slice(0, 4).map(s => s.split(',').map(Number)).filter(([a, o]) => inBd(a, o));
+      const box = near.map(() => '(p.lat BETWEEN ? AND ? AND p.lon BETWEEN ? AND ?)').join(' OR ');
+      const rows = db.prepare(`SELECT p.place AS name, COUNT(*) AS n FROM posts p JOIN users u ON u.id = p.user WHERE u.banned = 0 AND p.audience = 'all' AND p.at <= ?
+                               AND p.place <> '' AND (lower(p.place) LIKE ?${box ? ' OR ' + box : ''}) GROUP BY p.place ORDER BY n DESC, MAX(p.id) DESC LIMIT 8`)
+        .all(now, '%' + q + '%', ...near.flatMap(([a, o]) => [a - 0.27, a + 0.27, o - 0.29, o + 0.29]));
+      return json(res, 200, { places: rows });
     }
     if (action === 'audios') {
       const rows = db.prepare(`SELECT p.id, p.file, p.poster, p.caption, p.created, p.aname, u.name, u.pic_v, u.id AS uid, (SELECT COUNT(*) FROM posts x WHERE x.music = 'post:' || p.id) AS uses
