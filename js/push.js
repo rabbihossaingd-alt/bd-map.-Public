@@ -32,7 +32,7 @@ async function pushOnNow() {
   let sub = await reg.pushManager.getSubscription();
   const key = (await (await fetch('api/push/key')).json()).key;
   if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: pushKeyBytes(key) });
-  const r = await fetch('api/push/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sub.toJSON()) });
+  const r = await fetch('api/push/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...sub.toJSON(), lang: LANG }) });   // notifications come in the language the app is in
   return r.ok;
 }
 async function pushOff() {

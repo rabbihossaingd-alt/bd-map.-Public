@@ -774,7 +774,7 @@ function notify(user, actor, kind, post = 0, body = '') {
   if (kind !== 'comment') db.prepare('DELETE FROM notifications WHERE user = ? AND actor = ? AND kind = ? AND post = ?').run(user, actor, kind, post);
   db.prepare('INSERT INTO notifications (user, actor, kind, post, body, created) VALUES (?, ?, ?, ?, ?, ?)').run(user, actor, kind, post, body, Date.now());
   push(user, 'notify', {});
-  if (NOTE_TEXT[kind]) pushTo(user, { title: pushName(actor), body: NOTE_TEXT[kind] + (kind === 'comment' && body ? ': ' + body.slice(0, 100) : ''), tag: 'n-' + kind + '-' + (post || actor), url: '/#/explore' });
+  if (NOTE_TEXT.bn[kind]) pushTo(user, lang => ({ title: pushName(actor), body: NOTE_TEXT[lang][kind] + (kind === 'comment' && body ? ': ' + body.slice(0, 100) : ''), tag: 'n-' + kind + '-' + (post || actor), url: '/#/explore' }));
 }
 const unnotify = (user, actor, kind, post = 0) => db.prepare('DELETE FROM notifications WHERE user = ? AND actor = ? AND kind = ? AND post = ?').run(user, actor, kind, post);
 
@@ -804,6 +804,8 @@ setInterval(() => { for (const set of streams.values()) for (const res of set) r
 db.exec(`CREATE TABLE IF NOT EXISTS push_subs (endpoint TEXT PRIMARY KEY, user INTEGER NOT NULL, sess TEXT NOT NULL, p256dh TEXT NOT NULL, auth TEXT NOT NULL,
   created INTEGER NOT NULL, fails INTEGER NOT NULL DEFAULT 0)`);
 db.exec('CREATE INDEX IF NOT EXISTS push_subs_user ON push_subs (user)');
+// the language the app was in on that device when it subscribed: each notification is written in it
+if (!db.prepare("SELECT COUNT(*) AS n FROM pragma_table_info('push_subs') WHERE name = 'lang'").get().n) db.exec("ALTER TABLE push_subs ADD COLUMN lang TEXT NOT NULL DEFAULT 'bn'");
 const b64u = buf => Buffer.from(buf).toString('base64url');
 const VAPID = (() => {
   let jwk = null;
@@ -860,22 +862,33 @@ setInterval(() => db.prepare('DELETE FROM push_subs WHERE fails >= 20').run(), 3
 // goes out as a notification; while the person is looking at Manzeela, it arrives in the app only.
 const tabsInView = new Map();      // user id -> Map(tab -> last time it said it was visible)
 const inView = id => { const t = tabsInView.get(id); if (!t) return false; const now = Date.now(); for (const [k, at] of t) if (now - at > 90_000) t.delete(k); return t.size > 0 && isOnline(id); };
-function pushTo(userId, note, urgency = 'normal') {
+// make(lang) writes the notification in that device's language ('bn' or 'en'); nothing goes out when it returns null
+function pushTo(userId, make, urgency = 'normal') {
   if (!userId || inView(userId)) return;
-  for (const sub of subsOf.all(Date.now(), userId)) sendPush(sub, note, urgency);
+  const made = {};
+  for (const sub of subsOf.all(Date.now(), userId)) {
+    const lang = sub.lang === 'en' ? 'en' : 'bn';
+    if (!(lang in made)) made[lang] = make(lang);
+    if (made[lang]) sendPush(sub, { ...made[lang], lang }, urgency);
+  }
 }
 const pushName = id => (aq.byId.get(id) || {}).name || 'Manzeela';
-function messagePreview(kind, body) {
+const PREVIEW = {
+  bn: { photo: '📷 ছবি', video: '🎥 ভিডিও', audio: '🎤 ভয়েস মেসেজ', place: '📍 জায়গা', missed: '📞 মিসড কল', missedVideo: '📹 মিসড ভিডিও কল', file: '📎 ফাইল', other: 'নতুন মেসেজ', group: 'গ্রুপ' },
+  en: { photo: '📷 Photo', video: '🎥 Video', audio: '🎤 Voice message', place: '📍 Place', missed: '📞 Missed call', missedVideo: '📹 Missed video call', file: '📎 File', other: 'New message', group: 'Group' }
+};
+function messagePreview(kind, body, lang = 'bn') {
+  const t = PREVIEW[lang] || PREVIEW.bn;
   if (kind === 'text') return String(body).slice(0, 140);
-  if (kind === 'photo') return '📷 ছবি';
-  if (kind === 'video') return '🎥 ভিডিও';
-  if (kind === 'audio') return '🎤 ভয়েস মেসেজ';
-  if (kind === 'place') { try { return '📍 ' + JSON.parse(body).label; } catch { return '📍 জায়গা'; } }
-  if (kind === 'call') { try { const c = JSON.parse(body); return c.result === 'missed' ? (c.video ? '📹 মিসড ভিডিও কল' : '📞 মিসড কল') : ''; } catch { return ''; } }
-  if (kind === 'file') return '📎 ফাইল';
-  return 'নতুন মেসেজ';
+  if (kind === 'photo' || kind === 'video' || kind === 'audio' || kind === 'file') return t[kind];
+  if (kind === 'place') { try { return '📍 ' + JSON.parse(body).label; } catch { return t.place; } }
+  if (kind === 'call') { try { const c = JSON.parse(body); return c.result === 'missed' ? (c.video ? t.missedVideo : t.missed) : ''; } catch { return ''; } }
+  return t.other;
 }
-const NOTE_TEXT = { like: 'আপনার পোস্টে লাইক দিয়েছেন', comment: 'মন্তব্য করেছেন', follow: 'আপনাকে ফলো করেছেন', followback: 'আপনাকে ফলো ব্যাক করেছেন', tag: 'একটি পোস্টে আপনাকে ট্যাগ করেছেন' };
+const NOTE_TEXT = {
+  bn: { like: 'আপনার পোস্টে লাইক দিয়েছেন', comment: 'মন্তব্য করেছেন', follow: 'আপনাকে ফলো করেছেন', followback: 'আপনাকে ফলো ব্যাক করেছেন', tag: 'একটি পোস্টে আপনাকে ট্যাগ করেছেন' },
+  en: { like: 'liked your post', comment: 'commented', follow: 'started following you', followback: 'followed you back', tag: 'tagged you in a post' }
+};
 async function pushApi(req, res, action) {
   if (action === 'key' && req.method === 'GET') return json(res, 200, { key: VAPID.pub });
   if (req.method !== 'POST') return json(res, 405, { error: 'method not allowed' });
@@ -895,7 +908,8 @@ async function pushApi(req, res, action) {
     const ep = body.endpoint, k = body.keys || {};
     if (typeof ep !== 'string' || ep.length > 1000 || !pushHostOk(ep) || !/^[\w-]{80,100}$/.test(k.p256dh || '') || !/^[\w-]{16,30}$/.test(k.auth || '')) return json(res, 400, { error: 'bad request' });
     if (count('SELECT COUNT(*) AS n FROM push_subs WHERE user = ?', me.id) >= 10) db.prepare('DELETE FROM push_subs WHERE endpoint = (SELECT endpoint FROM push_subs WHERE user = ? ORDER BY created LIMIT 1)').run(me.id);
-    db.prepare('INSERT OR REPLACE INTO push_subs (endpoint, user, sess, p256dh, auth, created) VALUES (?, ?, ?, ?, ?, ?)').run(ep, me.id, sha(sessionToken(req)), k.p256dh, k.auth, Date.now());
+    db.prepare('INSERT OR REPLACE INTO push_subs (endpoint, user, sess, p256dh, auth, created, lang) VALUES (?, ?, ?, ?, ?, ?, ?)').run(ep, me.id, sha(sessionToken(req)), k.p256dh, k.auth, Date.now(),
+      body.lang === 'en' || body.lang === 'bn' ? body.lang : ((db.prepare('SELECT lang FROM push_subs WHERE user = ? ORDER BY created DESC LIMIT 1').get(me.id) || {}).lang || 'bn'));
     return json(res, 200, { ok: true });
   }
   return json(res, 404, { error: 'not found' });
@@ -1212,7 +1226,7 @@ async function chatApi(req, res, action, query) {
     const message = { ...shown({ id: Number(lastInsertRowid), sender: me.id, kind, body: text, sent: now, seen: 0, grp: 0, reply, reacts: '{}', gone: 0, got }), to: other };
     push(other, 'message', message);
     push(me.id, 'message', message);                 // the sender's other devices
-    { const say = messagePreview(kind, text); if (say && !mutedOf(other, 'u' + me.id)) pushTo(other, { title: me.name, body: say, tag: 'dm-' + me.id, url: '/#/chat' }, 'high'); }
+    if (!mutedOf(other, 'u' + me.id)) pushTo(other, lang => { const say = messagePreview(kind, text, lang); return say ? { title: me.name, body: say, tag: 'dm-' + me.id, url: '/#/chat' } : null; }, 'high');
     return json(res, 200, { message });
   }
   if (action === 'signal') {                         // call set-up, passed straight to the other person
@@ -1255,8 +1269,9 @@ function groupAction(res, me, action, body) {
     db.prepare('UPDATE group_members SET last_read = ? WHERE grp = ? AND user = ?').run(id, gid, me.id);
     const message = shown({ id, sender: me.id, kind: body.kind, body: text, sent: now, seen: 0, grp: gid, reply, reacts: '{}', gone: 0 });
     tellGroup(gid, 'message', message);
-    { const say = messagePreview(body.kind, text), g = gq.group.get(gid);
-      if (say) for (const m of gq.members.all(gid)) if (m.id !== me.id && !mutedOf(m.id, groupKey(gid))) pushTo(m.id, { title: (g && g.name) || 'গ্রুপ', body: me.name + ': ' + say, tag: 'g' + gid, url: '/#/chat' }, 'high'); }
+    { const g = gq.group.get(gid);
+      const make = lang => { const say = messagePreview(body.kind, text, lang); return say ? { title: (g && g.name) || PREVIEW[lang].group, body: me.name + ': ' + say, tag: 'g' + gid, url: '/#/chat' } : null; };
+      for (const m of gq.members.all(gid)) if (m.id !== me.id && !mutedOf(m.id, groupKey(gid))) pushTo(m.id, make, 'high'); }
     return json(res, 200, { message });
   }
   if (action === 'group-read') {

@@ -35,7 +35,7 @@ self.addEventListener('push', event => {
   try { n = event.data ? event.data.json() : {}; } catch { n = { body: event.data ? event.data.text() : '' }; }
   event.waitUntil(self.registration.showNotification(n.title || 'Manzeela', {
     body: n.body || '', tag: n.tag || undefined, renotify: !!n.tag, icon: '/img/icon-192.png', badge: '/img/badge-96.png',
-    data: { url: n.url || '/' }, lang: 'bn', timestamp: Date.now()
+    data: { url: n.url || '/' }, lang: n.lang === 'en' ? 'en' : 'bn', timestamp: Date.now()
   }));
 });
 // A tap opens the app where the notification points: an open window is brought forward, else a new one.
@@ -54,6 +54,6 @@ self.addEventListener('pushsubscriptionchange', event => {
     const key = (await (await fetch('/api/push/key')).json()).key;
     const raw = Uint8Array.from(atob(key.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
     const sub = await self.registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: raw });
-    await fetch('/api/push/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sub.toJSON()) });
+    await fetch('/api/push/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sub.toJSON()) });   // the server keeps the language this person used before
   })().catch(() => {}));
 });
