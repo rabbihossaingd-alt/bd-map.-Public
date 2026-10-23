@@ -2128,3 +2128,12 @@ document.addEventListener('click', e => {
   if (history.state && history.state.pgFrom) history.back();
   else location.hash = '#/' + (PAGE_PARENT[document.body.dataset.page] || '');
 });
+
+// Search boxes everywhere (also the ones made later): no red spelling lines under 'coxbazar', no autocorrect.
+document.addEventListener('focusin', e => {
+  const t = e.target;
+  if (t.tagName !== 'INPUT' || t.dataset.plain) return;
+  if (t.type === 'search' || /খুঁজ|খোঁজ|search|যাবেন|থেকে/i.test(t.placeholder || '')) {
+    t.spellcheck = false; t.setAttribute('autocorrect', 'off'); t.setAttribute('autocapitalize', 'off'); t.dataset.plain = '1';
+  }
+});
