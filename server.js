@@ -282,7 +282,10 @@ function deviceName(ua = '') {
   const br = /Edg\//.test(ua) ? 'Edge' : /OPR\//.test(ua) ? 'Opera' : /SamsungBrowser/.test(ua) ? 'Samsung Internet' : /Firefox\//.test(ua) ? 'Firefox' : /Chrome\//.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : '';
   return [br, os].filter(Boolean).join(' · ') || 'Browser';
 }
-const clientIp = req => String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress || '';
+// The visitor's own address. Behind Render (which sits behind Cloudflare) the connection comes from the proxy, so
+// counting by it would lump every visitor together: Cloudflare's own header first (a visitor cannot set it), then the
+// forwarded-for list, then the connection itself.
+const clientIp = req => String(req.headers['cf-connecting-ip'] || req.headers['true-client-ip'] || String(req.headers['x-forwarded-for'] || '').split(',')[0] || req.socket.remoteAddress || '').trim();
 
 // ---- usernames: a-z, 0-9, dot and underscore, 3 to 30 long, unique ----
 const RESERVED = ['admin', 'bdmap', 'bd_map', 'support', 'help', 'official', 'root', 'staff', 'moderator'];
@@ -345,6 +348,16 @@ const cleanName = n => typeof n === 'string' ? n.trim().replace(/\s+/g, ' ').sli
 
 // Guessing and flooding: at most 8 tries per key in 15 minutes.
 const tries = new Map();
+// Sign-in codes per day: an address gets 20, a network 40 — enough for anyone, and no one can spend the mail service's
+// daily allowance (Brevo's free 300) by asking for codes in a loop.
+const dailyCodes = new Map();
+function allowDaily(key, limit) {
+  const now = Date.now(), recent = (dailyCodes.get(key) || []).filter(t => now - t < 864e5);
+  if (recent.length >= limit) { dailyCodes.set(key, recent); return false; }
+  recent.push(now); dailyCodes.set(key, recent);
+  return true;
+}
+setInterval(() => { const now = Date.now(); for (const [k, v] of dailyCodes) if (!v.some(t => now - t < 864e5)) dailyCodes.delete(k); }, 3600e3).unref();
 function allowTry(key) {
   const now = Date.now(), recent = (tries.get(key) || []).filter(t => now - t < 15 * 60_000);
   if (recent.length >= 8) { tries.set(key, recent); return false; }
@@ -409,7 +422,7 @@ async function authApi(req, res, action) {
   if (!(req.headers['content-type'] || '').startsWith('application/json')) return json(res, 400, { error: 'bad request' });
   let body;
   try { body = JSON.parse(await readBody(req, 400_000)) || {}; } catch { return json(res, 400, { error: 'bad request' }); }
-  const ip = req.socket.remoteAddress, now = Date.now();
+  const ip = clientIp(req), now = Date.now();
 
   if (action === 'code') {
     const email = cleanEmail(body.email);
@@ -422,6 +435,7 @@ async function authApi(req, res, action) {
     const old = aq.code.get(email);
     if (old && now - old.sent < 60_000) return json(res, 429, { error: 'wait' });
     if (!allowTry(ip + '|code') || !allowTry(email + '|code')) return json(res, 429, { error: 'slow' });
+    if (!allowDaily('ip|' + ip, 40) || !allowDaily('mail|' + email, 20)) return json(res, 429, { error: 'slow' });
     if (!mailReady && !isLocal(req)) return json(res, 503, { error: 'mail' });
     const code = String(crypto.randomInt(100000, 1000000));
     aq.setCode.run(email, sha(code + email), now + 10 * 60_000, now);
@@ -893,7 +907,7 @@ async function chatApi(req, res, action, query) {
       return json(res, 200, out);
     }
     if (action === 'find') {
-      if (!allowWrite(req.socket.remoteAddress)) return json(res, 429, { error: 'slow' });
+      if (!allowWrite(clientIp(req))) return json(res, 429, { error: 'slow' });
       const email = cleanEmail(query.get('email') || '');
       if (!email) return json(res, 400, { error: 'email' });
       const user = aq.byEmail.get(email);
@@ -1027,7 +1041,7 @@ async function chatApi(req, res, action, query) {
 
   if (action === 'friend') {
     if (link && link.state === 'blocked') return json(res, 403, { error: 'blocked' });
-    if (!link) { if (!allowWrite(req.socket.remoteAddress)) return json(res, 429, { error: 'slow' }); cq.setLink.run(a, b, 'pending', me.id, now); notify(other, me.id, 'follow'); }
+    if (!link) { if (!allowWrite(clientIp(req))) return json(res, 429, { error: 'slow' }); cq.setLink.run(a, b, 'pending', me.id, now); notify(other, me.id, 'follow'); }
     else if (link.state === 'pending' && link.actor !== me.id) { cq.setLink.run(a, b, 'friends', me.id, now); notify(other, me.id, 'followback'); }
     refresh();
     return json(res, 200, { ok: true });
@@ -1627,7 +1641,7 @@ async function exploreApi(req, res, action, query) {
   if (action === 'view') {                           // posts that came on screen: counted once per viewer in 6 hours
     let body;
     try { body = JSON.parse(await readBody(req, 4000)) || {}; } catch { return json(res, 400, { error: 'bad request' }); }
-    const who = me ? 'u' + me.id : (String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress);
+    const who = me ? 'u' + me.id : clientIp(req);
     for (const id of (Array.isArray(body.ids) ? body.ids : []).slice(0, 30).map(Number)) {
       const key = who + '|' + id;
       if (!Number.isInteger(id) || viewed.has(key)) continue;
@@ -2554,7 +2568,7 @@ async function api(req, res) {
     return json(res, 200, out);
   }
   if (req.method !== 'POST') return json(res, 405, { error: 'method not allowed' });
-  if (!allowWrite(req.socket.remoteAddress)) return json(res, 429, { error: 'too many ratings, try again in a minute' });
+  if (!allowWrite(clientIp(req))) return json(res, 429, { error: 'too many ratings, try again in a minute' });
 
   let body;
   try { body = JSON.parse(await readBody(req)); } catch { return json(res, 400, { error: 'bad request' }); }
@@ -2563,7 +2577,9 @@ async function api(req, res) {
   const okDevice = typeof device === 'string' && /^[\w-]{8,64}$/.test(device);
   if (!okKey || !okDevice || !Number.isInteger(stars) || stars < 0 || stars > 5) return json(res, 400, { error: 'bad request' });
 
-  const voter = voterOf(req, device);
+  const user = userOf(req);
+  if (!user) return json(res, 401, { error: 'login' });           // one rating per account (S1)
+  const voter = 'u' + user.id;
   if (stars === 0) q.remove.run(key, voter);
   else q.upsert.run(key, voter, stars, Date.now());
   const row = q.one.get(key);
@@ -2581,7 +2597,7 @@ async function faresApi(req, res) {
     return json(res, 200, out);
   }
   if (req.method !== 'POST') return json(res, 405, { error: 'method not allowed' });
-  if (!allowWrite(req.socket.remoteAddress)) return json(res, 429, { error: 'too many reports, try again in a minute' });
+  if (!allowWrite(clientIp(req))) return json(res, 429, { error: 'too many reports, try again in a minute' });
   let body;
   try { body = JSON.parse(await readBody(req)); } catch { return json(res, 400, { error: 'bad request' }); }
   const { from, to, fare, device } = body || {};

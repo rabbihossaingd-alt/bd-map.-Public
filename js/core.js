@@ -283,7 +283,10 @@ async function loadRatings() {
   return RATINGS_ONLINE;
 }
 
+// A rating counts once per account (a device number could be made up a thousand times by a script): rating needs
+// signing in, and the server keeps one per person.
 async function setRating(key, n) {
+  if (RATINGS_ONLINE && typeof ME !== 'undefined' && !ME) { if (typeof needLogin === 'function') needLogin('রেটিং দিতে লগইন করুন'); return; }
   const all = getRatings();
   if (n) all[key] = n; else delete all[key];
   try { localStorage.setItem(RATE_KEY, JSON.stringify(all)); } catch { /* storage unavailable */ }
