@@ -84,6 +84,31 @@ addEventListener('hashchange', () => { for (const f of feedSounds) f.sound.stop(
 
 // ---- one post in the feed ----
 let feedWatcher = null;      // plays a feed video while it is on screen, pauses it when it leaves
+
+// One player at a time. Whatever video starts pauses every other one that has sound or sits in the feed, and the feed's
+// photo music stops; camera and call pictures (a live stream, not a file) are left alone. While reels, a story, a live,
+// the studio or a sheet covers the feed, the feed does not start; once nothing covers it, the video in view goes on.
+const FEED_COVERS = 'body > .reels, body > .stories, body > .live-hub, body > .live-room:not(.embedded), body > .studio, body > .dg-sheet:not(.out), body > .auth';
+const feedCovered = () => !!document.querySelector(FEED_COVERS) || ($('modal') && !$('modal').hidden && $('modal').classList.contains('post-modal'));
+document.addEventListener('play', e => {
+  const v = e.target;
+  if (!(v instanceof HTMLVideoElement) || v.srcObject) return;
+  if (v.closest('.fc-media') && feedCovered()) { v.pause(); return; }
+  for (const o of document.querySelectorAll('video')) if (o !== v && !o.paused && !o.srcObject && (!o.muted || o.closest('.fc-media'))) o.pause();
+  if (!v.closest('.fc-media')) for (const f of feedSounds) f.sound.stop();
+}, true);
+function resumeFeed() {
+  if (current !== 'explore' || feedCovered()) return;
+  const vh = innerHeight;
+  for (const v of document.querySelectorAll('#explore-feed .fc-media video')) {
+    const r = v.getBoundingClientRect(), seen = Math.max(0, Math.min(r.bottom, vh) - Math.max(r.top, 0)) / (r.height || 1);
+    if (seen > 0.6) { if (v.paused) v.play().catch(() => { v.muted = true; v.play().catch(() => {}); }); return; }
+  }
+}
+new MutationObserver(muts => {
+  if (feedCovered()) { for (const v of document.querySelectorAll('#explore-feed .fc-media video')) if (!v.paused) v.pause(); }
+  else if (muts.some(m => m.removedNodes.length)) setTimeout(resumeFeed, 350);
+}).observe(document.body, { childList: true });
 let feedSound = true;        // sound is on, as on Instagram; a browser that refuses sound before a tap gets it at the first tap
 let feedNeedsTap = false;
 // A browser lets a video play with sound only after a real tap: a touch's pointerup/touchend, a click or a key —
@@ -575,11 +600,18 @@ async function openReels(startId, user) {
   let posts = [];
   const seed = newSeed();
   const page = o => exploreApi(user ? `feed?kind=video&user=${user}${o ? '&before=' + o : ''}` : `feed?kind=video&seed=${seed}&o=${o}${startId ? '&first=' + startId : ''}`);
-  try { posts = (await page(0)).posts; } catch { return; }
+  // the screen answers the tap at once: black, with a spinner, until the list comes
+  closeReels();
+  const wait = reelsBox = el('div', 'reels reels-wait');
+  wait.appendChild(el('i', 'reels-spin'));
+  document.body.appendChild(wait);
+  document.body.classList.add('reels-open');
+  try { posts = (await page(0)).posts; } catch { if (reelsBox === wait) closeReels(); return; }
+  if (reelsBox !== wait) return;                                     // closed (or opened again) meanwhile
   let offset = posts.length, ended = posts.length < 30, loading = false;
   const at = startId ? posts.findIndex(p => p.id === startId) : 0;
-  if (at < 0 || !posts.length) { if (!startId) exploreNote('এখনো কোনো রিল নেই — প্রথম ভিডিওটি আপনিই দিন।'); return; }
-  closeReels();
+  if (at < 0 || !posts.length) { closeReels(); if (!startId) exploreNote('এখনো কোনো রিল নেই — প্রথম ভিডিওটি আপনিই দিন।'); return; }
+  wait.remove();
   let sound = true;
   const reelSounds = [];
   const box = reelsBox = el('div', 'reels');
@@ -611,6 +643,9 @@ async function openReels(startId, user) {
     const reel = el('section', 'reel');
     const v = el('video');
     Object.assign(v, { src: p.src, poster: p.poster, loop: true, playsInline: true, preload: 'metadata' });
+    // a spinner while it waits for more of the video
+    v.addEventListener('waiting', () => reel.classList.add('buffering'));
+    for (const t of ['playing', 'pause', 'canplay']) v.addEventListener(t, () => reel.classList.remove('buffering'));
     // A reel in its own shape: a tall one fills the screen, any other is whole in the middle with black above and below.
     const tall = (w, h) => reel.classList.toggle('tall', !!w && w / h < .66);
     if (p.w) tall(p.w, p.h); else v.addEventListener('loadedmetadata', () => tall(v.videoWidth, v.videoHeight));
@@ -944,6 +979,7 @@ function openQuickPost() {
     for (const e of entries) {
       const v = e.target;
       if (e.isIntersecting && e.intersectionRatio > 0.6) {
+        if (feedCovered()) continue;                                 // something is over the feed: it waits (see resumeFeed)
         // one video at a time, as Instagram plays them
         for (const o of document.querySelectorAll('.fc-media video')) if (o !== v && !o.paused) o.pause();
         const wantSound = feedSound && v.dataset.orig !== '0';

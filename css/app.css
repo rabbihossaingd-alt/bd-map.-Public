@@ -4352,3 +4352,9 @@ button.dg-wiki { background: none; border: 0; padding: 0; cursor: pointer; font:
 
 /* the sign-in line: terms and privacy look like links */
 .legal-line a { color: inherit; text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px; }
+
+/* ================= Audit round 1 ================= */
+/* reels: the screen answers the tap at once, and a spinner shows while a reel waits for more of its video */
+.reels-wait { display: grid; place-items: center; }
+.reels-spin, .reel.buffering::after { width: 38px; height: 38px; border-radius: 50%; border: 3px solid rgba(255, 255, 255, .3); border-top-color: #fff; animation: spin .8s linear infinite; }
+.reel.buffering::after { content: ""; position: absolute; left: 50%; top: 50%; margin: -19px 0 0 -19px; z-index: 4; pointer-events: none; }
