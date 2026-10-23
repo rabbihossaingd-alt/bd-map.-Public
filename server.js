@@ -1411,6 +1411,33 @@ for (const t of ['posts', 'stories'])
     if (!db.prepare(`SELECT COUNT(*) AS n FROM pragma_table_info('${t}') WHERE name = ?`).get(col).n) db.exec(`ALTER TABLE ${t} ADD COLUMN ${col} ${def}`);
 function deleteStory(st) { unlinkMedia(st.file); unlinkMedia(st.poster); db.prepare('DELETE FROM stories WHERE id = ?').run(st.id); }
 db.exec(`CREATE TABLE IF NOT EXISTS post_comments (id INTEGER PRIMARY KEY, post INTEGER NOT NULL, user INTEGER NOT NULL, body TEXT NOT NULL, created INTEGER NOT NULL)`);
+// ---- Photos and videos from Cloudflare (audit S6) ----
+// Each uploaded file also gets a public copy in R2 under m/<name>, served at media.manzeela.com through Cloudflare's
+// cache: no download charge, near every phone, and Render's bandwidth stays for the app. The backup copy under the
+// secret prefix is not touched (the database must never be reachable). Until a file's public copy exists, the app
+// keeps serving it from here; answers name the public address as soon as it does (see json()).
+const MEDIA_HOST = (process.env.MEDIA_HOST ?? (backupOn ? 'https://media.manzeela.com' : '')).replace(/\/+$/, '');
+const PUB = 'm/';
+db.exec('CREATE TABLE IF NOT EXISTS r2_public (name TEXT PRIMARY KEY, at INTEGER NOT NULL)');
+const published = new Set(MEDIA_HOST ? db.prepare('SELECT name FROM r2_public').all().map(r => r.name) : []);
+const mediaUrl = name => MEDIA_HOST + '/' + PUB + name;
+const toPublic = text => published.size ? text.replace(/"\/?media\/([a-f0-9]{24}\.[a-z0-9]{2,5})"/g, (all, n) => (published.has(n) ? '"' + mediaUrl(n) + '"' : all)) : text;
+let publishing = false;
+async function publishMedia() {
+  if (!backupOn || !MEDIA_HOST || publishing) return;
+  publishing = true;
+  try {
+    for (const { name } of db.prepare('SELECT f.name FROM r2_files f LEFT JOIN r2_public p ON p.name = f.name WHERE p.name IS NULL ORDER BY f.at').all()) {
+      const type = (Object.entries(MEDIA_TYPES).find(([, v]) => v[0] === path.extname(name)) || [])[0];
+      if (!type) continue;       // chat files (pdf, zip…) stay here: they must download under their own name
+      if (await r2.copy(R2_PREFIX + 'media/' + name, PUB + name, { type, cache: 'public, max-age=31536000, immutable' })) {
+        db.prepare('INSERT OR REPLACE INTO r2_public (name, at) VALUES (?, ?)').run(name, Date.now());
+        published.add(name);
+      }
+    }
+  } catch (e) { console.error('Public media copy failed (tried again later):', e.message); }
+  finally { publishing = false; }
+}
 // a deleted file goes from the disk and from the copy on R2 (else the copy would bring it back: see mediaBack)
 const unlinkMedia = name => {
   if (!name) return;
@@ -1418,6 +1445,10 @@ const unlinkMedia = name => {
   fs.unlink(path.join(MEDIA_DIR, base), () => {});
   if (backupOn) {
     r2.del(R2_PREFIX + 'media/' + base).catch(e => console.error('R2 delete failed:', base, e.message));
+    if (published.delete(base) || MEDIA_HOST) {
+      r2.del(PUB + base).catch(e => console.error('R2 delete failed:', base, e.message));
+      try { db.prepare('DELETE FROM r2_public WHERE name = ?').run(base); } catch { /* table not made yet */ }
+    }
     try { db.prepare('DELETE FROM r2_files WHERE name = ?').run(base); } catch { /* table not made yet */ }
   }
 };
@@ -1881,6 +1912,8 @@ function serveMedia(req, res, name, again) {
     // gone from this disk (a fresh deploy): fetched back from R2 once, then served as usual
     if (err && valid && !again) { mediaBack(path.basename(name)).then(found => (found ? serveMedia(req, res, name, true) : res.writeHead(404).end())); return; }
     if (err || !stat.isFile() || !valid) { res.writeHead(404).end(); return; }
+    // its public copy exists: from Cloudflare (an address the app made itself, or an old link)
+    if (published.has(path.basename(name))) { res.writeHead(302, { Location: mediaUrl(path.basename(name)), 'Cache-Control': 'public, max-age=86400' }).end(); return; }
     const type = Object.entries(MEDIA_TYPES).find(([, v]) => v[0] === path.extname(file));
     const head = { 'Content-Type': type ? type[0] : 'application/octet-stream', 'Accept-Ranges': 'bytes', 'Cache-Control': 'public, max-age=31536000, immutable', 'X-Content-Type-Options': 'nosniff' };
     if (!type) head['Content-Disposition'] = 'attachment';
@@ -2555,7 +2588,7 @@ setInterval(() => {
 
 function json(res, status, body) {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
-  res.end(JSON.stringify(body));
+  res.end(toPublic(JSON.stringify(body)));
 }
 
 function readBody(req, limit = 2048) {
@@ -3128,7 +3161,8 @@ if (backupOn) {
   // a database just brought back from R2 is already up there; any other (the first run, or a disk that survived) goes up once now
   if (dbRestored) dbCopied = changesNow(); else setTimeout(copyDbUp, 30_000).unref();
   setInterval(() => { copyDbUp(); }, 2 * 60_000).unref();
-  setInterval(() => { copyMediaUp(); }, 60_000).unref();
+  setInterval(() => { copyMediaUp().then(publishMedia); }, 60_000).unref();
+  setTimeout(publishMedia, 45_000).unref();
   setTimeout(copyMediaUp, 20_000).unref();
   // Leaving the old, public place: every file copied up there moves to the new name (R2 copies it), then the old copy
   // goes. The old server of a deploy may still write its last database there as it stops, so that one is removed again
