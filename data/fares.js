@@ -17,7 +17,8 @@ const FARES = {
     roadFactor: 1.08,           // stop-to-stop straight lines -> road distance (stops are now close together)
     roundTo: 5,                 // local buses charge in steps of ৳5; the computed fare is rounded down to one
     nearStopKm: 1.2,            // how far a point may be from a local bus stop
-    localSpeedKmh: [10, 18]     // Dhaka local bus average speed range, jam to clear road
+    localSpeedKmh: [7, 18]      // Dhaka local bus speed, in traffic to a clear road. 7 km/h is the city's average driving
+                                // speed (World Bank, 'Toward Great Dhaka', 2017; the Strategic Transport Plan says 6.4)
   },
   // Distance (km) from a city centre that counts as inside the fare zone.
   zones: {
@@ -26,6 +27,8 @@ const FARES = {
     dtca:       { lat: 23.78,  lon: 90.40, r: 45 },
     sylhet:     { lat: 24.895, lon: 91.869, r: 12 }
   },
+  // Dhaka's average driving speed with its traffic: used for how long a ride inside the city takes (World Bank, 2017)
+  cityKmh: { dhakaMetro: 7, source: 'ঢাকার গড় গতি ঘণ্টায় ৭ কিমি (বিশ্বব্যাংক, ২০১৭)' },
   cng: { base: 40, baseKm: 2, perKm: 12, waitPerMin: 2, maxKm: 40 },
   rides: [
     { id: 'bike', name: 'বাইক', sub: '১ জন',      base: 25, perKm: 15, perMin: 0.5, min: 50, maxKm: 60,

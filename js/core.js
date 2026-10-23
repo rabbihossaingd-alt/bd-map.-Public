@@ -566,6 +566,16 @@ async function placePhotos(place, radius = 500, max = 6) {
 }
 
 const distText = km => km < 1 ? `${num(Math.round(km * 100) * 10)} মিটার` : `${num(km, 1)} কিমি`;
+// a span of time, short enough for a chip: '১৩–৯৫ মিনিট', or '১.৫–৩ ঘণ্টা' once it runs past 100 minutes
+function fmtSpan(lo, hi) {
+  lo = Math.max(1, Math.round(lo)); hi = Math.max(lo, Math.round(hi));
+  if (hi - lo < 3) return fmtMin(hi);
+  if (hi < 100) return `${num(lo)}–${num(hi)} মিনিট`;
+  const h = m => Math.max(0.5, Math.round(m / 30) / 2);
+  return h(lo) === h(hi) ? `${num(h(hi))} ঘণ্টা` : `${num(h(lo))}–${num(h(hi))} ঘণ্টা`;
+}
+// both ends inside Dhaka's city zone: times there follow its traffic
+const inDhakaCity = (a, b) => !!(a && b && inZone(a, FARES.zones.dhakaMetro) && inZone(b, FARES.zones.dhakaMetro));
 const fareRange = (lo, hi) => lo === hi ? taka(lo) : `${taka(lo)}–${num(hi)}`;
 
 async function reverseName(lat, lon) {
@@ -696,6 +706,7 @@ function localTrips(from, to) {
     t.fare = total(t, 'fare');
     // One typical time: midpoint of the clear-road and jam estimates, to the nearest 5 minutes.
     t.min = Math.round((total(t, 'minFast') + total(t, 'minSlow')) / 10) * 5;
+    t.minLo = total(t, 'minFast'); t.minHi = total(t, 'minSlow');     // shown as a span, like the bus chip above
   }
   return trips.sort((a, b) => a.km - b.km);
 }

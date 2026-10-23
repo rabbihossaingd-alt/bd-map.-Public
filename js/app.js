@@ -59,6 +59,20 @@ function fareTiles(rule, km, official) {
   return tiles;
 }
 
+// One number first, as a traveller wants it: what the counters usually charge (non-AC, and AC when known), with the
+// BRTA's set fare under it as the official ceiling. Without a counter list, the BRTA chart (or the per-km rate) and the
+// AC estimate as before.
+function fareSummary(a, b, rule, km) {
+  const other = a.id === 'dhaka' ? b : b.id === 'dhaka' ? a : null;
+  const f = other && MARKET_FARES[other.id], official = officialFare(a, b);
+  if (!f) return fareTiles(rule, km, official);
+  const tiles = el('div', 'tiles');
+  tiles.append(tile('main', 'সাধারণত গুনবেন · নন-এসি', fareRange(f[0], f[1]), f.length > 2 ? `এসি ${fareRange(f[2], f[3])} · কাউন্টারের অনানুষ্ঠানিক তালিকা` : 'কাউন্টারের অনানুষ্ঠানিক তালিকা'));
+  if (official) tiles.append(tile('', 'বিআরটিএ নির্ধারিত · নন-এসি', fareRange(official.f51, official.f40), `সরকারি হার · ৫১ ও ৪০ আসন · ${official.terminal} থেকে`));
+  else tiles.append(tile('', 'সরকারি হারে · নন-এসি', taka(busFare(rule, km)), perKmText(rule.perKm)));
+  return tiles;
+}
+
 // What counters typically charge between Dhaka and a district (unofficial list), when we have it.
 function counterFare(a, b) {
   const other = a.id === 'dhaka' ? b : b.id === 'dhaka' ? a : null;
@@ -1257,7 +1271,9 @@ function renderBusPane(km) {
     const list = el('div');
     for (const t of trips.slice(0, 6)) {
       const first = t.legs[0], last = t.legs[t.legs.length - 1];
-      const card = item('bus', t.legs.map(l => l.r.bn).join(' → '), `${STOPS[first.seg[0]].bn} থেকে উঠুন · প্রায় ${fmtMin(t.min)}`, taka(t.fare), node => {
+      const off = STOPS[last.seg[last.seg.length - 1]], walk = trip.to ? haversineKm(off, trip.to) * FARES.bus.roadFactor : 0;
+      const getOff = `${off.bn}-এ নামুন` + (walk >= 0.15 ? ` · নেমে ${kmText(walk)} হাঁটা` : '');
+      const card = item('bus', t.legs.map(l => l.r.bn).join(' → '), `${STOPS[first.seg[0]].bn} থেকে উঠুন · ${getOff} · ${fmtSpan(t.minLo, t.minHi)}`, taka(t.fare), node => {
         selectOnly(node);
         showBusOnMap(t.legs.map(l => l.seg));
       });
@@ -1316,15 +1332,19 @@ function askFare(a, b, km) {
   input.focus();
 }
 
-function renderRidePane(km, min) {
+// min: the clear-road time; jamMin: with Dhaka's traffic. A ride paid by the minute is shown from one to the other.
+function renderRidePane(km, min, jamMin = min) {
   const pane = $('pane-ride');
   pane.replaceChildren();
   cancelRide();
   const add = (icon, name, sub, price) => {
-    pane.appendChild(item(icon, name, sub, taka(price), node => { selectOnly(node); requestRide(name, price); }));
+    pane.appendChild(item(icon, name, sub, Array.isArray(price) ? fareRange(Math.round(price[0] / 5) * 5, Math.round(price[1] / 5) * 5) : taka(price), node => { selectOnly(node); requestRide(name, Array.isArray(price) ? price[1] : price); }));
   };
-  if (km <= FARES.cng.maxKm) add('cng', 'সিএনজি', 'মিটার রেট', cngFare(km));
-  for (const r of FARES.rides) if (km <= r.maxKm) add(r.id, r.name, r.sub, rideFare(r, km, min, trip.from));
+  if (km <= FARES.cng.maxKm) add('cng', 'সিএনজি', 'মিটারে, সরকারি হার · চালকরা সাধারণত বেশি চান', cngFare(km));
+  for (const r of FARES.rides) if (km <= r.maxKm) {
+    const lo = rideFare(r, km, min, trip.from), hi = rideFare(r, km, jamMin, trip.from);
+    add(r.id, r.name, `${r.sub} · ${r.id === 'bike' ? 'পাঠাও-র' : 'উবারের'} প্রকাশিত হারে`, Math.round(hi) - Math.round(lo) >= 5 ? [lo, hi] : lo);
+  }
   const any = pane.children.length > 0;
   $('seg').hidden = !any;
   $('seg').querySelector('[data-pane=ride]').hidden = !any;      // too far for a ride: no empty tab
@@ -1385,23 +1405,28 @@ async function calculate() {
     bus: '<rect x="4" y="3" width="16" height="14" rx="3"/><path d="M4 10h16M7 21v-4M17 21v-4"/>',
     car: '<path d="M4 16l2-6a2 2 0 012-1.4h8a2 2 0 012 1.4l2 6v3H4z"/><circle cx="8" cy="16" r="1.4"/><circle cx="16" cy="16" r="1.4"/>'
   };
-  const ways = [['car', 'গাড়িতে', min], ['bus', 'বাসে', km / (km < 40 ? 14 : 40) * 60],
+  // Inside Dhaka a car and a bus go at the city's pace: from a clear road (the route's own time; a bus at its top speed)
+  // to the average with traffic (7 km/h, World Bank). The bus chip uses the same speeds as each bus below, so the two agree.
+  const city = inDhakaCity(trip.from, trip.to), [busSlow, busFast] = FARES.bus.localSpeedKmh;
+  const jam = km / FARES.cityKmh.dhakaMetro * 60;
+  const ways = [['car', 'গাড়িতে', city ? [min, Math.max(min, jam)] : min],
+    ['bus', 'বাসে', city ? [km / busFast * 60, km / busSlow * 60] : km / (km < 40 ? 14 : 40) * 60],
     ...(km <= 10 ? [['rick', 'রিকশা', km / 10 * 60]] : []), ['walk', 'হেঁটে', km / 4.5 * 60]];
   const row = el('div', 'ways');
   for (const [k, label, m] of ways) {
     const b = el('button', 'way' + (k === 'bus' ? ' on' : ''));
     b.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${WAY_ICONS[k]}</svg>`;
-    b.appendChild(el('span', null, `${label} ${fmtMin(Math.max(1, Math.round(m)))}`));
+    b.appendChild(el('span', null, `${label} ${Array.isArray(m) ? fmtSpan(m[0], m[1]) : fmtMin(Math.max(1, Math.round(m)))}`));
     b.addEventListener('click', () => { for (const x of row.children) x.classList.toggle('on', x === b); if (k === 'bus') showPane('bus'); if (k === 'car') showPane('ride'); });
     row.appendChild(b);
   }
-  $('trip-time').replaceChildren(row, el('p', 'ways-note', 'সময় আনুমানিক · গাড়ির সময় জ্যাম ছাড়া'));
+  $('trip-time').replaceChildren(row, el('p', 'ways-note', city ? `সময় আনুমানিক · কম সংখ্যাটি ফাঁকা রাস্তায়, বেশিটি জ্যামে — ${FARES.cityKmh.source}` : 'সময় আনুমানিক · গাড়ির সময় ফাঁকা রাস্তায় — শহর থেকে বের হতে ও জ্যামে আরও লাগে'));
   $('sheet').hidden = false;
   if (phoneSheet) phoneSheet.snap(1, false);
   $('trip-photo').replaceChildren(photoStrip(trip.to));
   clearBus();
   renderBusPane(km);
-  renderRidePane(km, min);
+  renderRidePane(km, min, city ? Math.max(min, jam) : min);
   renderTrainPane();
   if (typeof showCommunityFares === 'function') showCommunityFares();
   showPane('bus');
@@ -1732,15 +1757,13 @@ for (const b of $('seg').children) b.addEventListener('click', () => showPane(b.
     route.append(el('span', null, a.bn), Object.assign(el('i', 'rx-arrow'), { innerHTML: svg('arrow') }), el('span', null, b.bn));
     const facts = el('div', 'rx-facts');
     const fact = (icon, text) => { const f = el('span'); f.append(ic(icon), el('span', null, text)); return f; };
-    facts.append(fact('route', `${num(km, 1)} কিমি`), fact('clock', `গাড়িতে প্রায় ${fmtMin(r.duration / 60)}`));
+    facts.append(fact('route', `${num(km, 1)} কিমি`), fact('clock', `গাড়িতে ফাঁকা রাস্তায় ${fmtMin(r.duration / 60)} · বাসে প্রায় ${fmtMin(km / 40 * 60)}`));
     titles.append(route, facts);
     head.appendChild(titles);
     const btn = button('route', 'ম্যাপে দেখুন', () => { trip.from = asPlace(a); setPlace('to', asPlace(b)); }, true);
     const actions = el('div', 'actions');
     actions.appendChild(btn);
-    box.append(head, fareTiles(busRule(a, b), km, officialFare(a, b)));
-    const counter = counterFare(a, b);
-    if (counter) box.appendChild(counter);
+    box.append(head, fareSummary(a, b, busRule(a, b), km));
     box.append(el('div', 'label', 'এই রুটের বাস'), operatorChips(a, b), actions);
     stagger(box);
   }
