@@ -380,11 +380,17 @@ function officialFare(a, b) {
 const operatorsBetween = (a, b) => OPERATORS.filter(o => o.districts.includes(a.id) && o.districts.includes(b.id));
 
 // ---- Network lookups ----
+// Asked through our server first (one shared cache for everyone, and the public servers' rules kept); if that
+// path fails, straight from the public server as before.
+async function geoJson(ours, theirs, init) {
+  try { const r = await fetch(ours); if (r.ok) return await r.json(); } catch { /* our server unreachable */ }
+  const r = await fetch(theirs, init);
+  if (!r.ok) throw new Error('lookup failed');
+  return r.json();
+}
 async function searchNominatim(q) {
   const url = 'https://nominatim.openstreetmap.org/search?format=json&countrycodes=bd&limit=6&q=' + encodeURIComponent(q);
-  const res = await fetch(url, { headers: { 'Accept-Language': 'bn,en' } });
-  if (!res.ok) throw new Error('search failed');
-  return (await res.json()).map(p => {
+  return (await geoJson('api/geo/nominatim?q=' + encodeURIComponent(q), url, { headers: { 'Accept-Language': 'bn,en' } })).map(p => {
     const parts = p.display_name.split(',').map(s => s.trim());
     return { title: parts[0], sub: parts.slice(1, 4).join(', '), lat: +p.lat, lon: +p.lon };
   });
@@ -392,10 +398,9 @@ async function searchNominatim(q) {
 
 // Photon tolerates typos better than Nominatim; results are limited to Bangladesh.
 async function searchPhoton(q) {
-  const res = await fetch('https://photon.komoot.io/api/?limit=6&bbox=88.0,20.5,92.7,26.7&q=' + encodeURIComponent(q));
-  if (!res.ok) throw new Error('search failed');
+  const data = await geoJson('api/geo/search?q=' + encodeURIComponent(q), 'https://photon.komoot.io/api/?limit=6&bbox=88.0,20.5,92.7,26.7&q=' + encodeURIComponent(q));
   const skip = ['toilets', 'bench', 'waste_basket', 'atm'];
-  return (await res.json()).features
+  return data.features
     .filter(f => f.properties.name && f.properties.countrycode === 'BD' && !skip.includes(f.properties.osm_value))
     .map(f => {
       const p = f.properties;
@@ -596,9 +601,8 @@ const fareRange = (lo, hi) => lo === hi ? taka(lo) : `${taka(lo)}–${num(hi)}`;
 
 async function reverseName(lat, lon) {
   try {
-    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&zoom=16&lat=${lat}&lon=${lon}`,
+    const data = await geoJson(`api/geo/reverse?lat=${lat}&lon=${lon}`, `https://nominatim.openstreetmap.org/reverse?format=json&zoom=16&lat=${lat}&lon=${lon}`,
       { headers: { 'Accept-Language': 'bn,en' } });
-    const data = await res.json();
     return data.display_name ? data.display_name.split(',').slice(0, 2).join(',') : null;
   } catch { return null; }
 }
@@ -606,8 +610,7 @@ async function reverseName(lat, lon) {
 async function getRoute(pts) {
   const coords = pts.map(p => `${p.lon},${p.lat}`).join(';');
   const url = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson`;
-  const res = await fetch(url);
-  const data = await res.json();
+  const data = await geoJson('api/geo/route?c=' + encodeURIComponent(coords), url).catch(() => ({}));
   if (data.code !== 'Ok' || !data.routes.length) throw new Error('no route');
   return data.routes[0];
 }

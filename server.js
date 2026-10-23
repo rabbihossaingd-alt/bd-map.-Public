@@ -2916,6 +2916,65 @@ const SECURITY_HEADERS = {
   'Permissions-Policy': 'camera=(self), microphone=(self), geolocation=(self), display-capture=(self)',
   'Content-Security-Policy': "frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'"
 };
+// ---- Map lookups through this server: place search, address of a point, road route ----
+// The free OpenStreetMap servers (Photon, Nominatim, OSRM's demo) ask apps to send few, identified requests and to
+// keep their own copies. Asking them from here lets every phone share one cache (the same search, the same route,
+// asked by many), says who we are, keeps Nominatim's one-a-second rule for the whole app, and limits each address.
+// When this path fails the phone still asks the public server itself, so nothing gets worse than before.
+//   GET /api/geo/search?q=        Photon search, Bangladesh only        (its JSON, unchanged)
+//   GET /api/geo/nominatim?q=     Nominatim search, Bangladesh only
+//   GET /api/geo/reverse?lat&lon  Nominatim's name for a point
+//   GET /api/geo/route?c=lon,lat;lon,lat[;…]  OSRM driving route, up to 6 points inside Bangladesh
+const GEO_UA = 'Manzeela/1.0 (+https://manzeela.com; help@manzeela.com)';
+const GEO_TTL = { search: 864e5, nominatim: 864e5, reverse: 7 * 864e5, route: 864e5 };
+const geoCache = new Map(), geoWaiting = new Map(), geoAsks = new Map();
+let nominatimNext = 0;
+const inBd = (lat, lon) => lat > 20 && lat < 27 && lon > 88 && lon < 93;
+function geoUpstream(kind, sp) {
+  const q = cleanText(sp.get('q') || '', 100);
+  if (kind === 'search' && q.length >= 2) return 'https://photon.komoot.io/api/?limit=6&bbox=88.0,20.5,92.7,26.7&q=' + encodeURIComponent(q);
+  if (kind === 'nominatim' && q.length >= 2) return 'https://nominatim.openstreetmap.org/search?format=json&countrycodes=bd&limit=6&q=' + encodeURIComponent(q);
+  if (kind === 'reverse') {
+    const lat = +(+sp.get('lat')).toFixed(4), lon = +(+sp.get('lon')).toFixed(4);
+    if (inBd(lat, lon)) return `https://nominatim.openstreetmap.org/reverse?format=json&zoom=16&lat=${lat}&lon=${lon}`;
+  }
+  if (kind === 'route') {
+    const pts = String(sp.get('c') || '').split(';').map(p => p.split(',').map(Number));
+    if (pts.length >= 2 && pts.length <= 6 && pts.every(([lon, lat]) => inBd(lat, lon)))
+      return 'https://router.project-osrm.org/route/v1/driving/' + pts.map(([lon, lat]) => lon.toFixed(5) + ',' + lat.toFixed(5)).join(';') + '?overview=full&geometries=geojson';
+  }
+  return null;
+}
+async function geoFetch(kind, url) {
+  if (kind === 'nominatim' || kind === 'reverse') {       // one a second for the whole app, never a queue
+    const wait = nominatimNext - Date.now();
+    if (wait > 2000) throw new Error('busy');
+    nominatimNext = Math.max(Date.now(), nominatimNext) + 1100;
+    if (wait > 0) await new Promise(r => setTimeout(r, wait));
+  }
+  const res = await fetch(url, { headers: { 'User-Agent': GEO_UA, 'Referer': SITE + '/', 'Accept-Language': 'bn,en' }, signal: AbortSignal.timeout(9000) });
+  if (!res.ok) throw new Error('upstream ' + res.status);
+  return res.text();
+}
+async function geoApi(req, res, kind, sp) {
+  const url = GEO_TTL[kind] && geoUpstream(kind, sp);
+  if (!url) return json(res, 400, { error: 'bad request' });
+  const now = Date.now(), hit = geoCache.get(url);
+  const send = body => { res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'public, max-age=3600' }); res.end(body); };
+  if (hit && hit.until > now) { geoCache.delete(url); geoCache.set(url, hit); return send(hit.body); }   // newest last
+  const ip = clientIp(req), recent = (geoAsks.get(ip) || []).filter(t => now - t < 60_000);
+  if (recent.length >= 60) { geoAsks.set(ip, recent); return json(res, 429, { error: 'slow down' }); }
+  recent.push(now); geoAsks.set(ip, recent);
+  try {
+    if (!geoWaiting.has(url)) geoWaiting.set(url, geoFetch(kind, url).finally(() => geoWaiting.delete(url)));
+    const body = await geoWaiting.get(url);
+    geoCache.set(url, { body, until: Date.now() + GEO_TTL[kind] });
+    if (geoCache.size > 5000) geoCache.delete(geoCache.keys().next().value);       // the oldest goes
+    send(body);
+  } catch { json(res, 503, { error: 'map service busy' }); }
+}
+setInterval(() => { const now = Date.now(); for (const [ip, t] of geoAsks) if (!t.some(x => now - x < 60_000)) geoAsks.delete(ip); }, 60_000).unref();
+
 // ---- District pages for search engines and share previews: /district/<id> ----
 // The same app, with that district's own title, description, link preview and structured data in the page head,
 // so a search for "<district> যাতায়াত" can find it and a shared link shows the district's name. Everything said
@@ -2990,6 +3049,7 @@ const server = http.createServer((req, res) => {
   if (pathname.startsWith('/api/community/')) return communityApi(req, res, pathname.slice(15), searchParams).catch(e => { console.error(e); json(res, 500, { error: 'server error' }); });
   if (pathname.startsWith('/api/support/')) return supportApi(req, res, pathname.slice(13), searchParams).catch(() => json(res, 500, { error: 'server error' }));
   if (pathname.startsWith('/api/admin/')) return adminApi(req, res, pathname.slice(11), searchParams).catch(e => { console.error(e); json(res, 500, { error: 'server error' }); });
+  if (pathname.startsWith('/api/geo/') && req.method === 'GET') return geoApi(req, res, pathname.slice(9), searchParams).catch(() => json(res, 500, { error: 'server error' }));
   if (pathname === '/api/pois') return poisApi(req, res, searchParams);
   if (pathname === '/api/pois/search') return poisSearch(res, (searchParams.get('q') || '').slice(0, 80), parseFloat(searchParams.get('lat')), parseFloat(searchParams.get('lon')));
   if (pathname === '/api/pois/near') return poisNear(res, (searchParams.get('kind') || '').slice(0, 12), parseFloat(searchParams.get('lat')), parseFloat(searchParams.get('lon')));
