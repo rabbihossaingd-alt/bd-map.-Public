@@ -372,7 +372,7 @@ function renderMsgs(scroll = true) {
   } else {
     const see = el('button', 'pill-btn quiet', 'প্রোফাইল দেখুন');
     see.addEventListener('click', () => openProfilePage(t.id));
-    intro.append(avatar(t, 'xl'), nameEl(t), Object.assign(el('span', 'no-tr'), { textContent: [t.username ? '@' + t.username : '', t.bio || 'BD Map'].filter(Boolean).join(' · ') }), see);
+    intro.append(avatar(t, 'xl'), nameEl(t), Object.assign(el('span', 'no-tr'), { textContent: [t.username ? '@' + t.username : '', t.bio || 'Manzeela'].filter(Boolean).join(' · ') }), see);
   }
   box.appendChild(intro);
   let day = '', prev = null;

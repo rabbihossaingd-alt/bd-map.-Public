@@ -664,7 +664,7 @@ const coverStyle = (img, division) => {
     }
     const sh = el('button', 'pl-act'); sh.append(ic('send'), el('span', null, tl2('শেয়ার', 'Share')));
     sh.addEventListener('click', async () => {
-      const text = `${s.name}, ${d.bn} — BD Map`, url = location.origin + '/#/districts';
+      const text = `${s.name}, ${d.bn} — Manzeela`, url = location.origin + '/#/districts';
       try { if (navigator.share) await navigator.share({ title: s.name, text, url }); else { await navigator.clipboard.writeText(`${text}\n${url}`); flash(tl2('লিংক কপি হয়েছে', 'Link copied')); } } catch { /* cancelled */ }
     });
     acts.appendChild(sh);
@@ -849,8 +849,8 @@ const coverStyle = (img, division) => {
     }
     for (const a of arrows) a.hidden = true;
     load();
-    body.appendChild(el('p', 'tx-source', tl2('লেখা: বাংলা উইকিপিডিয়া (CC BY-SA) · ছবি: উইকিমিডিয়া কমন্স ও BD Map ব্যবহারকারীরা · ভাড়া: বিআরটিএ ও কাউন্টারের তালিকা · জরুরি নম্বর: সরকারি হেল্পলাইন',
-      'Text: Bangla Wikipedia (CC BY-SA) · Photos: Wikimedia Commons and BD Map users · Fares: BRTA and counters · Emergency: government helplines')));
+    body.appendChild(el('p', 'tx-source', tl2('লেখা: বাংলা উইকিপিডিয়া (CC BY-SA) · ছবি: উইকিমিডিয়া কমন্স ও Manzeela ব্যবহারকারীরা · ভাড়া: বিআরটিএ ও কাউন্টারের তালিকা · জরুরি নম্বর: সরকারি হেল্পলাইন',
+      'Text: Bangla Wikipedia (CC BY-SA) · Photos: Wikimedia Commons and Manzeela users · Fares: BRTA and counters · Emergency: government helplines')));
     scroller.append(hero, body);
     box.append(scroller);
     document.body.appendChild(box);
@@ -938,7 +938,7 @@ const coverStyle = (img, division) => {
           const p = places[c.dataset.key];
           if (!p) continue;
           const ph = c.querySelector('.ph');
-          if (p.photo && !ph.querySelector('.dg-img')) { ph.querySelector('.ph-art')?.remove(); photo(ph, p.photo, d.division, 960); ph.appendChild(el('span', 'ph-cap', tl2('ছবি: BD Map ব্যবহারকারী', 'Photo: a BD Map user'))); }
+          if (p.photo && !ph.querySelector('.dg-img')) { ph.querySelector('.ph-art')?.remove(); photo(ph, p.photo, d.division, 960); ph.appendChild(el('span', 'ph-cap', tl2('ছবি: Manzeela ব্যবহারকারী', 'Photo: a Manzeela user'))); }
           if (p.reviews) c.querySelector('.t b').after(Object.assign(el('span', 'pl-cardrate'), { textContent: `★ ${num(p.stars, 1)} · ${tl2(`${num(p.reviews)}টি রিভিউ`, `${p.reviews} reviews`)}` }));
         }
       }).catch(() => {});

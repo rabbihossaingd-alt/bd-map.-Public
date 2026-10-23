@@ -1,4 +1,4 @@
-// ---- BD Map admin panel ----
+// ---- Manzeela admin panel ----
 // A separate page (admin.html) for the people who run the app: numbers at a glance, users, support tickets,
 // reports, reported fares, the audit log and settings. Everything comes from /api/admin/* (see server.js),
 // which only answers a staff or admin account. Private messages are never shown: the panel only counts them.

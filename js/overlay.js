@@ -331,7 +331,7 @@ function openStickerSheet(host, ctx, pick) {
   tag('@', LANG === 'en' ? 'MENTION' : 'মেনশন', () => askFor('mention', LANG === 'en' ? 'Their username' : 'ইউজারনেম লিখুন'), 'mention');
   tag('#', LANG === 'en' ? 'HASHTAG' : 'হ্যাশট্যাগ', () => askFor('hash', LANG === 'en' ? 'hashtag' : 'হ্যাশট্যাগ লিখুন'), 'hash');
   tag('🕐', time, () => give({ t: 'tag', k: 'time', s: time, c: '#262626', bg: 0 }), 'time');
-  tag('🗺️', 'BD Map', () => give({ t: 'tag', k: 'bd', s: '🗺️ BD Map', c: '#006a4e', bg: 0 }), 'bd');
+  tag('🗺️', 'Manzeela', () => give({ t: 'tag', k: 'bd', s: '🗺️ Manzeela', c: '#006a4e', bg: 0 }), 'bd');
   tag('Aa', LANG === 'en' ? 'TEXT' : 'লেখা', () => { close(); ctx.text(); }, 'text');
   const tabs = el('div', 'fx-tabs sk-cats');
   const grid = el('div', 'sk-grid');

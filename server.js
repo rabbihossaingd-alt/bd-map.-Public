@@ -1,4 +1,4 @@
-// BD Map server: serves the app and keeps everyone's ratings, reported fares, accounts and messages in one place.
+// Manzeela server: serves the app and keeps everyone's ratings, reported fares, accounts and messages in one place.
 // No dependencies — needs Node.js 22.5 or newer (uses the built-in SQLite).
 //
 //   node server.js            start on port 8765
@@ -450,7 +450,7 @@ async function authApi(req, res, action) {
     const admin = ADMIN_EMAILS.includes(email);
     if (!user) {
       isNew = true;
-      const { lastInsertRowid } = aq.add.run(email, cleanName(email.split('@')[0].replace(/[._+-]+/g, ' ')) || 'BD Map', admin ? 'admin' : 'user', now, now);
+      const { lastInsertRowid } = aq.add.run(email, cleanName(email.split('@')[0].replace(/[._+-]+/g, ' ')) || 'Manzeela', admin ? 'admin' : 'user', now, now);
       user = aq.byId.get(lastInsertRowid);
     } else if (admin && user.role !== 'admin') { aq.setRole.run('admin', user.id); user.role = 'admin'; }
     if (user.banned) return json(res, 403, { error: 'banned' });
@@ -519,7 +519,7 @@ async function authApi(req, res, action) {
     if (me.totp_on) return json(res, 400, { error: 'on' });
     const secret = b32encode(crypto.randomBytes(20));
     db.prepare('UPDATE users SET totp = ? WHERE id = ?').run(secret, me.id);
-    const label = encodeURIComponent('BD Map:' + me.email);
+    const label = encodeURIComponent('Manzeela:' + me.email);
     return json(res, 200, { secret, uri: `otpauth://totp/${label}?secret=${secret}&issuer=BD%20Map&algorithm=SHA1&digits=6&period=30` });
   }
   if (action === '2fa-enable') {
@@ -2893,7 +2893,7 @@ if (backupOn) {
 }
 
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`BD Map is running.\n  On this computer:  http://localhost:${PORT}`);
+  console.log(`Manzeela is running.\n  On this computer:  http://localhost:${PORT}`);
   for (const list of Object.values(os.networkInterfaces())) {
     for (const a of list || []) if (a.family === 'IPv4' && !a.internal) console.log(`  On the same Wi-Fi: http://${a.address}:${PORT}`);
   }

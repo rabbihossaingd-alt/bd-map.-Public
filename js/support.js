@@ -21,8 +21,8 @@ const HELP = [
     ['প্রথমে ই-মেইলের স্প্যাম ও প্রমোশন ফোল্ডার দেখুন। ঠিকানাটি ঠিক লিখেছেন কি না মিলিয়ে নিন। এক মিনিট পরে আবার কোড চাইতে পারবেন; প্রতিটি কোড ১০ মিনিট চলে। তবুও না এলে নিচ থেকে আমাদের লিখুন।',
      'First check the spam and promotions folders. Make sure the address is typed correctly. You can ask for a new code after one minute; each code lasts 10 minutes. If it still does not arrive, write to us below.']],
   ['account', false, ['পাসওয়ার্ড লাগে না কেন?', 'Why is there no password?'],
-    ['BD Map-এ পাসওয়ার্ড নেই। প্রতিবার লগইনের সময় আপনার ই-মেইলে ৬ সংখ্যার একটি কোড যায় — সেটিই আপনার চাবি। মনে রাখার কিছু নেই, চুরি হওয়ারও কিছু নেই।',
-     'BD Map has no passwords. Each time you log in, a 6-digit code is sent to your e-mail — that is your key. Nothing to remember, nothing to steal.']],
+    ['Manzeela-তে পাসওয়ার্ড নেই। প্রতিবার লগইনের সময় আপনার ই-মেইলে ৬ সংখ্যার একটি কোড যায় — সেটিই আপনার চাবি। মনে রাখার কিছু নেই, চুরি হওয়ারও কিছু নেই।',
+     'Manzeela has no passwords. Each time you log in, a 6-digit code is sent to your e-mail — that is your key. Nothing to remember, nothing to steal.']],
   ['account', true, ['নাম, ছবি বা বায়ো কীভাবে বদলাবো?', 'How do I change my name, picture or bio?'],
     ['"আরও" পাতায় (কম্পিউটারে উপরের ডান দিকে) নিজের নামে চাপ দিন। ছবিতে চাপ দিলে নতুন ছবি বাছতে পারবেন; নাম ও বায়ো লিখে "সেভ করুন" চাপুন।',
      'Tap your name on the More page (top right on a computer). Tap the picture to choose a new one; edit the name and bio and press Save.']],
@@ -39,8 +39,8 @@ const HELP = [
     ['এসি বাসের ভাড়া সরকার ঠিক করে না — প্রতিটি কোম্পানি নিজে ঠিক করে, আর মৌসুমভেদে বদলায়। তাই আমরা একটি সীমা দেখাই। নিশ্চিত ভাড়া কাউন্টারে জেনে নিন।',
      'The government does not set AC fares — each company sets its own, and they change with the season. So we show a range. Confirm the exact fare at the counter.']],
   ['fare', false, ['বাইক বা কারের ভাড়া কি ঠিক এটাই হবে?', 'Will a bike or car ride cost exactly this?'],
-    ['না। রাইডের ভাড়া পাঠাও ও উবারের প্রকাশিত হার থেকে হিসাব করা একটি ধারণা; আসল ভাড়া সময়, যানজট ও চাহিদাভেদে বদলায়। BD Map থেকে এখনো রাইড ডাকা যায় না।',
-     'No. Ride fares are an idea worked out from the published Pathao and Uber rates; the real fare changes with time, traffic and demand. You cannot book a ride from BD Map yet.']],
+    ['না। রাইডের ভাড়া পাঠাও ও উবারের প্রকাশিত হার থেকে হিসাব করা একটি ধারণা; আসল ভাড়া সময়, যানজট ও চাহিদাভেদে বদলায়। Manzeela থেকে এখনো রাইড ডাকা যায় না।',
+     'No. Ride fares are an idea worked out from the published Pathao and Uber rates; the real fare changes with time, traffic and demand. You cannot book a ride from Manzeela yet.']],
   ['route', true, ['কোন বাসে যাবো, কীভাবে খুঁজবো?', 'How do I find which bus to take?'],
     ['হোম বা ম্যাপ পাতায় "কোথা থেকে" ও "কোথায় যাবেন" লিখুন — কোন বাস, কোথায় উঠবেন, ভাড়া কত দেখাবে। অথবা "ঢাকার বাস" পাতায় জায়গার নাম লিখলে সেখানে যাওয়া সব বাস দেখাবে।',
      'Enter "from" and "to" on the Home or Map page — it shows which bus, where to board and the fare. Or type a place on the "Dhaka buses" page to see every bus that goes there.']],
@@ -54,8 +54,8 @@ const HELP = [
     ['নিচের "সাপোর্টে লিখুন" থেকে "বাস, ট্রেন বা রুটের তথ্য ভুল" বেছে কোন পথ বা কোন বাস, আর সঠিক তথ্যটি কী — লিখে পাঠান। আমরা যাচাই করে ঠিক করে দেবো।',
      'Use "Write to support" below, choose "Wrong bus, train or route information", and tell us which route or bus and what the correct information is. We will check and fix it.']],
   ['chat', true, ['বন্ধু কীভাবে যোগ করবো?', 'How do I add a friend?'],
-    ['"মেসেজ" পাতায় উপরের সবুজ বোতামে চাপ দিন, বন্ধুর ই-মেইল লিখে খুঁজুন এবং অনুরোধ পাঠান। তিনি গ্রহণ করলে আপনারা মেসেজ ও কল করতে পারবেন। বন্ধুকেও BD Map-এ অ্যাকাউন্ট খুলতে হবে।',
-     'On the Messages page press the green button at the top, search your friend\'s e-mail and send a request. Once they accept, you can message and call each other. Your friend needs a BD Map account too.']],
+    ['"মেসেজ" পাতায় উপরের সবুজ বোতামে চাপ দিন, বন্ধুর ই-মেইল লিখে খুঁজুন এবং অনুরোধ পাঠান। তিনি গ্রহণ করলে আপনারা মেসেজ ও কল করতে পারবেন। বন্ধুকেও Manzeela-তে অ্যাকাউন্ট খুলতে হবে।',
+     'On the Messages page press the green button at the top, search your friend\'s e-mail and send a request. Once they accept, you can message and call each other. Your friend needs a Manzeela account too.']],
   ['chat', true, ['কল লাগছে না বা শব্দ আসছে না', 'Calls do not connect or there is no sound'],
     ['দুজনেরই অ্যাপ খোলা থাকতে হবে। ব্রাউজার মাইক্রোফোন (ও ভিডিও কলে ক্যামেরা) ব্যবহারের অনুমতি চাইলে "Allow" দিন। মোবাইল ডাটায় কখনো কখনো কল সংযোগ হয় না — দুজনই ওয়াই-ফাই দিয়ে চেষ্টা করে দেখুন।',
      'Both of you need the app open. When the browser asks to use the microphone (and camera for video), choose Allow. Calls sometimes fail on mobile data — try with both of you on Wi-Fi.']],
@@ -72,8 +72,8 @@ const HELP = [
     ['তিনি আর আপনাকে মেসেজ, কল বা বন্ধু হওয়ার অনুরোধ পাঠাতে পারবেন না, আর খুঁজলেও আপনাকে পাবেন না। "মেসেজ" পাতার ঢাল-চিহ্নে চাপ দিয়ে ব্লক করা মানুষদের তালিকা দেখা ও ব্লক তোলা যায়।',
      'They can no longer message, call or send you a friend request, and cannot find you by search. Press the shield icon on the Messages page to see the people you blocked and unblock them.']],
   ['safety', false, ['জরুরি বিপদে কী করবো?', 'What should I do in an emergency?'],
-    ['জরুরি বিপদে সরাসরি ৯৯৯-এ কল করুন (পুলিশ, ফায়ার সার্ভিস, অ্যাম্বুলেন্স)। BD Map সাপোর্ট জরুরি সেবা নয় — আমরা সাধারণত এক-দুই দিনের মধ্যে উত্তর দিই।',
-     'In an emergency call 999 directly (police, fire service, ambulance). BD Map support is not an emergency service — we usually reply within a day or two.']],
+    ['জরুরি বিপদে সরাসরি ৯৯৯-এ কল করুন (পুলিশ, ফায়ার সার্ভিস, অ্যাম্বুলেন্স)। Manzeela সাপোর্ট জরুরি সেবা নয় — আমরা সাধারণত এক-দুই দিনের মধ্যে উত্তর দিই।',
+     'In an emergency call 999 directly (police, fire service, ambulance). Manzeela support is not an emergency service — we usually reply within a day or two.']],
   ['map', false, ['একটি জায়গা খুঁজে পাচ্ছি না', 'I cannot find a place'],
     ['বাংলা, ইংরেজি বা বাংলিশ — যেকোনো বানানে লিখে দেখুন (যেমন "রমনা", "romna", "ramna")। পুরো নাম না লিখে প্রথম কয়েকটি অক্ষর লিখলেও পরামর্শ আসে। তবুও না পেলে ম্যাপে সেই জায়গায় চাপ দিয়ে বেছে নিন।',
      'Try any spelling — Bangla, English or Banglish (for example "রমনা", "romna", "ramna"). Typing just the first few letters also brings suggestions. If it still is not found, tap the spot on the map.']],
@@ -187,7 +187,7 @@ async function openTicket(id) {
   const thread = el('div', 'ticket-thread');
   for (const m of data.messages) {
     const b = el('div', 'tmsg ' + (m.staff ? 'staff' : 'me'));
-    b.append(el('small', null, m.staff ? `BD Map সাপোর্ট · ${dateText(m.sent)}` : dateText(m.sent)), Object.assign(el('p', 'no-tr'), { textContent: m.body }));
+    b.append(el('small', null, m.staff ? `Manzeela সাপোর্ট · ${dateText(m.sent)}` : dateText(m.sent)), Object.assign(el('p', 'no-tr'), { textContent: m.body }));
     thread.appendChild(b);
   }
   const body = [thread], actions = [];

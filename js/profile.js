@@ -275,7 +275,7 @@ async function drawInsights() {
 }
 
 // ---- the creator program: who can earn, the balance, and paying it out ----
-// Earnings are added by the BD Map team (a creator bonus, a share of a sponsorship, a prize); the app takes no
+// Earnings are added by the Manzeela team (a creator bonus, a share of a sponsorship, a prize); the app takes no
 // money from anyone. A payout goes to a bKash, Nagad or Rocket number and is marked with its transaction ID.
 const WALLET_NAMES = { bkash: 'বিকাশ', nagad: 'নগদ', rocket: 'রকেট' };
 const PAYOUT_STATUS = { pending: 'অপেক্ষায়', paid: 'পাঠানো হয়েছে', rejected: 'বাতিল' };
@@ -317,7 +317,7 @@ async function drawMoney(box) {
       try { await creatorApi('apply', {}); drawMoney(box); } catch { apply.disabled = false; }
     });
     apply.disabled = d.status === 'applied' || !st.eligible;
-    card.append(apply, el('div', 'form-note', d.status === 'applied' ? 'BD Map টিম আপনার প্রোফাইল দেখে জানাবে।'
+    card.append(apply, el('div', 'form-note', d.status === 'applied' ? 'Manzeela টিম আপনার প্রোফাইল দেখে জানাবে।'
       : d.status === 'rejected' ? 'আগের আবেদনটি গৃহীত হয়নি। প্রোফাইল ঠিক করে আবার আবেদন করতে পারেন।' : 'শর্ত পূরণ হলে আবেদন করা যাবে। অনুমোদনের পর থেকে আয় যোগ হবে।'));
     box.replaceChildren(card);
     return;
@@ -366,7 +366,7 @@ function openPayout(m, r, done) {
   }
   const [amountBox, amount] = field(`কত টাকা (${taka(r.payoutMin)} – ${taka(m.balance)})`, { type: 'number', inputMode: 'numeric', min: r.payoutMin, max: m.balance, value: m.balance, step: 1 });
   const [numBox, account] = field('ওয়ালেটের নম্বর (নিজের নামে)', { type: 'tel', inputMode: 'tel', placeholder: '01XXXXXXXXX', maxLength: 16, autocomplete: 'off' });
-  const note = el('div', 'form-note', 'নম্বরটি শুধু BD Map টিম দেখবে। ভুল নম্বরে গেলে টাকা ফেরানো কঠিন — দুবার দেখে নিন।');
+  const note = el('div', 'form-note', 'নম্বরটি শুধু Manzeela টিম দেখবে। ভুল নম্বরে গেলে টাকা ফেরানো কঠিন — দুবার দেখে নিন।');
   const send = button('send', 'অনুরোধ পাঠান', async () => {
     send.disabled = true;
     try { await creatorApi('payout', { amount: Number(amount.value), method, account: account.value }); closeModal(); done(); }
@@ -387,7 +387,7 @@ function openVerifyInfo() {
   for (const line of ['প্রোফাইলে আপনার আসল নাম ও নিজের ছবি', 'অন্তত কয়েকটি পোস্ট বা জানানো ভাড়া', 'কোনো রিপোর্ট বা নিয়ম ভাঙা নেই', 'দোকান, পরিবহন বা ট্যুর কোম্পানি হলে তার পরিচয়ের প্রমাণ'])
     list.appendChild(el('li', null, line));
   const apply = button('send', 'আবেদন করুন', () => { closeModal(); openNewTicket('verify'); });
-  openModal('ভেরিফায়েড ব্যাজ', 'ব্যাজ কেনা যায় না — BD Map টিম যাচাই করে দেয়।', [el('div', 'form-note', 'যা দেখা হয়:'), list], [apply]);
+  openModal('ভেরিফায়েড ব্যাজ', 'ব্যাজ কেনা যায় না — Manzeela টিম যাচাই করে দেয়।', [el('div', 'form-note', 'যা দেখা হয়:'), list], [apply]);
 }
 
 // ---- security: two-step verification and where the account is signed in ----
@@ -424,7 +424,7 @@ async function openTwoStep() {
   const intro = el('div', 'sec-intro');
   intro.append(Object.assign(el('div', 'sec-hero'), { innerHTML: svg('shield') }),
     el('b', null, 'অ্যাকাউন্টে আরেকটি তালা দিন'),
-    el('p', null, 'কেউ আপনার ই-মেইলে ঢুকে গেলেও আপনার ফোনের অথেন্টিকেটর অ্যাপের কোড ছাড়া BD Map-এ লগইন করতে পারবে না।'));
+    el('p', null, 'কেউ আপনার ই-মেইলে ঢুকে গেলেও আপনার ফোনের অথেন্টিকেটর অ্যাপের কোড ছাড়া Manzeela-তে লগইন করতে পারবে না।'));
   const steps = el('ol', 'sec-steps');
   for (const t of ['ফোনে Google Authenticator, Microsoft Authenticator বা 2FAS অ্যাপ নিন', 'অ্যাপে QR কোডটি স্ক্যান করুন (বা কী-টি লিখে দিন)', 'অ্যাপে আসা ৬ সংখ্যার কোড এখানে দিন']) steps.appendChild(el('li', null, t));
   const start = button('shield', 'শুরু করুন', setup);
@@ -464,7 +464,7 @@ async function openTwoStep() {
     const copy = button('copy', 'কপি করুন', () => { navigator.clipboard && navigator.clipboard.writeText(codes.join('\n')); copy.lastChild.textContent = 'কপি হয়েছে'; }, true);
     const save = button('file', 'ফাইলে রাখুন', () => {
       const a = el('a');
-      a.href = URL.createObjectURL(new Blob([`BD Map — ব্যাকআপ কোড (${ME.email})\nপ্রতিটি কোড একবারই চলে।\n\n${codes.join('\n')}\n`], { type: 'text/plain' }));
+      a.href = URL.createObjectURL(new Blob([`Manzeela — ব্যাকআপ কোড (${ME.email})\nপ্রতিটি কোড একবারই চলে।\n\n${codes.join('\n')}\n`], { type: 'text/plain' }));
       a.download = 'bdmap-backup-codes.txt';
       a.click();
     }, true);

@@ -750,7 +750,7 @@ function studioSheet(title, build, snaps = [.6, .92]) {
   return close;
 }
 function openAudienceSheet(st, AUD, done) {
-  const notes = { all: ['BD Map-এর যে কেউ', 'Anyone on BD Map'], friends: ['যাঁরা আপনাকে ফলো করেন এবং আপনি যাঁদের ফলো করেন', 'People who follow you back'], me: ['শুধু আপনার প্রোফাইলে, আপনার কাছে', 'Only on your profile, for you'] };
+  const notes = { all: ['Manzeela-র যে কেউ', 'Anyone on Manzeela'], friends: ['যাঁরা আপনাকে ফলো করেন এবং আপনি যাঁদের ফলো করেন', 'People who follow you back'], me: ['শুধু আপনার প্রোফাইলে, আপনার কাছে', 'Only on your profile, for you'] };
   studioSheet(LANG === 'en' ? 'Audience' : 'কে দেখবে', (box, close) => {
     for (const k of ['all', 'friends', 'me']) {
       const r = el('label', 'sd-radio');
@@ -1017,7 +1017,7 @@ async function sendPost(job) {
     pill.done(job.later ? (LANG === 'en' ? 'Scheduled' : 'সময় ঠিক হয়েছে') : job.mode === 'story' ? 'স্টোরি দেওয়া হয়েছে' : job.mode === 'reel' ? 'রিল পোস্ট হয়েছে' : 'পোস্ট হয়েছে');
     if (typeof refreshStoryRings === 'function') refreshStoryRings();
     if (current === 'explore') enter.explore(); else if (current === 'profile') drawProfile();
-    if (document.hidden && 'Notification' in window && Notification.permission === 'granted') new Notification('BD Map', { body: 'আপনার পোস্টটি দেওয়া হয়েছে।', icon: 'icon.svg' });
+    if (document.hidden && 'Notification' in window && Notification.permission === 'granted') new Notification('Manzeela', { body: 'আপনার পোস্টটি দেওয়া হয়েছে।', icon: 'icon.svg' });
   } catch (e) {
     uploads.delete(job);
     console.warn('post not sent:', e && e.message);
@@ -1088,7 +1088,7 @@ function bakeFrame(st, shape, fx) {
 }
 
 // ---- music: a sheet like TikTok's — popular, for you, saved, recent, search; trim; save ----
-// Sources: BD Map's own tracks (music.js), sounds people uploaded, reels' original sounds, and — when the server
+// Sources: Manzeela's own tracks (music.js), sounds people uploaded, reels' original sounds, and — when the server
 // has a Jamendo id — Jamendo's Creative Commons catalogue.
 const musicTitle = m => m.id.startsWith('gen:') ? MUSIC.name(m.id.slice(4)) : m.title || `${m.by || ''} · ${LANG === 'en' ? 'Original audio' : 'মূল অডিও'}`;
 function playMusicChoice(m, at = 0) {
@@ -1138,7 +1138,7 @@ async function openMusicSheet(done) {
   const close = () => { stopPreview(); sheet.classList.add('out'); setTimeout(() => sheet.remove(), 250); };
 
   // Every source becomes one shape: { id, title, by, art (url or gradient class), secs, uses, src? }
-  const genItem = (t, i) => ({ id: 'gen:' + t.id, title: MUSIC.name(t.id), by: `BD Map Music · ${MUSIC.mood(t.id)}`, art: 'g' + (i % 8), secs: 0, uses: (data.tracks.find(x => x.id === t.id) || {}).uses || 0 });
+  const genItem = (t, i) => ({ id: 'gen:' + t.id, title: MUSIC.name(t.id), by: `Manzeela Music · ${MUSIC.mood(t.id)}`, art: 'g' + (i % 8), secs: 0, uses: (data.tracks.find(x => x.id === t.id) || {}).uses || 0 });
   const soundItem = s => ({ id: s.id, title: s.title, by: s.user.name, art: '', pic: s.user, secs: s.secs, uses: s.uses || 0, src: s.src });
   const reelItem = a => ({ id: a.id, title: `${a.user.name} · ${LANG === 'en' ? 'original sound' : 'মূল সাউন্ড'}`, by: a.user.name, art: a.poster, secs: 0, uses: a.uses || 0, src: a.src });
   const extItem = t => ({ id: t.id, title: t.title, by: t.artist, art: t.image, secs: t.secs, uses: t.uses || 0, src: t.audio });
@@ -1213,7 +1213,7 @@ async function openMusicSheet(done) {
       const used = all().filter(x => x.uses > 0).sort((a, b) => b.uses - a.uses);
       items = [...used];
       if (jam.length) items.push(sec('এই সপ্তাহের জনপ্রিয় · Jamendo', 'Trending this week · Jamendo'), ...jam);
-      items.push(sec('BD Map Music ও আপনাদের সাউন্ড', 'BD Map Music and your sounds'), ...all().filter(x => !x.uses && !x.id.startsWith('jam:')));
+      items.push(sec('Manzeela Music ও আপনাদের সাউন্ড', 'Manzeela Music and your sounds'), ...all().filter(x => !x.uses && !x.id.startsWith('jam:')));
     } else if (tab === 'you') items = [...jam.slice(8, 30), ...MUSIC.TRACKS.map(genItem), ...data.audios.map(reelItem).slice(0, 10), ...jam.slice(0, 8)];
     else if (tab === 'saved') items = readList(MUSIC_SAVED);
     else items = readList(MUSIC_RECENT);
@@ -1223,7 +1223,7 @@ async function openMusicSheet(done) {
     const rows = items.map(x => (x.sec ? el('div', 'mp-sec', x.sec) : row(x)));
     if ((loading && data.catalogue !== false && (tab === 'hot' || tab === 'you') && !needle) || (needle && searching)) rows.push(el('div', 'mp-none mp-wait', LANG === 'en' ? 'Fetching songs…' : 'গান আনা হচ্ছে…'));
     list.replaceChildren(...(rows.length ? rows : [el('div', 'mp-none', tab === 'saved' ? (LANG === 'en' ? 'Tap 🔖 on a sound to keep it here.' : 'কোনো সাউন্ডে 🔖 চাপলে এখানে থাকবে।') : tab === 'recent' ? (LANG === 'en' ? 'Sounds you use show up here.' : 'যে সাউন্ড ব্যবহার করবেন, এখানে আসবে।') : (LANG === 'en' ? 'Nothing found.' : 'কিছু পাওয়া যায়নি।'))]));
-    if (data.catalogue === false && tab === 'hot' && !needle) list.appendChild(el('div', 'mp-note', LANG === 'en' ? 'Popular film songs need a licence from the music labels, so they are not here. BD Map Music, your own uploads and reels’ original sounds are free to use.' : 'সিনেমা ও জনপ্রিয় গান ব্যবহারের জন্য গানের কোম্পানির লাইসেন্স লাগে, তাই সেগুলো এখানে নেই। BD Map Music, নিজের আপলোড আর রিলের মূল সাউন্ড সবাই ব্যবহার করতে পারেন।'));
+    if (data.catalogue === false && tab === 'hot' && !needle) list.appendChild(el('div', 'mp-note', LANG === 'en' ? 'Popular film songs need a licence from the music labels, so they are not here. Manzeela Music, your own uploads and reels’ original sounds are free to use.' : 'সিনেমা ও জনপ্রিয় গান ব্যবহারের জন্য গানের কোম্পানির লাইসেন্স লাগে, তাই সেগুলো এখানে নেই। Manzeela Music, নিজের আপলোড আর রিলের মূল সাউন্ড সবাই ব্যবহার করতে পারেন।'));
   }
   for (const [k, bn, en] of [['hot', 'জনপ্রিয়', 'Hot'], ['you', 'আপনার জন্য', 'For you'], ['saved', 'সেভ করা', 'Saved'], ['recent', 'সাম্প্রতিক', 'Recent']]) {
     const b = el('button', null, LANG === 'en' ? en : bn);

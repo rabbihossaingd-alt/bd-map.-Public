@@ -1,4 +1,4 @@
-// ---- BD Map's own music, played by the browser ----
+// ---- Manzeela's own music, played by the browser ----
 // Eight short loops made from notes and noise with the Web Audio API — no recordings, so no one's copyright.
 // A post that uses one stores only its name and where it starts; every phone then plays the same notes in time
 // with the video. play() returns a handle that stops it. A recording (the camera) can take the sound through
@@ -159,7 +159,7 @@ function postSound(p) {
 function soundLabel(p) {
   if (!p.music) return '';
   const l = p.music.label;
-  if (l.kind === 'gen') return `${MUSIC.name(l.track)} · BD Map Music`;
+  if (l.kind === 'gen') return `${MUSIC.name(l.track)} · Manzeela Music`;
   if (l.kind === 'post') return `${l.by} · ${LANG === 'en' ? 'Original audio' : 'মূল অডিও'}`;
   if (l.kind === 'file') return `${l.title} · ${l.by}`;
   return '';

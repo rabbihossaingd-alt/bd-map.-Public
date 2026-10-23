@@ -284,7 +284,7 @@
     parts.push(cost);
     // share / copy the plan as text
     const acts = el('div', 'trip-acts');
-    const text = () => [tl2('BD Map ট্রিপ প্ল্যান', 'BD Map trip plan'), p.ends.map(d => d.bn).join(' → '), '',
+    const text = () => [tl2('Manzeela ট্রিপ প্ল্যান', 'Manzeela trip plan'), p.ends.map(d => d.bn).join(' → '), '',
       ...p.days.map(d => `${tl2('দিন', 'Day')} ${num(d.day)}: ${d.a ? `${d.a.bn} → ${d.b.bn} (${num(Math.round(d.km))} ${tl2('কিমি', 'km')})` : d.b.bn}${d.see && d.see.length ? ' — ' + d.see.map(s => s.name).join(', ') : ''}`),
       '', `${tl2('জনপ্রতি আনুমানিক', 'Per person, roughly')} ${taka(p.perHead)}`].join('\n');
     const share = el('button', 'btn'); share.append(ic('send'), el('span', null, tl2('প্ল্যান শেয়ার করুন', 'Share the plan')));

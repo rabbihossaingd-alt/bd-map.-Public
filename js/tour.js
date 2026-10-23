@@ -653,7 +653,7 @@
     glass(56, 56, 300, 66, 33, { tint: 'rgba(10,15,25,.35)' });
     ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.roundRect(70, 69, 40, 40, 12); ctx.fill();
     ctx.fillStyle = '#0a8f62'; ctx.beginPath(); ctx.arc(90, 89, 8, 0, Math.PI * 2); ctx.fill();
-    setFont(800, 28); ctx.fillStyle = '#ffffff'; ctx.fillText('BD Map', 124, 99);
+    setFont(800, 28); ctx.fillStyle = '#ffffff'; ctx.fillText('Manzeela', 124, 99);
     setFont(600, 24); ctx.fillStyle = 'rgba(255,255,255,.75)'; ctx.fillText(tr('· ট্যুর'), 230, 98);
     ctx.globalAlpha = 1;
     // title over the photos' foot
@@ -710,7 +710,7 @@
     });
     ctx.textAlign = 'left'; ctx.globalAlpha = 1;
     setFont(500, 20); ctx.fillStyle = 'rgba(255,255,255,.45)';
-    ctx.fillText(tr('BD Map দিয়ে পরিকল্পনা'), 72, H - 30);
+    ctx.fillText(tr('Manzeela দিয়ে পরিকল্পনা'), 72, H - 30);
     if (mosaic.length) { ctx.textAlign = 'right'; ctx.fillText(tr('ছবি: উইকিমিডিয়া কমন্স'), W - 72, H - 30); ctx.textAlign = 'left'; }
   }
 

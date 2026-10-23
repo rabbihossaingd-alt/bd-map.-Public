@@ -49,7 +49,7 @@ function avatar(person, cls = '') {
   return a;
 }
 
-// The blue badge beside the name of an account the BD Map team has verified. The list is small and public.
+// The blue badge beside the name of an account the Manzeela team has verified. The list is small and public.
 const VERIFIED = new Set();
 fetch('api/people/verified').then(r => r.json()).then(d => { for (const id of d.ids || []) VERIFIED.add(id); }).catch(() => {});
 const isVerified = person => !!person && (!!person.verified || VERIFIED.has(person.id));
@@ -158,7 +158,7 @@ function authShell(content, footer, step) {
     x.addEventListener('click', closeAuth);
     const art = el('div', 'auth-art');
     art.innerHTML = '<span class="a1"></span><span class="a2"></span><span class="a3"></span><span class="a4"></span>';
-    // What BD Map is, shown beside the form on a wide screen: a few cards from the app, floating.
+    // What Manzeela is, shown beside the form on a wide screen: a few cards from the app, floating.
     const show = el('aside', 'auth-show');
     show.innerHTML = `
       <div class="as-copy"><b>${LANG === 'en' ? 'Bangladesh, in one app' : 'বাংলাদেশ, এক অ্যাপে'}</b>
@@ -177,7 +177,7 @@ function authShell(content, footer, step) {
   const main = authBox.querySelector('.auth-main');
   const card = el('div', 'auth-card');
   const brand = el('div', 'auth-brand');
-  brand.append(Object.assign(el('span', 'auth-logo'), { innerHTML: '<i></i>' }), el('b', 'no-tr', 'BD Map'));
+  brand.append(Object.assign(el('span', 'auth-logo'), { innerHTML: '<i></i>' }), el('b', 'no-tr', 'Manzeela'));
   card.appendChild(brand);
   if (step) {
     const dots = el('div', 'auth-steps');
@@ -395,7 +395,7 @@ function openSecondStep(ticket) {
   const form = el('div', 'auth-form');
   const shield = el('div', 'auth-mail');
   shield.innerHTML = svg('shield');
-  form.append(shield, el('h2', null, 'টু-স্টেপ ভেরিফিকেশন'), el('p', 'auth-sub', 'Google Authenticator বা অন্য অথেন্টিকেটর অ্যাপে BD Map-এর ৬ সংখ্যার কোডটি দিন।'), boxes, backupBox, useBackup, note, toggle);
+  form.append(shield, el('h2', null, 'টু-স্টেপ ভেরিফিকেশন'), el('p', 'auth-sub', 'Google Authenticator বা অন্য অথেন্টিকেটর অ্যাপে Manzeela-র ৬ সংখ্যার কোডটি দিন।'), boxes, backupBox, useBackup, note, toggle);
   authShell([form], [linkBtn('আবার শুরু করুন', () => openLogin())]);
   boxes.focus();
 }
@@ -475,8 +475,8 @@ async function logOut() {
 function legalLine() {
   const s = el('span', 'legal-line');
   const a = (href, bn, en) => Object.assign(el('a', null, LANG === 'en' ? en : bn), { href: href + (LANG === 'en' ? '?lang=en' : ''), target: '_blank', rel: 'noopener' });
-  if (LANG === 'en') s.append('By signing in you agree to BD Map’s ', a('terms.html', 'নিয়ম', 'terms'), ' and ', a('privacy.html', 'প্রাইভেসি', 'privacy policy'), '.');
-  else s.append('লগইন করলে আপনি BD Map-এর ', a('terms.html', 'নিয়ম', 'terms'), ' ও ', a('privacy.html', 'প্রাইভেসি পলিসি', 'privacy policy'), ' মেনে নিচ্ছেন।');
+  if (LANG === 'en') s.append('By signing in you agree to Manzeela’s ', a('terms.html', 'নিয়ম', 'terms'), ' and ', a('privacy.html', 'প্রাইভেসি', 'privacy policy'), '.');
+  else s.append('লগইন করলে আপনি Manzeela-র ', a('terms.html', 'নিয়ম', 'terms'), ' ও ', a('privacy.html', 'প্রাইভেসি পলিসি', 'privacy policy'), ' মেনে নিচ্ছেন।');
   return s;
 }
 function confirmDelete() {

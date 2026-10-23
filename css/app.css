@@ -4349,3 +4349,6 @@ button.dg-wiki { background: none; border: 0; padding: 0; cursor: pointer; font:
 .prof-none { border: 0; padding: 48px 20px; color: var(--ink); }
 .prof-none .ic { width: 64px; height: 64px; display: grid; place-items: center; border: 2px solid var(--ink); border-radius: 50%; font-size: 28px; opacity: 1; }
 .prof-none b { font-size: 18px; font-weight: 700; }
+
+/* the sign-in line: terms and privacy look like links */
+.legal-line a { color: inherit; text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px; }

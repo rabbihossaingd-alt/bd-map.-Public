@@ -20,12 +20,12 @@ const agoText = ts => {
 };
 const svgEl = (name, cls) => Object.assign(el('i', cls || ''), { innerHTML: svg(name) });
 
-function exploreNote(text) { chatToast(ME || { id: 0, name: 'BD Map' }, text); }
+function exploreNote(text) { chatToast(ME || { id: 0, name: 'Manzeela' }, text); }
 // Share a post: the phone's own share sheet where there is one, otherwise the link is copied.
 async function sharePost(p) {
   const url = `${location.origin}${location.pathname}?post=${p.id}#/explore`;
   try {
-    if (navigator.share) await navigator.share({ title: 'BD Map', text: p.caption || p.user.name, url });
+    if (navigator.share) await navigator.share({ title: 'Manzeela', text: p.caption || p.user.name, url });
     else { await navigator.clipboard.writeText(url); exploreNote('লিংক কপি হয়েছে।'); }
   } catch { /* the share sheet was closed */ }
 }
