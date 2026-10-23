@@ -670,7 +670,7 @@ const coverStyle = (img, division) => {
     }
     const sh = el('button', 'pl-act'); sh.append(ic('send'), el('span', null, tl2('শেয়ার', 'Share')));
     sh.addEventListener('click', async () => {
-      const text = `${s.name}, ${d.bn} — Manzeela`, url = location.origin + '/#/district/' + d.id;
+      const text = `${s.name}, ${d.bn} — Manzeela`, url = location.origin + '/district/' + d.id;
       try { if (navigator.share) await navigator.share({ title: s.name, text, url }); else { await navigator.clipboard.writeText(`${text}\n${url}`); flash(tl2('লিংক কপি হয়েছে', 'Link copied')); } } catch { /* cancelled */ }
     });
     acts.appendChild(sh);

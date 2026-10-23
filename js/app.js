@@ -247,6 +247,9 @@ function revealOnScroll(root) {
 const placeParam = v => { const [lat, lon, ...rest] = String(v || '').split(','); const p = { lat: Number(lat), lon: Number(lon), label: decodeURIComponent(rest.join(',')) || '' }; return isFinite(p.lat) && isFinite(p.lon) && p.lat && p.lon ? p : null; };
 const placeToParam = p => `${(+p.lat).toFixed(5)},${(+p.lon).toFixed(5)},${encodeURIComponent(p.label || '')}`;
 const tripLink = () => trip.from && trip.to ? `${location.origin}/#/trip?from=${placeToParam(trip.from)}&to=${placeToParam(trip.to)}` : location.origin + '/#/trip';
+// A district page (/district/<id>, what search engines and link previews know) opens the app on that district.
+{ const m = /^\/district\/([a-z-]{2,30})\/?$/.exec(location.pathname); if (m) history.replaceState(history.state, '', '/#/district/' + m[1]); }
+
 function route() {
   let name = location.hash.replace(/^#\/?/, '') || 'home';
   let deep = null;

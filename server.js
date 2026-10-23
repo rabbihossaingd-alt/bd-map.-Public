@@ -2916,8 +2916,50 @@ const SECURITY_HEADERS = {
   'Permissions-Policy': 'camera=(self), microphone=(self), geolocation=(self), display-capture=(self)',
   'Content-Security-Policy': "frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'"
 };
+// ---- District pages for search engines and share previews: /district/<id> ----
+// The same app, with that district's own title, description, link preview and structured data in the page head,
+// so a search for "<district> যাতায়াত" can find it and a shared link shows the district's name. Everything said
+// comes from the app's own data files (the district list and the GI journal list); nothing is written by hand here.
+const SEO_DATA = (() => {
+  try {
+    const read = f => fs.readFileSync(path.join(ROOT, 'data', f), 'utf8');
+    return require('node:vm').runInNewContext(read('bangladesh.js') + '\n' + read('district-famous.js') + '\n;({ DISTRICTS, GI_PRODUCTS })', {});
+  } catch (e) { console.error('district pages off:', e.message); return { DISTRICTS: [], GI_PRODUCTS: [] }; }
+})();
+const SEO_DISTRICTS = new Map(SEO_DATA.DISTRICTS.map(({ id, bn, en, lat, lon, division }) =>
+  [id, { id, bn, en, lat, lon, division, gi: SEO_DATA.GI_PRODUCTS.filter(g => g[0] === id).map(g => g[1]) }]));
+const attr = s => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+function districtPage(html, d) {
+  const url = SITE + '/district/' + d.id;
+  const title = d.bn + ' জেলা (' + d.en + ') — যাতায়াত, ভাড়া ও দর্শনীয় স্থান | Manzeela';
+  const famous = d.gi.length ? ' বিখ্যাত: ' + d.gi.slice(0, 3).join(', ') + '।' : '';
+  const desc = d.bn + ', ' + d.division + ' বিভাগ — কীভাবে যাবেন, যাতায়াতের ভাড়া, দর্শনীয় স্থান আর কাছের জায়গা।' + famous;
+  const ld = JSON.stringify({ '@context': 'https://schema.org', '@type': 'AdministrativeArea', name: d.bn, alternateName: d.en, url,
+    geo: { '@type': 'GeoCoordinates', latitude: d.lat, longitude: d.lon },
+    containedInPlace: { '@type': 'AdministrativeArea', name: d.division + ' বিভাগ' } }).replace(/</g, '\\u003c');
+  const set = (re, value) => { html = html.replace(re, (all, a, b) => a + attr(value) + b); };
+  html = html.replace('<head>', '<head>\n<base href="/">');
+  html = html.replace(/<title>[^<]*<\/title>/, '<title>' + attr(title) + '</title>');
+  set(/(<meta name="description" content=")[^"]*(")/, desc);
+  set(/(<meta property="og:title" content=")[^"]*(")/, title);
+  set(/(<meta property="og:description" content=")[^"]*(")/, desc);
+  set(/(<link rel="canonical" href=")[^"]*(")/, url);
+  set(/(<meta property="og:url" content=")[^"]*(")/, url);
+  return html.replace('</head>', '<script type="application/ld+json">' + ld + '</script>\n</head>');
+}
+function serveDistrict(req, res, id) {
+  const d = SEO_DISTRICTS.get(id);
+  if (!d) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }).end('Not found'); return; }
+  fs.readFile(path.join(ROOT, 'index.html'), 'utf8', (e, html) => {
+    if (e) { res.writeHead(500).end(); return; }
+    const body = Buffer.from(districtPage(versionPage(html), d));
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Length': body.length, 'Cache-Control': 'no-cache' });
+    res.end(req.method === 'HEAD' ? undefined : body);
+  });
+}
+
 const ROBOTS = `User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /admin.html\nSitemap: ${SITE}/sitemap.xml\n`;
-const sitemap = () => `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${['/', '/privacy.html', '/terms.html', '/delete-account.html']
+const sitemap = () => `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${['/', ...[...SEO_DISTRICTS.keys()].map(id => '/district/' + id), '/privacy.html', '/terms.html', '/delete-account.html']
   .map(p => `  <url><loc>${SITE}${p}</loc><changefreq>${p === '/' ? 'daily' : 'monthly'}</changefreq></url>`).join('\n')}\n</urlset>\n`;
 
 const server = http.createServer((req, res) => {
@@ -2958,6 +3000,7 @@ const server = http.createServer((req, res) => {
   if (pathname.startsWith('/api/auth/')) return authApi(req, res, pathname.slice(10)).catch(() => json(res, 500, { error: 'server error' }));
   if (pathname.startsWith('/api/')) return json(res, 404, { error: 'not found' });
   if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405).end(); return; }
+  { const m = /^\/district\/([a-z-]{2,30})\/?$/.exec(pathname); if (m) return serveDistrict(req, res, m[1]); }
   serveFile(req, res, pathname, searchParams.has('v'));
 });
 server.requestTimeout = 0;           // uploads of big videos; idle sockets are still closed by keepAliveTimeout
