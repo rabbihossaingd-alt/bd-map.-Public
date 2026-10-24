@@ -156,6 +156,7 @@ const PAGES = {
     task(o.reportsOpen, 'রিপোর্ট দেখা বাকি', 'অভিযোগগুলো যাচাই করুন', () => show('reports'), 'bad');
     task(o.placePhotosWaiting, 'জায়গার ছবি দেখা বাকি', 'অনুমোদন দিন বা বাদ দিন', () => show('photos'), 'violet');
     task(o.gemsWaiting, 'মেঠোপথে নতুন জায়গা দেখা বাকি', 'নতুন জায়গার খোঁজ', () => show('gems'), 'violet');
+    task(o.faresWaiting, 'ভাড়া অনুমোদন বাকি', 'অনুমোদন দিলে প্রতিটিতে ১০ পয়েন্ট', () => show('fares'), 'warn');
     task(o.payoutsWaiting, 'টাকা পাঠানো বাকি', `মোট ৳${num(o.payoutsPendingTaka)}`, () => { PAGES.creators.state.tab = 'payouts'; show('creators'); }, 'warn');
     task(o.creatorsWaiting, 'ক্রিয়েটর আবেদন', 'অনুমোদন দিন বা বাতিল করুন', () => { PAGES.creators.state.tab = 'creators'; show('creators'); }, 'violet');
     task(o.verifyWaiting, 'ব্যাজের আবেদন', 'সাপোর্টে "ব্যাজ" বিষয়ের অনুরোধ', () => show('support'), 'violet');
@@ -336,7 +337,7 @@ const PAGES = {
     const badge = document.querySelector('#nav [data-page=photos] em');
     if (badge) { badge.textContent = num(d.waiting); badge.hidden = !d.waiting; }
     box.appendChild(tabs([['pending', `দেখা বাকি (${num(d.waiting)})`], ['ok', 'অনুমোদিত'], ['no', 'বাদ দেওয়া']], st.status, v => { st.status = v; show('photos'); }));
-    box.appendChild(h('p', 'hint', 'রূপসী বাংলায় ব্যবহারকারীরা জায়গার যে ছবি পাঠিয়েছেন। ছবিটি সত্যিই ওই জায়গার, পরিষ্কার, আর মানুষের মুখ মুখ্য নয় — এমন হলে অনুমোদন দিন; অনুমোদিত প্রতিটি ছবিতে পাঠানো মানুষটি ৩ পয়েন্ট পান। অন্য জায়গার, ঝাপসা, স্ক্রিনশট বা কারও ওয়াটারমার্ক থাকা ছবি বাদ দিন।'));
+    box.appendChild(h('p', 'hint', 'রূপসী বাংলায় ব্যবহারকারীরা জায়গার যে ছবি পাঠিয়েছেন। ছবিটি সত্যিই ওই জায়গার, পরিষ্কার, আর মানুষের মুখ মুখ্য নয় — এমন হলে অনুমোদন দিন (ছবির জন্য পয়েন্ট নেই)। অন্য জায়গার, ঝাপসা, স্ক্রিনশট বা কারও ওয়াটারমার্ক থাকা ছবি বাদ দিন।'));
     if (!d.photos.length) { box.appendChild(empty(st.status === 'pending' ? 'দেখার মতো কোনো ছবি বাকি নেই।' : 'এখানে এখনো কিছু নেই।')); return; }
     const grid = h('div', 'pgrid');
     for (const p of d.photos) {
@@ -347,7 +348,7 @@ const PAGES = {
       who.classList.add('click'); who.addEventListener('click', () => openUser(p.user.id));
       const acts = h('div', 'acts');
       if (p.key) {
-        if (st.status !== 'ok') acts.append(btn('অনুমোদন দিন', '', async () => { if (await act(api('place-photo', { id: p.id, do: 'approve' }), 'ছবিটি অ্যাপে দেখা যাবে, ৩ পয়েন্ট দেওয়া হলো।')) show('photos'); }));
+        if (st.status !== 'ok') acts.append(btn('অনুমোদন দিন', '', async () => { if (await act(api('place-photo', { id: p.id, do: 'approve' }), 'ছবিটি অ্যাপে দেখা যাবে।')) show('photos'); }));
         if (st.status !== 'no') acts.append(btn(st.status === 'ok' ? 'সরিয়ে দিন' : 'বাদ দিন', 'bad', async () => { if (await act(api('place-photo', { id: p.id, do: 'reject' }), 'ছবিটি বাদ দেওয়া হলো।')) show('photos'); }));
       }
       card.append(img, h('b', null, p.name), h('small', null, `${p.district} · ${ago(st.status === 'pending' ? p.created : p.decided)}`), who, acts);
@@ -362,7 +363,7 @@ const PAGES = {
     const badge = document.querySelector('#nav [data-page=gems] em');
     if (badge) { badge.textContent = num(d.waiting); badge.hidden = !d.waiting; }
     box.appendChild(tabs([['pending', `দেখা বাকি (${num(d.waiting)})`], ['ok', 'অনুমোদিত'], ['no', 'বাদ দেওয়া']], st.status, v => { st.status = v; show('gems'); }));
-    box.appendChild(h('p', 'hint', 'ব্যবহারকারীরা যেসব অজানা জায়গার খোঁজ পাঠিয়েছেন। জায়গাটি সত্যিই আছে, বর্ণনা ঠিক আর ভদ্র, ছবি ওই জায়গার — এমন হলে অনুমোদন দিন; পাঠানো মানুষটি ৫ পয়েন্ট পান। বিজ্ঞাপন, ব্যক্তিগত বাড়ি বা ভুয়া তথ্য বাদ দিন।'));
+    box.appendChild(h('p', 'hint', 'ব্যবহারকারীরা যেসব অজানা জায়গার খোঁজ পাঠিয়েছেন। জায়গাটি সত্যিই আছে, বর্ণনা ঠিক আর ভদ্র, ছবি ওই জায়গার — এমন হলে অনুমোদন দিন (এর জন্য পয়েন্ট নেই)। বিজ্ঞাপন, ব্যক্তিগত বাড়ি বা ভুয়া তথ্য বাদ দিন।'));
     if (!d.gems.length) { box.appendChild(empty(st.status === 'pending' ? 'দেখার মতো কিছু বাকি নেই।' : 'এখানে এখনো কিছু নেই।')); return; }
     const KIND = { water: 'ঝর্ণা', river: 'নদী / সৈকত / লেক', hill: 'পাহাড় / বন', heritage: 'ঐতিহাসিক স্থাপনা', faith: 'ধর্মীয় স্থান', wetland: 'হাওর / বিল', village: 'গ্রাম ও গ্রামীণ জীবন', other: 'অন্যান্য' };
     for (const g of d.gems) {
@@ -377,7 +378,7 @@ const PAGES = {
       if (g.photos.length) { const row = h('div', 'pgrid'); for (const src of g.photos) { const i = h('img'); i.src = src; i.loading = 'lazy'; i.style.cssText = 'width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:12px;cursor:zoom-in'; i.addEventListener('click', () => window.open(src, '_blank')); row.appendChild(i); } card.appendChild(row); }
       card.appendChild(h('small', null, ago(st.status === 'pending' ? g.created : g.decided)));
       const acts = h('div', 'acts');
-      if (st.status !== 'ok') acts.append(btn('অনুমোদন দিন', '', async () => { if (await act(api('gem', { id: g.id, do: 'approve' }), 'জায়গাটি অ্যাপে দেখা যাবে, ৫ পয়েন্ট দেওয়া হলো।')) show('gems'); }));
+      if (st.status !== 'ok') acts.append(btn('অনুমোদন দিন', '', async () => { if (await act(api('gem', { id: g.id, do: 'approve' }), 'জায়গাটি অ্যাপে দেখা যাবে।')) show('gems'); }));
       if (st.status !== 'no') acts.append(btn(st.status === 'ok' ? 'সরিয়ে দিন' : 'বাদ দিন', 'bad', async () => { if (await act(api('gem', { id: g.id, do: 'reject' }), 'বাদ দেওয়া হলো।')) show('gems'); }));
       card.appendChild(acts);
       box.appendChild(card);
@@ -478,7 +479,7 @@ const PAGES = {
     const d = await api('audit');
     const WHAT = { verify: 'ব্যাজ দেওয়া', unverify: 'ব্যাজ সরানো', 'creator approve': 'ক্রিয়েটর অনুমোদন', 'creator reject': 'ক্রিয়েটর আবেদন বাতিল', 'creator revoke': 'ক্রিয়েটর বন্ধ',
                    earning: 'আয় যোগ', 'payout paid': 'টাকা পাঠানো', 'payout rejected': 'টাকা তোলা বাতিল', 'creator rules': 'ক্রিয়েটর নিয়ম বদল', 'sound removed': 'সাউন্ড সরানো', 'story removed': 'স্টোরি সরানো', 'comment removed': 'মন্তব্য সরানো', 'group removed': 'গ্রুপ বন্ধ', flag: 'সুইচ বদল', export: 'তালিকা ডাউনলোড', ban: 'অ্যাকাউন্ট বন্ধ', unban: 'অ্যাকাউন্ট চালু', role: 'ভূমিকা বদল', delete: 'অ্যাকাউন্ট মোছা', signout: 'সব ডিভাইস থেকে লগআউট', reply: 'সাপোর্টে উত্তর',
-                   notice: 'ঘোষণা বদল', 'fare removed': 'ভাড়া সরানো', 'report dismissed': 'রিপোর্ট বন্ধ', 'post removed': 'পোস্ট সরানো' };
+                   notice: 'ঘোষণা বদল', 'fare removed': 'ভাড়া সরানো', 'fare approved': 'ভাড়া অনুমোদন', 'report dismissed': 'রিপোর্ট বন্ধ', 'post removed': 'পোস্ট সরানো' };
     box.appendChild(h('p', 'hint', 'অ্যাডমিন ও সাপোর্ট টিম এই প্যানেল থেকে যা যা বদলেছেন, তার তালিকা। এটি মোছা যায় না।'));
     if (!d.audit.length) { box.appendChild(empty('এখনো কিছু বদলানো হয়নি।')); return; }
     box.appendChild(table(['কখন', 'কে', 'কী', 'কার/কীসের', 'বিস্তারিত'], d.audit.map(a => [when(a.at), a.name || 'মুছে ফেলা অ্যাকাউন্ট', WHAT[a.action] || a.action, a.target, a.detail])));
@@ -508,8 +509,9 @@ const PAGES = {
     row('Node.js', s.node, '');
     const help = h('div', 'card');
     help.append(h('h3', null, 'সার্ভারে যা সেট করতে হয়'), h('p', 'hint', 'হোস্টিংয়ের "Environment variables"-এ এগুলো বসান, তারপর সার্ভার আবার চালু করুন।'));
-    for (const [k, v] of [['ADMIN_EMAILS', 'যে ই-মেইল(গুলো) অ্যাডমিন হবে, কমা দিয়ে'], ['SMTP_HOST · SMTP_USER · SMTP_PASS', 'লগইন কোড পাঠানোর মেইল অ্যাকাউন্ট (Gmail হলে smtp.gmail.com ও একটি App Password)'],
-                          ['DATA_DIR', 'ডাটাবেস রাখার স্থায়ী ডিস্কের ফোল্ডার'], ['TURN_URL · TURN_USER · TURN_PASS', 'মোবাইল ডাটায় কল চালানোর রিলে সার্ভার (ঐচ্ছিক)']]) {
+    for (const [k, v] of [['ADMIN_EMAILS', 'যে ই-মেইল(গুলো) অ্যাডমিন হবে, কমা দিয়ে'], ['BREVO_API_KEY · MAIL_FROM', 'লগইন কোডের মেইল পাঠানো (Brevo), পাঠানোর ঠিকানা no-reply@manzeela.com'],
+                          ['R2_ENDPOINT · R2_ACCESS_KEY_ID · R2_SECRET_ACCESS_KEY · R2_BUCKET · R2_BACKUP=1', 'ছবি-ভিডিও আর ডাটাবেসের কপি Cloudflare R2-তে'], ['ESRI_KEY', 'স্যাটেলাইট ম্যাপের চাবি'],
+                          ['DATA_DIR', 'ডাটাবেস রাখার স্থায়ী ডিস্কের ফোল্ডার'], ['TURN_URL · TURN_USER · TURN_PASS অথবা METERED_APP · METERED_KEY', 'মোবাইল ডাটায় কল চালানোর রিলে সার্ভার']]) {
       const r = h('div', 'line'); r.append(h('code', null, k), h('span', 'k', v)); help.appendChild(r);
     }
     box.append(notice, sys, help);
@@ -617,7 +619,7 @@ function switchRow(title, sub, key, on) {
 }
 
 function setCounts(o) {
-  for (const [key, n] of [['support', o.ticketsOpen], ['reports', o.reportsOpen], ['photos', o.placePhotosWaiting], ['gems', o.gemsWaiting], ['creators', (o.payoutsWaiting || 0) + (o.creatorsWaiting || 0)]]) {
+  for (const [key, n] of [['support', o.ticketsOpen], ['reports', o.reportsOpen], ['photos', o.placePhotosWaiting], ['gems', o.gemsWaiting], ['fares', o.faresWaiting], ['creators', (o.payoutsWaiting || 0) + (o.creatorsWaiting || 0)]]) {
     const b = document.querySelector(`#nav [data-page=${key}] em`);
     if (b) { b.textContent = num(n); b.hidden = !n; }
   }
