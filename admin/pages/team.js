@@ -47,7 +47,19 @@ export async function render(box) {
     for (const [p, label] of Object.entries(data.perms)) tb.append(h('tr', null, h('td', null, label, h('small', 'mono muted', ' ' + p)), ...roles.map(r => h('td', 'c', r.perms.includes(p) ? icon('check', 'yes') : h('span', 'muted', '–')))));
     t.append(tb);
     return h('div', 'stack', h('div', 'role-notes', ...roles.map(r => h('div', 'role-note', badge(r.name, ROLE_TONE[r.key] || ''), h('span', 'muted', ROLE_NOTE[r.key] || '')))), h('div', 'card flush', h('div', 'tbl-wrap', t)),
-      h('p', 'hint', 'কাস্টম ভূমিকা (নিজের মতো অনুমতি বেছে) ফেজ ২-এ আসছে।'));
+      h('div', 'row-acts', button('নতুন ভূমিকা', { kind: 'primary', ic: 'plus', onClick: () => roleForm() }), ...roles.filter(r => !r.builtin).map(r => button(`${r.name} বদলান`, { small: true, onClick: () => roleForm(r) }))));
+  }
+  // a custom role: a name and the permissions it gives (team management stays with the owner)
+  function roleForm(r) {
+    const name = attrs(h('input', 'input'), { maxlength: '40', value: r ? r.name : '', placeholder: 'যেমন: ভাড়া যাচাইকারী' });
+    const boxes = Object.entries(data.perms).filter(([p]) => p !== 'team.manage').map(([p, label]) => { const c = attrs(h('input'), { type: 'checkbox', value: p }); c.checked = r ? r.perms.includes(p) : ['dashboard.view', 'inbox.view'].includes(p); return h('label', 'check', c, ' ' + label); });
+    const mm = modal({ title: r ? r.name + ' — ভূমিকা' : 'নতুন ভূমিকা', wide: true, body: h('div', 'confirm', field('নাম', name), h('div', 'perm-grid', ...boxes)),
+      actions: [r && !r.members ? button('মুছুন', { kind: 'ghost', onClick: async () => { try { await api('roles/delete', { key: r.key }); mm.close(); toast('ভূমিকা মুছে ফেলা হলো।'); load(); } catch (e) { toast(errText(e), { bad: true }); } } }) : null,
+        button('বাতিল', { kind: 'ghost', onClick: () => mm.close() }), button('সেভ', { kind: 'primary', onClick: async () => {
+          const perms = boxes.map(b => b.querySelector('input')).filter(c => c.checked).map(c => c.value);
+          if (!name.value.trim() || !perms.length) { toast('নাম আর অন্তত একটি অনুমতি লাগবে।', { bad: true }); return; }
+          try { await api('roles/save', { key: r && r.key, name: name.value, perms }); mm.close(); toast('ভূমিকা সেভ হলো — খতিয়ানে লেখা থাকল।'); load(); } catch (e) { toast(errText(e), { bad: true }); }
+        } })].filter(Boolean) });
   }
   async function setRole(who, role, label) {
     const tier = role === 'admin' ? 3 : 2;

@@ -11,6 +11,7 @@ const CHAT = { friends: [], groups: [], requests: [], incoming: [], outgoing: []
 async function chatApi(path, body) {
   const res = await fetch('api/chat/' + path, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {});
   const data = (res.headers.get('content-type') || '').includes('json') ? await res.json() : {};
+  if (!res.ok && data.error === 'restricted' && typeof restrictedNotice === 'function') restrictedNotice();
   if (!res.ok) throw new Error(data.error || 'server');
   return data;
 }

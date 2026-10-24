@@ -1,97 +1,123 @@
-// কমান্ড সেন্টার: what needs doing today first, then how the app is doing. Phase 1 reads the older overview numbers
-// (14 days); phase 2 adds the date range, DAU/WAU/MAU, alerts on unusual days and the waiting times.
-import { api, can, legacy, session } from '../api.js';
-import { badge, empty, errorBox, h, icon, person, skeleton, when, attrs, dot } from '../ui.js';
-import { num, taka, pct } from '../fmt.js';
+// কমান্ড সেন্টার: what needs doing first (with how long the oldest has waited, red past its SLA), then how the app is
+// doing over a chosen range compared with the range before, anything unusual, the health of the system, the latest
+// changes and newcomers, and the two emergency switches.
+import { api, can, errText, legacy, session } from '../api.js';
+import { attrs, badge, button, confirmAction, dot, empty, errorBox, h, icon, person, skeleton, tabs, toast, when } from '../ui.js';
+import { num, pct, taka, waited } from '../fmt.js';
 import { lineChart, sparkline } from '../chart.js';
 
-export async function render(box, { go }) {
-  box.append(skeleton(8, 'cards'));
-  let o, c;
-  try { [o, c] = await Promise.all([legacy('overview'), api('counts')]); }
-  catch (e) { box.replaceChildren(errorBox(e, () => { box.replaceChildren(); render(box, { go }); })); return; }
-  const me = session.me, hour = (new Date().getUTCHours() + 6) % 24;   // Dhaka time
-  const tasks = [
-    ['support', 'সাপোর্টে উত্তর বাকি', 'tickets', 'support.view', 'warn'], ['reports', 'রিপোর্ট দেখা বাকি', 'reports', 'reports.view', 'danger'],
-    ['fares', 'ভাড়া অনুমোদন বাকি', 'fares', 'data.approve', 'warn'], ['photos', 'জায়গার ছবি দেখা বাকি', 'photos', 'data.approve', ''],
-    ['gems', 'মেঠোপথে নতুন জায়গা', 'gems', 'data.approve', ''], ['payouts', 'পেআউট অপেক্ষায়', 'payouts', 'payouts.view', 'warn'],
-    ['creators', 'ক্রিয়েটর আবেদন', 'creators', 'creators.manage', ''], ['verify', 'ব্যাজের আবেদন', 'tickets', 'support.view', '']
-  ].filter(t => can(t[3]));
-  const mine = tasks.reduce((s, t) => s + (c[t[0]] || 0), 0);
+const read = (k, d) => { try { return localStorage.getItem(k) || d; } catch { return d; } };
+const save = (k, v) => { try { localStorage.setItem(k, v); } catch { /* storage off */ } };
 
-  const head = h('div', 'page-head', h('div', null, h('h1', null, `${hour < 12 ? 'শুভ সকাল' : hour < 17 ? 'শুভ দুপুর' : hour < 20 ? 'শুভ সন্ধ্যা' : 'শুভ রাত্রি'}, ${me.user.name}`),
-    h('p', 'muted', `${me.roleName} · ${mine ? `আপনার জন্য ${num(mine)}টি কাজ অপেক্ষায়` : 'আপনার জন্য কোনো কাজ বাকি নেই — সাবাস'} · এখন ${num(c.online)} জন অ্যাপে`)));
-
-  const todo = h('section', 'section', h('h2', null, 'আজকের কাজ'));
-  const grid = h('div', 'task-grid');
-  for (const [k, label, page, , tone] of tasks) {
-    const n = c[k] || 0;
-    const card = attrs(h('a', 'task ' + (n ? tone : 'done'), h('b', null, num(n)), h('span', null, label), h('small', null, n ? 'খুলুন' : 'সব ঠিক আছে')), { href: '#/' + page });
-    if (k === 'payouts' && o.payoutsPendingTaka) card.querySelector('small').textContent = `মোট ${taka(o.payoutsPendingTaka)}`;
-    grid.append(card);
+export async function render(box, ctx) {
+  let range = Number(read('mzadm.range', '14')), compare = read('mzadm.compare', '1') === '1';
+  let o;
+  async function load() {
+    box.replaceChildren(skeleton(8, 'cards'));
+    try { o = await api('overview2?range=' + range); paint(); } catch (e) { box.replaceChildren(errorBox(e, load)); }
   }
-  todo.append(grid);
+  function paint() {
+    const me = session.me, hour = (new Date().getUTCHours() + 6) % 24, t = o.tasks;
+    const TASKS = [['support', 'সাপোর্টে উত্তর বাকি', '#/inbox/ticket', 'support.view'], ['reports', 'রিপোর্ট কেস', '#/inbox/report', 'reports.view'], ['fares', 'ভাড়া অনুমোদন বাকি', '#/inbox/fare', 'data.approve'],
+      ['photos', 'জায়গার ছবি', '#/inbox/photo', 'data.approve'], ['gems', 'মেঠোপথ', '#/inbox/gem', 'data.approve'], ['payouts', 'পেআউট অপেক্ষায়', '#/inbox/payout', 'payouts.view'],
+      ['creators', 'ক্রিয়েটর আবেদন', '#/inbox/creator', 'creators.manage'], ['verify', 'ব্যাজের আবেদন', '#/inbox/verify', 'support.view']].filter(x => can(x[3]));
+    const mine = TASKS.reduce((s, [k]) => s + (t[k].n || 0), 0);
+    const head = h('div', 'page-head', h('div', null, h('h1', null, `${hour < 12 ? 'শুভ সকাল' : hour < 17 ? 'শুভ দুপুর' : hour < 20 ? 'শুভ সন্ধ্যা' : 'শুভ রাত্রি'}, ${me.user.name}`),
+      h('p', 'muted', `${me.roleName} · ${mine ? `আপনার জন্য ${num(mine)}টি কাজ` : 'কোনো কাজ বাকি নেই — সাবাস'} · এখন ${num(o.kpi.online)} জন অ্যাপে`)),
+      mine && can('inbox.view') ? button('পরেরটা নাও', { kind: 'primary', ic: 'inbox', onClick: () => ctx.go('#/inbox/next') }) : null);
 
-  // KPI cards: the 14-day series where one exists, compared with the week before
-  const trend = d => { if (!d) return null; const a = d.slice(0, 7).reduce((x, y) => x + y, 0), b = d.slice(7).reduce((x, y) => x + y, 0); return a ? Math.round((b - a) / a * 100) : b ? 100 : 0; };
-  const kpi = (label, value, sub, series, tone) => {
-    const t = trend(series);
-    return h('div', 'kpi ' + (tone || ''), h('span', 'k-label', label), h('b', 'k-val', value), h('div', 'k-row', t == null ? h('span') : h('em', t > 0 ? 'up' : t < 0 ? 'down' : '', pct(t)), series ? sparkline(series) : null), h('small', 'muted', sub));
-  };
-  const kpis = h('div', 'kpi-grid',
-    kpi('মোট ব্যবহারকারী', num(o.users), `আজ নতুন ${num(o.usersToday)} · ৭ দিনে সক্রিয় ${num(o.active7)}`, o.signups),
-    kpi('আজ সক্রিয়', num(o.activeToday), `এখন অনলাইন ${num(o.online)}`, null, 'live'),
-    kpi('আজকের মেসেজ', num(o.messagesToday), `মোট ${num(o.messages)} · শুধু সংখ্যা, লেখা নয়`, o.chats),
-    kpi('পোস্ট', num(o.posts), `আজ ${num(o.postsToday)} · স্টোরি ${num(o.stories)}`, o.postsSeries),
-    kpi('লাইক', num((o.likesSeries || []).reduce((a, b) => a + b, 0)), 'গত ১৪ দিনে', o.likesSeries),
-    kpi('জানানো ভাড়া', num(o.fares), `অনুমোদন বাকি ${num(c.fares)}`, o.faresSeries),
-    kpi('চলতি গ্রুপ কল', num(o.calls), `বন্ধুত্ব ${num(o.friendships)}টি`),
-    kpi('ভেরিফায়েড', num(o.verified), `টু-স্টেপ চালু ${num(o.twofa)} জন`),
-    kpi('বন্ধ অ্যাকাউন্ট', num(o.banned), `খোলা রিপোর্ট ${num(o.reportsOpen)}`, null, o.banned ? 'danger' : ''),
-    kpi('অপেক্ষমাণ পেআউট', taka(o.payoutsPendingTaka || 0), `${num(o.payoutsWaiting || 0)}টি অনুরোধ`, null, o.payoutsWaiting ? 'warn' : ''));
+    // anything far from its usual day
+    const alerts = o.alerts.length ? h('div', 'alerts', ...o.alerts.map(a => h('div', 'banner warn', icon('alert'), h('span', null, `গতকাল ${a.label} সাধারণ দিনের চেয়ে ${num(Math.abs(a.change))}% ${a.change < 0 ? 'কম' : 'বেশি'}।${a.hint ? ' ' + a.hint : ''}`)))) : null;
 
-  const charts = h('section', 'section', h('h2', null, 'গত ১৪ দিন'), h('div', 'chart-grid',
-    h('div', 'card', h('h3', null, 'নতুন অ্যাকাউন্ট ও পোস্ট'), lineChart([{ name: 'নতুন অ্যাকাউন্ট', data: o.signups, tone: 'brand' }, { name: 'পোস্ট', data: o.postsSeries, tone: 'info' }])),
-    h('div', 'card', h('h3', null, 'লাইক, সাপোর্ট ও ভাড়া'), lineChart([{ name: 'লাইক', data: o.likesSeries, tone: 'info' }, { name: 'সাপোর্ট', data: o.support, tone: 'warn' }, { name: 'ভাড়া', data: o.faresSeries, tone: 'brand' }]))));
+    const hl = o.health;
+    const health = can('system.view') ? h('div', 'health', h('span', 'muted', 'সিস্টেম'),
+      h('span', 'hp', dot(hl.mail ? 'ok' : 'danger'), hl.mail ? 'মেইল' : 'মেইল বন্ধ'), h('span', 'hp', dot(hl.turn ? 'ok' : 'warn'), hl.turn ? 'কলের রিলে' : 'কলের রিলে নেই'),
+      h('span', 'hp', dot(!hl.r2 ? 'warn' : hl.backupLate ? 'danger' : 'ok'), !hl.r2 ? 'R2 কপি বন্ধ' : hl.lastBackup ? h('span', null, 'শেষ ব্যাকআপ ', when(hl.lastBackup)) : 'ব্যাকআপ এখনো হয়নি'),
+      h('span', 'hp', dot('ok'), `ডাটাবেস ${num(hl.dbBytes / 1048576, 1)} MB`), attrs(h('a', 'link', 'বিস্তারিত'), { href: '#/health' })) : null;
 
-  const lower = h('div', 'two-col');
-  // the latest changes from the audit log
-  if (can('audit.view')) {
-    const feed = h('div', 'card', h('div', 'card-head', h('h3', null, 'সাম্প্রতিক কাজ'), attrs(h('a', 'link', 'সব দেখুন'), { href: '#/audit' })));
-    try {
-      const a = await api('audit?limit=10');
-      if (!a.rows.length) feed.append(empty('এখনো কোনো কাজ হয়নি।'));
-      for (const r of a.rows) feed.append(h('div', 'feed-row', h('span', 'feed-dot'), h('div', 't', h('b', null, `${r.name || 'মুছে ফেলা অ্যাকাউন্ট'} · ${actionText(r.action)}`), h('span', 'muted', r.note || (r.target_type ? `${r.target_type} ${r.target_id}` : ''))), when(r.at)));
-    } catch (e) { feed.append(errorBox(e)); }
-    lower.append(feed);
+    const grid = h('div', 'task-grid');
+    for (const [k, label, link] of TASKS) {
+      const x = t[k], late = x.oldest && Date.now() - x.oldest > x.sla * 3600e3, near = x.oldest && !late && Date.now() - x.oldest > x.sla * 3600e3 * 0.75;
+      grid.append(attrs(h('a', 'task ' + (!x.n ? 'done' : late ? 'danger' : near ? 'warn' : ''), h('b', null, num(x.n)), h('span', null, label),
+        h('small', null, !x.n ? 'সব ঠিক আছে' : k === 'payouts' && x.taka ? `মোট ${taka(x.taka)}${x.oldest ? ' · ' + waited(Date.now() - x.oldest) + ' অপেক্ষায়' : ''}` : x.oldest ? `সবচেয়ে পুরনো ${waited(Date.now() - x.oldest)}${late ? ' — SLA পার' : ''}` : 'খুলুন')), { href: link }));
+    }
+
+    // the range and the comparison
+    const rangeBar = h('div', 'range-bar', tabs([[1, 'আজ'], [7, '৭ দিন'], [14, '১৪ দিন'], [30, '৩০ দিন'], [90, '৯০ দিন']].map(([v, l]) => [v, l]), range, v => { range = v; save('mzadm.range', String(v)); load(); }));
+    const cmp = attrs(h('input'), { type: 'checkbox' }); cmp.checked = compare;
+    cmp.addEventListener('change', () => { compare = cmp.checked; save('mzadm.compare', compare ? '1' : '0'); paint(); });
+    rangeBar.append(h('label', 'check', cmp, ' আগের সময়ের সাথে তুলনা'));
+    const n = Math.max(range, 2), cur = a => a.slice(-n), prev = a => a.slice(-2 * n, -n), sum = a => a.reduce((x, y) => x + y, 0);
+    const change = a => { const p = sum(prev(a)), c = sum(cur(a)); return p ? Math.round((c - p) / p * 100) : c ? 100 : 0; };
+    const kpi = (label, value, sub, s, tone) => h('div', 'kpi ' + (tone || ''), h('span', 'k-label', label), h('b', 'k-val', value),
+      h('div', 'k-row', s && compare ? h('em', change(s) > 0 ? 'up' : change(s) < 0 ? 'down' : '', pct(change(s))) : h('span'), s ? sparkline(cur(s)) : null), h('small', 'muted', sub));
+    const k = o.kpi, S = o.series;
+    const kpis = h('div', 'kpi-grid',
+      kpi('মোট ব্যবহারকারী', num(k.users), `আজ নতুন ${num(k.signupsToday)}`, S.signups),
+      kpi('দৈনিক সক্রিয় (DAU)', num(k.dau), o.tracked < 7 ? `গোনা শুরু ${num(o.tracked)} দিন আগে` : `সাপ্তাহিক ${num(k.wau)} · মাসিক ${num(k.mau)}`, S.active, 'live'),
+      kpi('স্টিকিনেস', num(k.stickiness) + '%', 'DAU ÷ MAU'),
+      kpi('নতুন সাইনআপ', num(sum(cur(S.signups))), range === 1 ? 'আজ' : `গত ${num(range)} দিনে`, S.signups),
+      kpi('পোস্ট', num(sum(cur(S.posts))), `মোট ${num(k.posts)}`, S.posts),
+      kpi('মেসেজ', num(sum(cur(S.messages))), 'শুধু সংখ্যা — লেখা কখনো নয়', S.messages),
+      kpi('জানানো ভাড়া', num(sum(cur(S.fares))), `মোট ${num(k.fares)}`, S.fares),
+      kpi('চলতি গ্রুপ কল', num(k.calls), 'এই মুহূর্তে'),
+      kpi('ভেরিফায়েড', num(k.verified), 'নীল ব্যাজ'),
+      kpi('বন্ধ অ্যাকাউন্ট', num(k.banned), '', null, k.banned ? 'danger' : ''),
+      kpi('অপেক্ষমাণ পেআউট', taka(k.payoutTaka), `${num(t.payouts.n)}টি অনুরোধ`, null, t.payouts.n ? 'warn' : ''));
+    const charts = h('div', 'chart-grid',
+      h('div', 'card', h('h3', null, 'নতুন অ্যাকাউন্ট ও সক্রিয় ব্যবহারকারী'), lineChart([{ name: 'নতুন', data: cur(S.signups), tone: 'brand' }, { name: 'সক্রিয়', data: cur(S.active), tone: 'info' }])),
+      h('div', 'card', h('h3', null, 'পোস্ট ও লাইক'), lineChart([{ name: 'পোস্ট', data: cur(S.posts), tone: 'brand' }, { name: 'লাইক', data: cur(S.likes), tone: 'info' }])),
+      h('div', 'card', h('h3', null, 'সাপোর্ট ও ভাড়া'), lineChart([{ name: 'সাপোর্ট', data: cur(S.tickets), tone: 'warn' }, { name: 'ভাড়া', data: cur(S.fares), tone: 'brand' }])));
+
+    const lower = h('div', 'two-col');
+    if (can('audit.view')) {
+      const feed = h('div', 'card', h('div', 'card-head', h('h3', null, 'সাম্প্রতিক কাজ'), attrs(h('a', 'link', 'সব দেখুন'), { href: '#/audit' })));
+      if (!o.recent.length) feed.append(empty('এখনো কোনো কাজ হয়নি।'));
+      for (const r of o.recent) feed.append(h('div', 'feed-row', h('span', 'feed-dot'), h('div', 't', h('b', null, `${r.name || 'সিস্টেম'} · ${actionText(r.action)}`), h('span', 'muted', r.note || (r.target_type ? `${r.target_type} ${r.target_id}` : ''))), when(r.at)));
+      lower.append(feed);
+    }
+    const people = h('div', 'card', h('div', 'card-head', h('h3', null, 'নতুন সদস্য'), can('users.view') ? attrs(h('a', 'link', 'সব দেখুন'), { href: '#/users' }) : null));
+    for (const u of o.newcomers) { const row = h('div', 'feed-row' + (can('users.view') ? ' click' : ''), person(u, '@' + u.username), when(u.created)); if (can('users.view')) row.addEventListener('click', () => ctx.go('#/users/' + u.id)); people.append(row); }
+    if (!o.newcomers.length) people.append(empty('এখনো কেউ যোগ দেননি।'));
+    lower.append(people);
+    if (can('flags.manage')) lower.append(switches());
+
+    box.replaceChildren(head, ...(alerts ? [alerts] : []), ...(health ? [health] : []), h('section', 'section', h('h2', null, 'আজকের কাজ'), grid),
+      h('section', 'section', h('div', 'section-head', h('h2', null, 'এক নজরে'), rangeBar), kpis, o.tracked < 7 ? h('p', 'hint', icon('clock'), ` দৈনিক সক্রিয় ব্যবহারকারী গোনা শুরু হয়েছে ${num(o.tracked)} দিন আগে — আগের দিনগুলোর হিসাব নেই।`) : null),
+      h('section', 'section', charts), lower);
   }
-  const people = h('div', 'card', h('h3', null, 'নতুন যোগ দিয়েছেন'));
-  for (const u of o.latestUsers || []) people.append(h('div', 'feed-row', person({ ...u, pic: u.pic }, '@' + (u.username || '')), when(u.created)));
-  if (!(o.latestUsers || []).length) people.append(empty('এখনো কেউ যোগ দেননি।'));
-  lower.append(people);
-
-  // the health strip: green, amber or red at a glance
-  let health = null;
-  if (can('system.view')) {
-    try {
-      const s = await legacy('system');
-      health = h('div', 'health', h('span', 'muted', 'সিস্টেম'),
-        h('span', 'hp', dot(s.mail ? 'ok' : 'danger'), 'মেইল'), h('span', 'hp', dot(s.turn ? 'ok' : 'warn'), 'কলের রিলে'),
-        h('span', 'hp', dot(s.dataDir === 'DATA_DIR' ? 'ok' : 'warn'), `ডাটাবেস ${num((s.dbBytes / 1048576).toFixed(1), 1)} MB`), h('span', 'hp', dot('ok'), `চলছে ${num(Math.floor(s.uptime / 3600))} ঘণ্টা`),
-        attrs(h('a', 'link', 'বিস্তারিত'), { href: '#/health' }));
-    } catch { /* the strip is left out */ }
+  // the two emergency switches (tier 2: a reason, written in the log)
+  function switches() {
+    const card = h('div', 'card', h('h3', null, 'দ্রুত সুইচ'));
+    legacy('flags').then(({ flags }) => {
+      const row = (key, title, sub) => {
+        const sw = attrs(h('button', 'switch' + (flags[key] ? ' on' : ''), h('i')), { role: 'switch', 'aria-checked': String(!!flags[key]), 'aria-label': title, type: 'button' });
+        sw.addEventListener('click', async () => {
+          const next = !flags[key];
+          const ok = await confirmAction({ tier: 2, title: `${title} ${next ? 'চালু' : 'বন্ধ'} করবেন?`, text: next ? 'সবাই আবার এটা করতে পারবেন।' : 'পুরো অ্যাপের জন্য সঙ্গে সঙ্গে বন্ধ হবে (টিম ছাড়া)।', danger: !next, confirmText: next ? 'চালু করুন' : 'বন্ধ করুন' });
+          if (!ok) return;
+          try { await legacy('flags', { [key]: next }); flags[key] = next; sw.classList.toggle('on', next); sw.setAttribute('aria-checked', String(next)); toast(next ? 'চালু করা হলো।' : 'বন্ধ করা হলো।'); }
+          catch (e) { toast(errText(e), { bad: true }); }
+        });
+        return h('div', 'sw-row', h('div', 't', h('b', null, title), h('span', 'muted', sub)), sw);
+      };
+      card.append(row('signups', 'নতুন অ্যাকাউন্ট খোলা', 'বন্ধ করলে শুধু পুরনোরা লগইন করতে পারবেন'), row('posts', 'পোস্ট ও স্টোরি দেওয়া', 'বন্ধ করলে সাধারণ ব্যবহারকারীরা পোস্ট করতে পারবেন না'));
+    }).catch(e => card.append(errorBox(e)));
+    return card;
   }
-  box.replaceChildren(head, ...(health ? [health] : []), todo, h('section', 'section', h('h2', null, 'এক নজরে'), kpis), charts, lower);
-  // live: the task numbers follow the stream
-  const onCounts = e => { const n = e.detail; grid.querySelectorAll('.task').forEach((card, i) => { const k = tasks[i][0]; const v = n[k] || 0; card.querySelector('b').textContent = num(v); card.className = 'task ' + (v ? tasks[i][4] : 'done'); }); };
-  document.addEventListener('mz:counts', onCounts);
-  return { destroy: () => document.removeEventListener('mz:counts', onCounts) };
+  await load();
+  const onCounts = () => {};       // the numbers above refresh with the range; the menu badges follow the stream
+  return { destroy: () => {} , key: () => false, onCounts };
 }
 
 // what each logged action means, in a sentence fragment
 export const ACTIONS = {
   'admin.login': 'প্যানেলে ঢুকেছেন', 'admin.login.failed': 'ভুল কোড দিয়েছেন', 'admin.lock': 'প্যানেল লক করেছেন', stepup: 'উচ্চ-ঝুঁকির কাজের আগে নিশ্চিত করেছেন', 'stepup.failed': 'নিশ্চিতকরণে ভুল কোড',
-  'team.role': 'ভূমিকা বদলেছেন', 'pii.unmask': 'গোপন তথ্য দেখেছেন', denied: 'অনুমতি ছাড়া চেষ্টা', export: 'ডাউনলোড করেছেন',
+  'team.role': 'ভূমিকা বদলেছেন', 'role.save': 'ভূমিকা তৈরি/বদল', 'role.delete': 'ভূমিকা মুছেছেন', 'pii.unmask': 'গোপন তথ্য দেখেছেন', denied: 'অনুমতি ছাড়া চেষ্টা', export: 'ডাউনলোড করেছেন',
+  'case.assign': 'কাজ অ্যাসাইন করেছেন', 'ticket.reply': 'টিকিটে উত্তর দিয়েছেন', 'ticket.note': 'টিকিটে নোট রেখেছেন', 'ticket.status': 'টিকিটের অবস্থা বদলেছেন', 'ticket.meta': 'টিকিটের ট্যাগ/প্রায়োরিটি',
+  'macro.save': 'টেমপ্লেট সেভ', 'macro.delete': 'টেমপ্লেট মুছেছেন', 'user.note': 'ব্যবহারকারীর নোট', 'user.verify': 'ব্যাজ দিয়েছেন', 'user.unverify': 'ব্যাজ সরিয়েছেন', 'user.restrict': 'সীমিত করেছেন', 'user.unrestrict': 'সীমা তুলেছেন',
+  'user.ban': 'অ্যাকাউন্ট বন্ধ করেছেন', 'user.unban': 'অ্যাকাউন্ট চালু করেছেন', 'user.signout': 'সব ডিভাইস থেকে লগআউট', 'user.signout.one': 'একটি ডিভাইস থেকে লগআউট', 'user.delete': 'অ্যাকাউন্ট মুছেছেন (৩০ দিন)', 'user.restore': 'অ্যাকাউন্ট ফিরিয়েছেন', 'user.purge': 'অ্যাকাউন্ট চিরতরে মুছে গেছে',
+  'report.dismiss': 'রিপোর্ট বাতিল', 'report.remove': 'রিপোর্টে কনটেন্ট সরানো', 'report.restrict': 'রিপোর্টে সীমিত', 'report.ban': 'রিপোর্টে অ্যাকাউন্ট বন্ধ', 'report.reopen': 'রিপোর্ট আবার খোলা', 'post.remove': 'পোস্ট সরিয়েছেন',
   verify: 'ব্যাজ দিয়েছেন', unverify: 'ব্যাজ সরিয়েছেন', ban: 'অ্যাকাউন্ট বন্ধ করেছেন', unban: 'অ্যাকাউন্ট চালু করেছেন', role: 'ভূমিকা বদলেছেন (পুরনো প্যানেল)', delete: 'অ্যাকাউন্ট মুছেছেন',
   signout: 'সব ডিভাইস থেকে লগআউট করিয়েছেন', reply: 'সাপোর্টে উত্তর দিয়েছেন', notice: 'ঘোষণা বদলেছেন', flag: 'ফিচার সুইচ বদলেছেন', 'fare removed': 'ভাড়া সরিয়েছেন', 'fare approved': 'ভাড়া অনুমোদন করেছেন',
   'report dismissed': 'রিপোর্ট বন্ধ করেছেন', 'post removed': 'পোস্ট সরিয়েছেন', 'story removed': 'স্টোরি সরিয়েছেন', 'comment removed': 'মন্তব্য সরিয়েছেন', 'sound removed': 'সাউন্ড সরিয়েছেন', 'group removed': 'গ্রুপ বন্ধ করেছেন',

@@ -4,9 +4,17 @@
 // posts. Tapping a video opens the reels viewer: one video per screen, swipe or scroll up for the next.
 // A post is one photo or one video with a caption and, optionally, the place it shows.
 
+// An account the team has limited for a few days (admin panel → সীমিত করুন): say so plainly, once, wherever it happens.
+let restrictedShown = 0;
+function restrictedNotice() {
+  if (Date.now() - restrictedShown < 15000 || typeof openModal !== 'function') return;
+  restrictedShown = Date.now();
+  openModal('অ্যাকাউন্ট কিছুদিনের জন্য সীমিত', '', [el('div', 'empty', 'নিয়ম ভাঙার জন্য আপনার অ্যাকাউন্ট কিছুদিনের জন্য সীমিত করা হয়েছে — এই সময়ে পোস্ট/মন্তব্য বা মেসেজ পাঠানো যাবে না। ভুল মনে হলে সাহায্য কেন্দ্রে জানান।')]);
+}
 async function exploreApi(path, body) {
   const res = await fetch('api/explore/' + path, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {});
   const data = (res.headers.get('content-type') || '').includes('json') ? await res.json() : {};
+  if (!res.ok && data.error === 'restricted') restrictedNotice();
   if (!res.ok) throw new Error(data.error || 'server');
   return data;
 }

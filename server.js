@@ -245,12 +245,21 @@ const okDevice = d => typeof d === 'string' && /^[\w-]{8,64}$/.test(d);
 const sessionToken = req => (new RegExp('(?:^|;\\s*)' + COOKIE + '=([a-f0-9]{64})').exec(req.headers.cookie || '') || [])[1];
 // Only a browser on this same computer, not something reaching the server through a host's proxy.
 const isLocal = req => ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress) && !req.headers['x-forwarded-for'];
+db.exec('CREATE TABLE IF NOT EXISTS activity_days (user INTEGER NOT NULL, day INTEGER NOT NULL, PRIMARY KEY (user, day))');
+const dhakaDay = t => Math.floor((t + 6 * 3600e3) / 864e5);
+const activeMark = db.prepare('INSERT OR IGNORE INTO activity_days (user, day) VALUES (?, ?)'), activeToday = new Set();
+// accounts an admin deleted wait 30 days (restorable) before everything goes; restrictions switch posting or messages off
+for (const [col, def] of [['deleted_at', 'INTEGER NOT NULL DEFAULT 0']]) if (!db.prepare("SELECT COUNT(*) AS n FROM pragma_table_info('users') WHERE name = ?").get(col).n) db.exec(`ALTER TABLE users ADD COLUMN ${col} ${def}`);
+db.exec('CREATE TABLE IF NOT EXISTS restrictions (id INTEGER PRIMARY KEY, user INTEGER NOT NULL, kind TEXT NOT NULL, until INTEGER NOT NULL, reason TEXT NOT NULL DEFAULT \'\', by INTEGER NOT NULL, made INTEGER NOT NULL, lifted INTEGER NOT NULL DEFAULT 0)');
+db.exec('CREATE INDEX IF NOT EXISTS restrictions_user ON restrictions (user, until)');
+const restricted = (userId, kind) => !!db.prepare('SELECT 1 FROM restrictions WHERE user = ? AND kind = ? AND until > ? AND lifted = 0 LIMIT 1').get(userId, kind, Date.now());
 function userOf(req) {
   const token = sessionToken(req);
   const user = token ? aq.session.get(sha(token), Date.now()) : null;
   if (!user || user.banned) return null;
   if (user.role !== 'admin' && ADMIN_EMAILS.includes(user.email)) { aq.setRole.run('admin', user.id); user.role = 'admin'; }
   const now = Date.now();
+  { const k = dhakaDay(now) * 1e7 + user.id; if (!activeToday.has(k)) { activeToday.add(k); activeMark.run(user.id, dhakaDay(now)); if (activeToday.size > 200000) activeToday.clear(); } }   // DAU, once a day each
   if (now - user.seen > 5 * 60_000) { aq.setSeen.run(now, user.id); db.prepare('UPDATE sessions SET last = ? WHERE token = ?').run(now, sha(token)); }   // "last active", to the nearest five minutes
   return user;
 }
@@ -627,6 +636,7 @@ db.exec(`CREATE TABLE IF NOT EXISTS reports (
   made     INTEGER NOT NULL,
   status   TEXT NOT NULL DEFAULT 'open'
 )`);
+if (!db.prepare("SELECT COUNT(*) AS n FROM pragma_table_info('reports') WHERE name = 'outcome'").get().n) db.exec("ALTER TABLE reports ADD COLUMN outcome TEXT NOT NULL DEFAULT ''");
 const cq = {
   link:    db.prepare('SELECT * FROM friends WHERE a = ? AND b = ?'),
   setLink: db.prepare(`INSERT INTO friends (a, b, state, actor, updated) VALUES (?, ?, ?, ?, ?)
@@ -1218,6 +1228,7 @@ async function chatApi(req, res, action, query) {
   // Calls need an open conversation. A message does not: until it is accepted it is a request, and limited.
   if (action !== 'send' && !open) return json(res, 403, { error: 'friends' });
   if (action === 'send') {
+    if (restricted(me.id, 'message')) return json(res, 403, { error: 'restricted' });
     if (!allowSend(me.id)) return json(res, 429, { error: 'slow' });
     if (!open && count('SELECT COUNT(*) AS n FROM messages WHERE a = ? AND b = ? AND sender = ?', a, b, me.id) >= REQUEST_LIMIT) return json(res, 403, { error: 'request' });
     if (!open && body.kind !== 'text') return json(res, 403, { error: 'request' });
@@ -1280,6 +1291,7 @@ function groupAction(res, me, action, body) {
   const gid = Number(body.group), mem = gq.member.get(gid, me.id);
   if (!mem) return json(res, 403, { error: 'group' });
   if (action === 'group-send') {
+    if (restricted(me.id, 'message')) return json(res, 403, { error: 'restricted' });
     if (!allowSend(me.id)) return json(res, 429, { error: 'slow' });
     if (body.kind === 'call') return json(res, 400, { error: 'bad request' });
     const text = messageText(me, body.kind, body.body);
@@ -1389,10 +1401,12 @@ db.exec(`CREATE TABLE IF NOT EXISTS audit (
 db.exec(`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)`);
 if (!db.prepare("SELECT COUNT(*) AS n FROM pragma_table_info('reports') WHERE name = 'status'").get().n) db.exec("ALTER TABLE reports ADD COLUMN status TEXT NOT NULL DEFAULT 'open'");
 const TICKET_KINDS = ['account', 'fare', 'route', 'chat', 'person', 'other', 'verify'];
+// staff-only notes in a ticket (admin v2): the person never sees them
+if (!db.prepare("SELECT COUNT(*) AS n FROM pragma_table_info('ticket_msgs') WHERE name = 'internal'").get().n) db.exec('ALTER TABLE ticket_msgs ADD COLUMN internal INTEGER NOT NULL DEFAULT 0');
 const sq = {
   mine:     db.prepare('SELECT id, category, subject, status, created, updated, unread FROM tickets WHERE user = ? ORDER BY updated DESC LIMIT 50'),
   one:      db.prepare('SELECT * FROM tickets WHERE id = ?'),
-  msgs:     db.prepare('SELECT m.id, m.staff, m.body, m.sent, u.name FROM ticket_msgs m LEFT JOIN users u ON u.id = m.sender WHERE m.ticket = ? ORDER BY m.id'),
+  msgs:     db.prepare('SELECT m.id, m.staff, m.body, m.sent, u.name FROM ticket_msgs m LEFT JOIN users u ON u.id = m.sender WHERE m.ticket = ? AND m.internal = 0 ORDER BY m.id'),
   add:      db.prepare('INSERT INTO tickets (user, category, subject, created, updated) VALUES (?, ?, ?, ?, ?)'),
   addMsg:   db.prepare('INSERT INTO ticket_msgs (ticket, sender, staff, body, sent) VALUES (?, ?, ?, ?, ?)'),
   touch:    db.prepare('UPDATE tickets SET status = ?, updated = ?, unread = ? WHERE id = ?'),
@@ -1930,6 +1944,8 @@ async function exploreApi(req, res, action, query) {
   try { body = JSON.parse(await readBody(req, 600_000)) || {}; } catch { return json(res, 400, { error: 'bad request' }); }
 
   if ((action === 'post' || action === 'story') && !flagOn('posts') && me.role === 'user') return json(res, 403, { error: 'closed' });
+  // an account an admin restricted from posting (admin v2): no posts, stories or comments until it ends
+  if ((action === 'post' || action === 'story' || action === 'comment') && restricted(me.id, 'post')) return json(res, 403, { error: 'restricted' });
   if (action === 'post' && !body.media) {              // words only
     const text = cleanText(body.caption, 1000);
     if (text.length < 2) return json(res, 400, { error: 'short' });
@@ -2565,8 +2581,8 @@ async function adminApi(req, res, action, query) {
       log(body.do, u.email, cleanText(body.note, 200));
     } else if (body.do === 'signout') { aq.endAll.run(u.id); log('signout', u.email); }
     else if (!admin) return json(res, 403, { error: 'forbidden' });
-    else if (body.do === 'role' && ['user', 'staff', 'admin'].includes(body.role)) { aq.setRole.run(body.role, u.id); log('role', u.email, body.role); }
-    else if (body.do === 'delete') { deleteUser(u.id); log('delete', u.email); }
+    else if (body.do === 'role') return json(res, 400, { error: 'use-team' });   // roles: the new panel's টিম ও অনুমতি (reason, step-up, audit)
+    else if (body.do === 'delete') return json(res, 400, { error: 'use-new' });   // the new panel deletes with a reason, a fresh code and 30 days to undo
     else return json(res, 400, { error: 'bad request' });
     return json(res, 200, { ok: true });
   }
@@ -3247,6 +3263,9 @@ const sitemap = () => `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="ht
 // The admin panel v2 (lib/admin-v2.cjs): roles, its own locked session, the append-only audit log, a live stream.
 const ADMIN2 = require('./lib/admin-v2.cjs')({ db, json, readBody, userOf, sessionToken, sha, crypto, clientIp, totpOk, backupOk, sendMail, MAILS, mailReady, isLocal, ADMIN_EMAILS, deviceName,
   onlineCount: () => streams.size });
+require('./lib/admin-ops.cjs')(ADMIN2, { db, json, deleteUser, deletePost, aq, push, sendMail, MAILS, mailReady, groupCalls, hasTurn, backupOn, dhakaDay, clientIp, isOnline,
+  onlineCount: () => streams.size, lastBackup: () => lastBackupAt,
+  endStreams: id => { for (const s of streams.get(id) || []) s.end(); } });
 
 const server = http.createServer((req, res) => {
   const { pathname, searchParams } = new URL(req.url, 'http://localhost');
@@ -3296,7 +3315,7 @@ server.requestTimeout = 0;           // uploads of big videos; idle sockets are 
 server.headersTimeout = 60_000;
 // ---- The copies on R2 (see "Keeping the data" at the top) ----
 db.exec('CREATE TABLE IF NOT EXISTS r2_files (name TEXT PRIMARY KEY, at INTEGER NOT NULL)');
-let dbCopied = -1, dbCopying = null;
+let dbCopied = -1, dbCopying = null, lastBackupAt = 0;   // lastBackupAt: when the database last reached R2 (the admin panel's health strip)
 const changesNow = () => db.prepare('SELECT total_changes() AS n').get().n;
 // the database: a clean copy (VACUUM INTO) sent up whenever something has changed since the last one
 function copyDbUp() {
@@ -3310,7 +3329,7 @@ function copyDbUp() {
       fs.rmSync(tmp, { force: true });
       db.exec(`VACUUM INTO '${tmp.replace(/'/g, "''")}'`);
       await r2.put(R2_PREFIX + 'ratings.db', tmp, 'application/vnd.sqlite3');
-      dbCopied = n;
+      dbCopied = n; lastBackupAt = Date.now();
     } catch (e) { console.error('Database copy to R2 failed:', e.message); }
     finally { fs.rmSync(tmp, { force: true }); dbCopying = null; }
   })();

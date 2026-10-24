@@ -11,15 +11,15 @@ import { openPalette, paletteOpen } from './palette.js';
 export const NAV = [
   ['প্রধান', [
     { key: 'command', title: 'কমান্ড সেন্টার', ic: 'home', perm: 'dashboard.view', status: 'v2', hint: 'g h' },
-    { key: 'inbox', title: 'ইনবক্স', ic: 'inbox', perm: 'inbox.view', status: 2, hint: 'g i', count: 'all' }]],
+    { key: 'inbox', title: 'ইনবক্স', ic: 'inbox', perm: 'inbox.view', status: 'v2', hint: 'g i', count: 'all' }]],
   ['সাপোর্ট', [
-    { key: 'tickets', title: 'টিকিট', ic: 'life', perm: 'support.view', status: 'legacy', legacy: 'support', count: 'support' },
-    { key: 'macros', title: 'উত্তর-টেমপ্লেট', ic: 'reply', perm: 'support.reply', status: 2 }]],
+    { key: 'tickets', title: 'টিকিট', ic: 'life', perm: 'support.view', status: 'v2', count: 'support' },
+    { key: 'macros', title: 'উত্তর-টেমপ্লেট', ic: 'reply', perm: 'support.view', status: 'v2' }]],
   ['মানুষ', [
-    { key: 'users', title: 'ব্যবহারকারী', ic: 'users', perm: 'users.view', status: 'legacy', legacy: 'users' },
+    { key: 'users', title: 'ব্যবহারকারী', ic: 'users', perm: 'users.view', status: 'v2' },
     { key: 'team', title: 'টিম ও অনুমতি', ic: 'key', perm: 'team.manage', status: 'v2' }]],
   ['বিশ্বাস ও নিরাপত্তা', [
-    { key: 'reports', title: 'রিপোর্ট', ic: 'flag', perm: 'reports.view', status: 'legacy', legacy: 'reports', count: 'reports' },
+    { key: 'reports', title: 'রিপোর্ট', ic: 'flag', perm: 'reports.view', status: 'v2', count: 'reports' },
     { key: 'modqueue', title: 'মডারেশন কিউ', ic: 'shield', perm: 'content.remove', status: 4 },
     { key: 'strikes', title: 'স্ট্রাইক ও আপিল', ic: 'strike', perm: 'content.remove', status: 4 },
     { key: 'risk', title: 'ঝুঁকি সংকেত', ic: 'radar', perm: 'users.ban', status: 4 }]],
@@ -53,7 +53,8 @@ export const NAV = [
     { key: 'prefs', title: 'প্যানেল সেটিংস', ic: 'cog', perm: null, status: 'v2' }]]
 ];
 const ALL_PAGES = NAV.flatMap(([group, items]) => items.map(p => ({ ...p, group })));
-const PAGE_FILES = { command: './pages/command.js', audit: './pages/audit.js', team: './pages/team.js', prefs: './pages/prefs.js' };
+const PAGE_FILES = { command: './pages/command.js', audit: './pages/audit.js', team: './pages/team.js', prefs: './pages/prefs.js', inbox: './pages/inbox.js', tickets: './pages/tickets.js',
+  macros: './pages/macros.js', users: './pages/users.js', reports: './pages/reports.js' };
 export const pagesFor = () => ALL_PAGES.filter(p => !p.perm || can(p.perm));
 
 let current = { key: '', mod: null, inst: null };
@@ -129,7 +130,7 @@ function toggleTheme(btn) {
   btn.replaceChildren(icon(next === 'light' ? 'moon' : 'sun'));
 }
 async function lockNow() { try { await api('lock', {}); } catch { /* locked anyway */ } location.reload(); }
-function palette() { openPalette({ pages: pagesFor(), go, openPerson }); }
+function palette() { openPalette({ pages: pagesFor(), go, openPerson: u => can('users.view') ? go('#/users/' + u.id) : openPerson(u) }); }
 // a person from the palette: the short card until the full 360 view comes (phase 2)
 function openPerson(u) {
   openDrawer({ title: 'ব্যবহারকারী', ref: 'user:' + u.id, body: h('div', 'stack',
@@ -155,6 +156,8 @@ function paintCounts(c) {
   for (const [key, el] of badgeEls) {
     const p = ALL_PAGES.find(x => x.key === key), n = p.count === 'all' ? all : c[p.count] || 0;
     el.textContent = num(n); el.hidden = !n;
+    const tone = c.tone && (p.count === 'all' ? (Object.values(c.tone).includes('danger') ? 'danger' : Object.values(c.tone).includes('warn') ? 'warn' : '') : c.tone[p.count]);
+    el.className = 'nbadge' + (tone ? ' ' + tone : '');
   }
   shell.online.querySelector('b').textContent = num(c.online || 0);
   shell.bellDot.hidden = !all;
@@ -175,6 +178,7 @@ function stream() {
     es.addEventListener('counts', e => { tries = 0; paintCounts(JSON.parse(e.data)); });
     es.addEventListener('presence', e => { presence = JSON.parse(e.data); paintWatching(); });
     es.addEventListener('audit', e => document.dispatchEvent(new CustomEvent('mz:audit', { detail: JSON.parse(e.data) })));
+    for (const ev of ['assign', 'ticket']) es.addEventListener(ev, e => document.dispatchEvent(new CustomEvent('mz:' + ev, { detail: JSON.parse(e.data) })));
     es.onerror = () => {
       es.close();
       // a lock shows as a failed stream: check before trying again

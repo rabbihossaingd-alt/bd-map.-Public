@@ -47,7 +47,7 @@ export function openPalette({ pages, go, openPerson }) {
     if (mine !== seq) return;
     paint([
       ['মানুষ', r.users.map(u => ({ ic: 'users', title: u.name, sub: `@${u.username} · ${u.email} · ID ${num(u.id)}${u.banned ? ' · বন্ধ' : ''}`, run: () => openPerson(u) }))],
-      ['টিকিট', r.tickets.map(t => ({ ic: 'life', title: `#${num(t.id)} ${t.subject}`, sub: t.name, run: () => go('#/tickets') }))],
+      ['টিকিট', r.tickets.map(t => ({ ic: 'life', title: `#${num(t.id)} ${t.subject}`, sub: t.name, run: () => go('#/tickets/' + t.id) }))],
       ['পেআউট', r.payouts.map(p => ({ ic: 'wallet', title: `${p.ref} · ${taka(p.amount)}`, sub: `${p.name} · ${p.method}`, run: () => go('#/payouts') }))],
       ['পোস্ট', r.posts.map(p => ({ ic: 'image', title: p.caption || `পোস্ট #${num(p.id)}`, sub: p.name, run: () => go('#/posts') }))],
       ['গ্রুপ', r.groups.map(g => ({ ic: 'group', title: g.name || `গ্রুপ #${num(g.id)}`, run: () => go('#/groups') }))],
