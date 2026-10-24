@@ -2395,8 +2395,11 @@ const briefUser = u => u && ({ id: u.id, name: u.name, email: u.email, pic: u.pi
 async function adminApi(req, res, action, query) {
   const me = userOf(req);
   if (!me || (me.role !== 'admin' && me.role !== 'staff')) return json(res, 403, { error: 'forbidden' });
+  // the older panel sits behind the same lock as v2: it answers only while a panel session (opened with a code) is open
+  if (!ADMIN2.panelOpen(req, me)) return json(res, 401, { error: 'locked' });
+  if (!ADMIN2.legacyAllowed(req, me, action)) return json(res, 403, { error: 'forbidden' });
   const admin = me.role === 'admin', now = Date.now();
-  const log = (what, target, detail = '') => sq.audit.run(me.id, what, String(target), detail, now);
+  const log = (what, target, detail = '') => { sq.audit.run(me.id, what, String(target), detail, now); ADMIN2.legacyAudit(me.id, what, String(target), detail, req); };
 
   if (req.method === 'GET') {
     if (action === 'me') return json(res, 200, { user: publicUser(me).user });
@@ -2833,7 +2836,7 @@ async function faresApi(req, res) {
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8',
                 '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml',
                 '.webmanifest': 'application/manifest+json', '.png': 'image/png', '.jpg': 'image/jpeg', '.ico': 'image/x-icon' };
-const PRIVATE = ['db', 'tools', 'node_modules'];   // never served
+const PRIVATE = ['db', 'tools', 'node_modules', 'docs', 'lib'];   // never served (docs: internal plans; lib: server code)
 
 // Cache versions: each page names its own scripts and styles as file?v=<hash of the file>, so a phone keeps them for
 // a year and asks again only when one changes — no 30 round trips on every visit. vendor/ files carry their
@@ -3241,6 +3244,10 @@ const ROBOTS = `User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /admin.html\
 const sitemap = () => `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${['/', ...[...SEO_DISTRICTS.keys()].map(id => '/district/' + id), '/privacy.html', '/terms.html', '/delete-account.html']
   .map(p => `  <url><loc>${SITE}${p}</loc><changefreq>${p === '/' ? 'daily' : 'monthly'}</changefreq></url>`).join('\n')}\n</urlset>\n`;
 
+// The admin panel v2 (lib/admin-v2.cjs): roles, its own locked session, the append-only audit log, a live stream.
+const ADMIN2 = require('./lib/admin-v2.cjs')({ db, json, readBody, userOf, sessionToken, sha, crypto, clientIp, totpOk, backupOk, sendMail, MAILS, mailReady, isLocal, ADMIN_EMAILS, deviceName,
+  onlineCount: () => streams.size });
+
 const server = http.createServer((req, res) => {
   const { pathname, searchParams } = new URL(req.url, 'http://localhost');
   for (const [k, v] of Object.entries(SECURITY_HEADERS)) res.setHeader(k, v);
@@ -3269,6 +3276,7 @@ const server = http.createServer((req, res) => {
   if (pathname.startsWith('/api/places/')) return placesApi(req, res, pathname.slice(12), searchParams).catch(e => { console.error(e); if (!res.headersSent) json(res, 500, { error: 'server error' }); });
   if (pathname.startsWith('/api/community/')) return communityApi(req, res, pathname.slice(15), searchParams).catch(e => { console.error(e); json(res, 500, { error: 'server error' }); });
   if (pathname.startsWith('/api/support/')) return supportApi(req, res, pathname.slice(13), searchParams).catch(() => json(res, 500, { error: 'server error' }));
+  if (pathname.startsWith('/api/admin/v2/')) return ADMIN2.handle(req, res, pathname.slice(14), searchParams).catch(e => { console.error(e); if (!res.headersSent) json(res, 500, { error: 'server error' }); });
   if (pathname.startsWith('/api/admin/')) return adminApi(req, res, pathname.slice(11), searchParams).catch(e => { console.error(e); json(res, 500, { error: 'server error' }); });
   if (pathname.startsWith('/api/geo/') && req.method === 'GET') return geoApi(req, res, pathname.slice(9), searchParams).catch(() => json(res, 500, { error: 'server error' }));
   if (pathname === '/api/pois') return poisApi(req, res, searchParams);

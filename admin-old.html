@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="bn">
+<head>
+<meta charset="utf-8">
+<script>try{var t=localStorage.getItem('bdmap.theme')||'dark';if(t==='auto')t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme='dark'}</script>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Manzeela — পুরনো অ্যাডমিন প্যানেল</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anek+Bangla:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="css/admin.css">
+</head>
+<body>
+
+<!-- Shown until the server confirms a staff or admin account -->
+<div class="gate" id="gate" hidden>
+  <div class="gate-card">
+    <div class="logo"><i></i></div>
+    <h1>Manzeela অ্যাডমিন</h1>
+    <p id="gate-text">এই পাতাটি শুধু অ্যাডমিন ও সাপোর্ট টিমের জন্য। অ্যাডমিন ই-মেইল দিয়ে অ্যাপে লগইন করে আবার আসুন।</p>
+    <a class="btn" href="index.html#/more">অ্যাপে লগইন করুন</a>
+  </div>
+</div>
+
+<div class="shell" id="shell" hidden>
+  <aside class="side">
+    <a class="brand" href="index.html"><span class="logo sm"><i></i></span><b>Manzeela</b><em>অ্যাডমিন</em></a>
+    <nav id="nav"></nav>
+    <div class="me" id="me"></div>
+  </aside>
+
+  <div class="main">
+    <header class="top">
+      <h1 id="title"></h1>
+      <div class="top-tools" id="tools"></div>
+      <div class="gsearch"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input id="gq" type="search" autocomplete="off" placeholder="মানুষ, পোস্ট, গ্রুপ খুঁজুন  /" aria-label="সব জায়গায় খুঁজুন"><div class="gs" id="gs" hidden></div></div>
+      <a class="btn quiet app-link" href="index.html">অ্যাপে যান</a>
+    </header>
+    <div class="content" id="content"></div>
+  </div>
+</div>
+
+<div class="drawer-back" id="drawer-back" hidden></div>
+<aside class="drawer" id="drawer" hidden>
+  <header><b id="drawer-title"></b><button class="x" id="drawer-close" aria-label="বন্ধ করুন">✕</button></header>
+  <div class="drawer-body" id="drawer-body"></div>
+  <footer id="drawer-foot"></footer>
+</aside>
+<div class="snack" id="snack"></div>
+
+<script src="data/dhaka-buses.js"></script>
+<script src="js/admin.js"></script>
+</body>
+</html>

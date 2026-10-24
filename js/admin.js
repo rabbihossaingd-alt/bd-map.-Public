@@ -1,5 +1,5 @@
 // ---- Manzeela admin panel ----
-// A separate page (admin.html) for the people who run the app: numbers at a glance, users, support tickets,
+// The older panel (admin-old.html), kept while each page moves to the new one (admin.html, admin/). A separate page for the people who run the app: numbers at a glance, users, support tickets,
 // reports, reported fares, the audit log and settings. Everything comes from /api/admin/* (see server.js),
 // which only answers a staff or admin account. Private messages are never shown: the panel only counts them.
 
@@ -661,7 +661,7 @@ async function show(name) {
   const box = h('div', 'page');
   try { await PAGES[page].draw(box); }
   catch (e) {
-    if (e.status === 403) { location.reload(); return; }
+    if (e.status === 403 || e.status === 401) { location.reload(); return; }
     box.replaceChildren(empty('তথ্য আনা যায়নি। পাতাটি আবার খুলে দেখুন।'));
   }
   if (mine !== drawing) return;
@@ -673,7 +673,8 @@ async function show(name) {
   try { ME = (await api('me')).user; }
   catch (e) {
     $('gate').hidden = false;
-    if (e.status !== 403) $('gate-text').textContent = 'সার্ভারের সাথে যোগাযোগ করা যায়নি। একটু পরে আবার চেষ্টা করুন।';
+    if (e.status === 401) { $('gate-text').textContent = 'প্যানেল লক করা আছে। নতুন প্যানেলে কোড দিয়ে খুলুন, তারপর এখানে ফিরে আসুন।'; const a = document.querySelector('#gate .btn'); if (a) { a.href = 'admin.html'; a.textContent = 'প্যানেল খুলুন'; } }
+    else if (e.status !== 403) $('gate-text').textContent = 'সার্ভারের সাথে যোগাযোগ করা যায়নি। একটু পরে আবার চেষ্টা করুন।';
     return;
   }
   const NAV = [['প্রধান', ['overview']], ['মানুষ', ['users', 'support', 'reports']], ['কনটেন্ট', ['photos', 'gems', 'posts', 'stories', 'sounds', 'comments', 'groups']],
