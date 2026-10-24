@@ -199,16 +199,16 @@ const matches = (it, q) => matchScore(it, q) > 0;
 // the data itself: a district town, then a bus stop by how many routes use it, then a curated place, then
 // the nationwide index by the kind of place (an airport or a neighbourhood before a market or a hotel).
 function searchLocal(q, limit = 8) {
-  const out = [], low = q.toLowerCase();
+  const out = [], low = q.toLowerCase(), joined = /\s/.test(q.trim()) ? q.replace(/\s+/g, '') : '';   // 'jatra bari' is also 'jatrabari'
   const scan = (list, icon, sub, pop) => {
     for (const it of list) {
-      const score = matchScore(it, q);
+      const score = Math.max(matchScore(it, q), joined ? matchScore(it, joined) : 0);
       if (!score) continue;
       // A name that begins with what was typed beats one where a later word does, which beats the rest.
       const en = (it.en || '').toLowerCase();
       const starts = it.bn.startsWith(q) || en.startsWith(low) ? 2
                    : it.bn.split(' ').some(w => w.startsWith(q)) || en.split(' ').some(w => w.startsWith(low)) ? 1 : 0;
-      out.push({ score, starts, pop: pop(it), icon, title: it.bn, sub: sub(it), lat: it.lat, lon: it.lon });
+      out.push({ score, starts, pop: pop(it), icon, title: it.bn, sub: sub(it), lat: it.lat, lon: it.lon, area: icon !== 'pin' || it.kind === 't' || PLACES.includes(it) });
     }
   };
   stopUse();

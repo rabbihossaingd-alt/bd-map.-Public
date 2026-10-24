@@ -960,7 +960,8 @@ const coverStyle = (img, division) => {
     gemAdd.addEventListener('click', () => openGemForm(d));
     gemRail.appendChild(gemAdd);
     gemSec.appendChild(gemRail);
-    placesGet('gems?d=' + d.id).then(({ gems }) => { gemRail.append(...gems.map(gemCard)); }).catch(() => {});
+    gemRail.classList.add('only-add');            // until someone has sent a place: one wide card, not a lone tall one
+    placesGet('gems?d=' + d.id).then(({ gems }) => { gemRail.append(...gems.map(gemCard)); gemRail.classList.toggle('only-add', !gems.length); }).catch(() => {});
     body.appendChild(gemSec);
     if (TOURIST_POLICE[d.id]) {
       const tp = el('section', 'pl-card pl-sos dg-tp');

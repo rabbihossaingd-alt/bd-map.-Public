@@ -299,7 +299,7 @@ function wireSuggest(input, box, onPick, onType) {
     t.append(el('b', null, title), el('span', null, sub));
     s.append(ic(icon), t);
     // mousedown so the pick lands before the input's blur hides the list
-    s.addEventListener('mousedown', e => { e.preventDefault(); box.hidden = true; onPick({ lat, lon, label: title }); });
+    s.addEventListener('mousedown', e => { e.preventDefault(); box.hidden = true; input.blur(); onPick({ lat, lon, label: title }); });   // the keyboard goes; onPick may open the next field
     box.appendChild(s);
   };
   // Nothing typed yet: offer the places most people go to.
@@ -1049,9 +1049,10 @@ function initBanglaLabels() {
 // Room to leave around fitted shapes so the floating cards do not cover them.
 function mapPadding() {
   // On wide screens the results sheet fills the left side; without it only the small search card is there.
+  // On phones the top leaves room for the red pin, which stands 40 px above its point.
   return innerWidth > 760
     ? { top: 40, bottom: 40, left: $('sheet').hidden ? 40 : 430, right: 70 }
-    : { top: Math.max($('trip-search').offsetHeight, $('map-search').offsetHeight) + 34, bottom: Math.max($('sheet').offsetHeight, $('place-card').offsetHeight) + 24, left: 24, right: 24 };
+    : { top: Math.max($('trip-search').offsetHeight, $('map-search').offsetHeight) + 74, bottom: Math.max($('sheet').offsetHeight, $('place-card').offsetHeight) + 24, left: 24, right: 24 };
 }
 
 // Built once and shared; started early from the bottom of this file so the map opens faster.
@@ -1145,6 +1146,7 @@ async function createMap() {
   const geo = new maplibregl.GeolocateControl({ positionOptions: { enableHighAccuracy: true }, trackUserLocation: true,
                                                 showUserHeading: true, showAccuracyCircle: true, fitBoundsOptions: { maxZoom: 16 } });
   map.addControl(geo, 'bottom-right');
+  geoCtl = geo;
   document.querySelector('.maplibregl-ctrl-geolocate').parentElement.style.display = 'none';
   geo.on('trackuserlocationstart', () => $('tool-me').classList.add('on'));
   geo.on('trackuserlocationend', () => $('tool-me').classList.remove('on'));
@@ -1204,8 +1206,19 @@ function ensureMap() {
   return mapReady;
 }
 
+// Following the blue dot (on since the map opened) would pull the camera back to you on the next GPS update, so a
+// route being shown never stayed in view. Showing a route lets go, as MapLibre itself does when you pan by hand.
+let geoCtl = null;
+function stopFollowing() {
+  if (!geoCtl || geoCtl._watchState !== 'ACTIVE_LOCK') return;
+  geoCtl._watchState = 'BACKGROUND';
+  const b = geoCtl._geolocateButton;
+  if (b) { b.classList.add('maplibregl-ctrl-geolocate-background'); b.classList.remove('maplibregl-ctrl-geolocate-active'); }
+  geoCtl.fire(new maplibregl.Event('trackuserlocationend'));
+}
 // `points` are [lon, lat] pairs.
 function fit(points, animate = true) {
+  stopFollowing();
   const b = points.reduce((box, p) => box.extend(p), new maplibregl.LngLatBounds(points[0], points[0]));
   map.fitBounds(b, { padding: mapPadding(), animate, duration: 900, maxZoom: 16, pitch: is3D ? 60 : 0 });
 }
@@ -1214,7 +1227,11 @@ function drawMarkers() {
   for (const w of ['from', 'to']) {
     if (markers[w]) { markers[w].remove(); markers[w] = null; }
     if (!trip[w]) continue;
-    markers[w] = new maplibregl.Marker({ element: el('div', 'pin ' + (w === 'from' ? 'a' : 'b')) })
+    // as in Google Maps: the start a ringed dot (blue when it is where you are), the end a red pin standing on its place
+    const mine = w === 'from' && /^(আমার লোকেশন|My location)$/.test(trip.from.label || '');
+    const dot = el('div', 'pin ' + (w === 'from' ? 'a' + (mine ? ' me' : '') : 'b'));
+    if (w === 'to') dot.innerHTML = '<svg viewBox="0 0 30 40" width="30" height="40" aria-hidden="true"><path d="M15 39c-1-6-14-15-14-24a14 14 0 0128 0c0 9-13 18-14 24z" fill="#ea4335" stroke="#b31412" stroke-width="1.2"/><circle cx="15" cy="15" r="5.2" fill="#7a0f0a"/></svg>';
+    markers[w] = new maplibregl.Marker({ element: dot, anchor: w === 'to' ? 'bottom' : 'center' })
       .setLngLat([trip[w].lon, trip[w].lat]).addTo(map);
   }
 }
@@ -1469,7 +1486,7 @@ async function calculate() {
 // On a phone the results sheet can be pulled up to read everything, or down to see the map.
 const phoneSheet = matchMedia('(max-width: 760px)').matches ? (() => {
   let at = 1;
-  const s = dragSheet($('sheet'), $('sheet-grip'), { snaps: [.2, .46, .88], onTap: () => { at = at === 1 ? 2 : 1; s.snap(at); } });
+  const s = dragSheet($('sheet'), $('sheet-grip'), { snaps: [.2, .34, .88], onTap: () => { at = at === 1 ? 2 : 1; s.snap(at); } });
   return s;
 })() : null;
 
@@ -1584,8 +1601,12 @@ function showPlace(pl) {
     ]);
     if (mine !== seq) return;
     sug.replaceChildren();
+    // An area, a bus stop or a district that matches what was typed comes before shops and offices with the word in
+    // their name (Jatrabari before 'Jatra Bangladesh Ltd'), as in Google Maps; then the rest.
+    const top = local.filter(pl => pl.area && pl.score >= 2).slice(0, 3), rest = local.filter(pl => !top.includes(pl));
+    for (const pl of top) item({ lat: pl.lat, lon: pl.lon, name: pl.title, sub: pl.sub }, pl.icon);
     for (const pl of ours) item({ ...pl, name: LANG !== 'en' && pl.bn ? pl.bn : pl.name }, 'pin');
-    for (const pl of local.slice(0, 4)) item({ lat: pl.lat, lon: pl.lon, name: pl.title, sub: pl.sub }, pl.icon);
+    for (const pl of rest.slice(0, Math.max(0, 4 - top.length))) item({ lat: pl.lat, lon: pl.lon, name: pl.title, sub: pl.sub }, pl.icon);
     sug.hidden = !sug.children.length;
     // places OpenStreetMap knows (areas, roads, landmarks) after a pause
     clearTimeout(timer);
@@ -2157,3 +2178,12 @@ document.addEventListener('focusin', e => {
   new ResizeObserver(paint).observe(chips);
   addEventListener('resize', paint);
 })();
+
+// Enter in any one-line box (a search, a place, a station, a code) closes the keyboard once it has done its job, as
+// phones' own apps do. Not in the boxes where people keep writing: chat (a textarea), comments and live chat. When
+// Enter moved on to the next field (from → to), that field keeps the keyboard.
+document.addEventListener('keydown', e => {
+  const t = e.target;
+  if (e.key !== 'Enter' || e.isComposing || t.tagName !== 'INPUT' || /^(checkbox|radio|button|submit|range|color|file)$/.test(t.type) || t.closest('.cs, .live-room, .lv-chat, .chat-compose')) return;
+  setTimeout(() => { if (document.activeElement === t) t.blur(); }, 0);
+});

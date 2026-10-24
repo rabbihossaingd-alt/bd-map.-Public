@@ -543,10 +543,11 @@ function addMessage(m) {
   if (ME && m.sender !== ME.id) {
     CHAT.typing.delete(key);
     if (m.kind !== 'sys') {
-      if (viewing) (t.members ? chatApi('group-read', { group: t.id }) : chatApi('read', { with: key })).catch(() => {});
+      if (viewing) { (t.members ? chatApi('group-read', { group: t.id }) : chatApi('read', { with: key })).catch(() => {}); if (!t.muted && m.kind !== 'call' && typeof messageChime === 'function') messageChime(true); }
       else {
         t.unread++;
         if (!t.muted) {
+          if (m.kind !== 'call' && typeof messageChime === 'function') messageChime(false);
           const from = senderIn(t, m.sender);
           chatToast(from, t.members ? `${firstName(from.name)}: ${preview(m, null)}` : preview(m, t), () => { go('chat'); openThread(key); }, t.members ? titleOf(t) : from.name);
         }
@@ -1144,6 +1145,7 @@ let iceServers = null;
 function signal(data) { return chatApi('signal', { to: call.peer.id, data }); }
 
 function showCall(status) {
+  if (typeof ringForCall === 'function') ringForCall(call.state);   // ringback or ringtone (ring.js)
   const box = $('call');
   box.hidden = false;
   box.dataset.state = call.state;
@@ -1246,6 +1248,7 @@ function callFailed() {
 }
 function callConnected() {
   call.state = 'live';
+  if (typeof ringForCall === 'function') ringForCall('live');
   call.started = Date.now();
   clearTimeout(call.ring);
   showCall('০০:০০');
@@ -1293,14 +1296,18 @@ async function acceptCall() {
     await pc.setLocalDescription(answer);
     await signal({ type: 'answer', sdp: answer.sdp });
     call.state = 'connecting';
+    if (typeof ringForCall === 'function') ringForCall('connecting');
     showCall('সংযোগ হচ্ছে…');
     clearTimeout(call.ring);
     call.ring = setTimeout(connectTimeout, 25000);
   } catch { signal({ type: 'end' }).catch(() => {}); endCall('কল ধরা যায়নি।', true); }
 }
 
-async function onSignal(from, data) {
+async function onSignal(from, data, tries = 0) {
   const f = friendById(from);
+  // A call held for an app that was closed arrives the moment the app connects, often before the chat list has
+  // loaded: wait for it (a few seconds at most) instead of dropping the call.
+  if (!f && data && tries < 12 && (data.type === 'offer' || data.type === 'ice')) { setTimeout(() => onSignal(from, data, tries + 1), 500); return; }
   if (!f || !data) return;
   if (data.type === 'offer') {
     if (call.state !== 'idle') { chatApi('signal', { to: from, data: { type: 'busy' } }).catch(() => {}); return; }
@@ -1354,6 +1361,7 @@ function endCall(message, linger) {
   stopMedia();
   $('call-remote').srcObject = $('call-local').srcObject = null;
   Object.assign(call, { state: 'idle', pc: null, offer: null, ice: [], started: 0, peer: linger ? call.peer : null });
+  if (typeof ringForCall === 'function') ringForCall('idle');
   const box = $('call');
   if (message && !box.hidden) {
     box.dataset.state = 'over';

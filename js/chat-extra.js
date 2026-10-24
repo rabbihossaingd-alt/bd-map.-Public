@@ -355,6 +355,7 @@ addEventListener('beforeunload', () => { if (gc.group) navigator.sendBeacon && f
 function ringGroupCall(t, c, by) {
   stopRing();
   gc.ringing = t.id;
+  if (typeof ringFor === 'function') ringFor('in');
   const box = el('div', 'gc-ring');
   box.id = 'gc-ring';
   const tt = el('div', 't');
@@ -375,6 +376,7 @@ function ringGroupCall(t, c, by) {
 }
 function stopRing() {
   clearTimeout(gc.ringTimer);
+  if (gc.ringing && typeof ringFor === 'function') ringFor('');
   gc.ringing = null;
   const r = $('gc-ring');
   if (r) r.remove();

@@ -1,7 +1,7 @@
 // Network first, cache as offline fallback — the app shell and data files keep working without a connection.
 // `no-cache` makes the browser revalidate each file, so an updated app shows up on a normal refresh.
 // Only good answers are kept: an error page (a 503 while the server restarts) must never become the offline copy.
-const CACHE = 'bdmap-v6';
+const CACHE = 'bdmap-v7';
 
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', event => event.waitUntil(
@@ -35,7 +35,9 @@ self.addEventListener('push', event => {
   try { n = event.data ? event.data.json() : {}; } catch { n = { body: event.data ? event.data.text() : '' }; }
   event.waitUntil(self.registration.showNotification(n.title || 'Manzeela', {
     body: n.body || '', tag: n.tag || undefined, renotify: !!n.tag, icon: '/img/icon-192.png', badge: '/img/badge-96.png',
-    data: { url: n.url || '/' }, lang: n.lang === 'en' ? 'en' : 'bn', timestamp: Date.now()
+    data: { url: n.url || '/' }, lang: n.lang === 'en' ? 'en' : 'bn', timestamp: Date.now(),
+    // a call stays on screen until answered or dismissed, and buzzes like one
+    requireInteraction: !!n.call, vibrate: n.call ? [600, 300, 600, 300, 600] : [150]
   }));
 });
 // A tap opens the app where the notification points: an open window is brought forward, else a new one.

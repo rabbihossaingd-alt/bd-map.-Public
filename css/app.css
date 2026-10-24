@@ -4469,3 +4469,32 @@ button.dg-wiki { background: none; border: 0; padding: 0; cursor: pointer; font:
 .push-ask em { font-style: normal; font-size: 12.5px; color: var(--ink-2); }
 .push-ask .pa-go { flex: none; height: 36px; padding: 0 14px; border-radius: 999px; background: var(--accent); color: #fff; font-weight: 700; font-size: 13.5px; }
 .push-ask .pa-x { flex: none; width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; color: var(--muted); font-size: 16px; }
+
+/* A search card's suggestion list must sit above what comes after the card (the train page's results drew over it) */
+.card.tx-od, .tx-od { position: relative; z-index: 30; }
+.tx-od:focus-within, .hero-search:focus-within, .card:has(> .od):focus-within { z-index: 60; }
+
+/* Route markers as in Google Maps: the start a white dot with a dark ring (blue when it is your location), the end a red pin */
+.pin.a { width: 18px; height: 18px; background: #fff; border: 4px solid #202124; border-radius: 50%; box-shadow: 0 1px 4px rgba(0, 0, 0, .35); }
+.pin.a.me { background: #1a73e8; border-color: #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, .12), 0 1px 4px rgba(0, 0, 0, .35); }
+.pin.b { width: 30px; height: 40px; background: none; border: 0; border-radius: 0; box-shadow: none; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .35)); }
+:root[data-theme=dark] .pin.a { background: #1c1c1e; border-color: #f5f5f7; }
+:root[data-theme=dark] .pin.b { background: none; }
+/* Phones: the from/to card lighter and smaller, white like Google's, so more of the map shows */
+@media (max-width: 760px) {
+  #page-trip #trip-search { padding: 4px 6px 4px 2px; border-radius: 18px; background: var(--surface); box-shadow: 0 1px 3px rgba(0, 0, 0, .16), 0 6px 18px -8px rgba(0, 0, 0, .25); border-color: transparent; -webkit-backdrop-filter: none; backdrop-filter: none; }
+  #page-trip #trip-search .od { background: none; padding: 0 2px 0 8px; gap: 8px; }
+  #page-trip #trip-search .field input { padding: 7px 0; font-size: 15px; }
+  #page-trip #trip-search .dots .l { height: 12px; }
+}
+/* the from/to card's markers match the map's: a ringed dot, and a small red pin */
+#trip-search .dots .a, #home-search .dots .a, .hero-search .dots .a { width: 11px; height: 11px; background: transparent; border: 2.5px solid var(--ink); }
+#trip-search .dots .b, #home-search .dots .b, .hero-search .dots .b { width: 12px; height: 12px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); background: #ea4335; }
+/* মেঠোপথ with nothing sent yet: one wide, low invitation instead of a tall card beside empty space */
+.dg-rail.only-add { display: block; overflow: visible; }
+.dg-rail.only-add .gm-add { display: flex; align-items: center; gap: 14px; width: 100%; max-width: 560px; height: auto; padding: 12px; text-align: left; border-radius: 20px;
+  background: linear-gradient(150deg, color-mix(in srgb, #8b5cf6 10%, var(--surface)), color-mix(in srgb, #10b981 8%, var(--surface))); border: 1.5px dashed color-mix(in srgb, #8b5cf6 40%, transparent); }
+.dg-rail.only-add .gm-add .ph { flex: none; width: 56px !important; height: 56px !important; aspect-ratio: auto; border-radius: 16px; border: 0; }
+.dg-rail.only-add .gm-add .ph::after { display: none; }
+.dg-rail.only-add .gm-plus { font-size: 30px; }
+.dg-rail.only-add .gm-add .t { display: grid; gap: 3px; padding: 0; }

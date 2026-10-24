@@ -789,6 +789,9 @@ function push(userId, event, data) {
   for (const res of streams.get(userId) || []) res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
 }
 const isOnline = id => (streams.get(id) || { size: 0 }).size > 0;
+// calls waiting for an app that was closed when they came: callee id -> { from, offer, ice: [...], at } (40 s)
+const pendingCalls = new Map();
+setInterval(() => { const now = Date.now(); for (const [k, v] of pendingCalls) if (now - v.at > 40_000) pendingCalls.delete(k); }, 10_000).unref();
 function tellFriends(userId, event, data) {
   for (const l of cq.links.all(userId)) if (l.state === 'friends') push(l.id, event, data);
 }
@@ -977,6 +980,9 @@ async function chatApi(req, res, action, query) {
       set.add(res);
       if (set.size === 1 && prefsOf(me).active) tellFriends(me.id, 'presence', { id: me.id, online: true });
       deliverTo(me.id);
+      // a call that rang while this app was closed, still waiting: hand it over, then the caller's network details
+      { const w = pendingCalls.get(me.id);
+        if (w && Date.now() - w.at < 38_000) for (const d of [w.offer, ...w.ice]) res.write(`event: signal\ndata: ${JSON.stringify({ from: w.from, data: d })}\n\n`); }
       req.on('close', () => {
         set.delete(res);
         if (!set.size) {
@@ -1226,13 +1232,27 @@ async function chatApi(req, res, action, query) {
     const message = { ...shown({ id: Number(lastInsertRowid), sender: me.id, kind, body: text, sent: now, seen: 0, grp: 0, reply, reacts: '{}', gone: 0, got }), to: other };
     push(other, 'message', message);
     push(me.id, 'message', message);                 // the sender's other devices
-    if (!mutedOf(other, 'u' + me.id)) pushTo(other, lang => { const say = messagePreview(kind, text, lang); return say ? { title: me.name, body: say, tag: 'dm-' + me.id, url: '/#/chat' } : null; }, 'high');
+    if (!mutedOf(other, 'u' + me.id)) pushTo(other, lang => { const say = messagePreview(kind, text, lang); return say ? { title: me.name, body: say, tag: (kind === 'call' ? 'call-' : 'dm-') + me.id, url: '/#/chat' } : null; }, 'high');
     return json(res, 200, { message });
   }
   if (action === 'signal') {                         // call set-up, passed straight to the other person
     if (!body.data || typeof body.data !== 'object') return json(res, 400, { error: 'bad request' });
     push(other, 'signal', { from: me.id, data: body.data });
-    return json(res, 200, { online: isOnline(other) });
+    // A call to someone whose app is closed: their phone gets an "incoming call" notification, and the call waits here
+    // for 40 seconds (with the caller's network details), handed to their app the moment it opens (see 'stream').
+    const type = body.data.type, waiting = pendingCalls.get(other);
+    let reachable = isOnline(other);
+    if (type === 'offer') {
+      const pushable = subsOf.all(Date.now(), other).length > 0;
+      pendingCalls.set(other, { from: me.id, offer: body.data, ice: [], at: Date.now() });
+      if (!inView(other) && pushable) pushTo(other, lang => ({ title: me.name, body: lang === 'en' ? (body.data.video ? '📹 Incoming video call' : '📞 Incoming voice call') : (body.data.video ? '📹 ভিডিও কল আসছে' : '📞 ভয়েস কল আসছে'), tag: 'call-' + me.id, url: '/#/chat', call: true }), 'high');
+      reachable = reachable || pushable;
+    } else if (waiting && waiting.from === me.id) {
+      if (type === 'ice' && waiting.ice.length < 60) waiting.ice.push(body.data);
+      else if (type !== 'ice') pendingCalls.delete(other);           // ended, or the other side answered
+    }
+    if (type === 'answer' || type === 'decline' || type === 'busy') { const w = pendingCalls.get(me.id); if (w && w.from === other) pendingCalls.delete(me.id); }
+    return json(res, 200, { online: reachable });
   }
   json(res, 404, { error: 'not found' });
 }
@@ -3022,7 +3042,11 @@ function poisSearch(res, q, lat, lon) {
     const n = poiNames[i];
     if (!words.every(w => n.includes(w))) continue;
     const p = poiAll[i], km = near ? poiKm(lat, lon, p[0], p[1]) : null;
-    const score = (n.startsWith(words[0]) ? 0 : n.includes(' ' + words[0]) ? 1 : 2) * 50 + (near ? Math.min(km, 400) / 8 : 0);
+    // 'jatra bari' is Jatrabari, not 'Jatra Bangladesh Ltd, Baridhara': the words written together beat words found
+    // apart, and a word found at the start of a name word beats one found inside another word
+    const together = words.length > 1 && n.replace(/[\s,.\-/]+/g, '').includes(words.join('')) ? 0 : 1;
+    const inside = words.filter(w => !(n.startsWith(w) || new RegExp('[\\s,(/-]' + w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).test(n))).length;
+    const score = together * 80 + inside * 30 + (n.startsWith(words[0]) ? 0 : 10) + (near ? Math.min(km, 400) / 8 : 0);
     hits.push([score, p, km]);
   }
   hits.sort((a, b) => a[0] - b[0]);
