@@ -409,13 +409,17 @@ const PAGES = {
     const stop = id => { const s = typeof STOPS !== 'undefined' && STOPS[id]; return s ? s.bn || s[0] : id; };
     box.appendChild(h('p', 'hint', 'যাত্রীরা যে ভাড়া দিয়েছেন বলে জানিয়েছেন। একই পথের জানানো ভাড়াগুলোর মাঝেরটি অ্যাপে সবার জন্য দেখানো হয়। ভুল বা বাজে তথ্য এখান থেকে সরানো যায়।'));
     const MODE = { bus: 'বাস', cng: 'সিএনজি', rickshaw: 'রিকশা', leguna: 'লেগুনা', bike: 'বাইক', car: 'কার', train: 'ট্রেন', launch: 'লঞ্চ', other: 'অন্য' };
-    box.appendChild(h('h3', 'sub', 'যেকোনো পথের ভাড়া (পয়েন্টসহ)'));
-    box.appendChild(d.contributions.length ? table(['পথ', 'বাহন', 'ভাড়া', 'কে', 'কখন', ''], d.contributions.map(c => [`${c.flabel} → ${c.tlabel}`, MODE[c.mode] || c.mode, '৳' + num(c.fare), `${c.name} (${c.email})`, ago(c.created),
-      btn('সরান, পয়েন্ট কাটুন', 'quiet small', async () => { if (await act(api('contribution', { id: c.id }), 'ভাড়াটি সরানো হলো, ১০ পয়েন্ট কাটা গেল।')) show('fares'); })])) : empty('এখনো কেউ এই পাতা থেকে ভাড়া জানাননি।'));
+    box.appendChild(h('p', 'hint', `পয়েন্ট শুধু ভাড়া জানানোর জন্য, আর আপনি অনুমোদন দিলে তবেই: প্রতিটিতে ১০। ${d.waiting ? num(d.waiting) + 'টি ভাড়া অনুমোদনের অপেক্ষায়।' : 'অপেক্ষায় কোনো ভাড়া নেই।'}`));
+    const okCell = (ok, approve) => ok ? h('span', 'pill ok', 'অনুমোদিত') : btn('অনুমোদন দিন · +১০', 'small', approve);
+    box.appendChild(h('h3', 'sub', 'যেকোনো পথের ভাড়া'));
+    box.appendChild(d.contributions.length ? table(['পথ', 'বাহন', 'ভাড়া', 'কে', 'কখন', '', ''], d.contributions.map(c => [`${c.flabel} → ${c.tlabel}`, MODE[c.mode] || c.mode, '৳' + num(c.fare), `${c.name} (${c.email})`, ago(c.created),
+      okCell(c.ok, async () => { if (await act(api('approve-contribution', { id: c.id }), 'অনুমোদন দেওয়া হলো, ১০ পয়েন্ট যোগ হলো।')) show('fares'); }),
+      btn(c.ok ? 'সরান, পয়েন্ট কাটুন' : 'ভুল — সরান', 'quiet small', async () => { if (await act(api('contribution', { id: c.id }), c.ok ? 'ভাড়াটি সরানো হলো, ১০ পয়েন্ট কাটা গেল।' : 'ভাড়াটি সরানো হলো।')) show('fares'); })])) : empty('এখনো কেউ এই পাতা থেকে ভাড়া জানাননি।'));
     box.appendChild(h('h3', 'sub', 'ঢাকার বাসের স্টপ-থেকে-স্টপ ভাড়া'));
     if (!d.fares.length) { box.appendChild(empty('এখনো কেউ ভাড়া জানাননি।')); return; }
-    box.appendChild(table(['পথ', 'ভাড়া', 'কে', 'কখন', ''], d.fares.map(f => [`${stop(f.a)} ↔ ${stop(f.b)}`, '৳' + num(f.fare), f.device.startsWith('u') && f.device.length < 8 ? `অ্যাকাউন্ট #${f.device.slice(1)}` : 'লগইন ছাড়া', ago(f.updated),
-      btn('সরান', 'quiet small', async () => { if (await act(api('fare', { a: f.a, b: f.b, device: f.device }), 'ভাড়াটি সরানো হলো।')) show('fares'); })])));
+    box.appendChild(table(['পথ', 'ভাড়া', 'কে', 'কখন', '', ''], d.fares.map(f => { const acct = /^u\d+$/.test(f.device); return [`${stop(f.a)} ↔ ${stop(f.b)}`, '৳' + num(f.fare), acct ? `অ্যাকাউন্ট #${f.device.slice(1)}` : 'লগইন ছাড়া', ago(f.updated),
+      acct ? okCell(f.ok, async () => { if (await act(api('approve-fare', { a: f.a, b: f.b, device: f.device }), 'অনুমোদন দেওয়া হলো, ১০ পয়েন্ট যোগ হলো।')) show('fares'); }) : h('span', 'hint', 'পয়েন্ট নেই'),
+      btn(acct && f.ok ? 'সরান, পয়েন্ট কাটুন' : 'সরান', 'quiet small', async () => { if (await act(api('fare', { a: f.a, b: f.b, device: f.device }), 'ভাড়াটি সরানো হলো।')) show('fares'); })]; })));
   } },
 
   creators: { title: 'ক্রিয়েটর ও পেমেন্ট', icon: 'wallet', state: { tab: 'payouts', status: 'pending' }, async draw(box) {

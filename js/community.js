@@ -118,7 +118,7 @@ async function loadRecentFares() {
     try {
       const r = await communityApi('fare', { from: picked.from, to: picked.to, mode, fare: Math.round(+fare.value) });
       ME.points = r.points;
-      say(r.earned ? `ধন্যবাদ! আপনি ${num(r.earned)} পয়েন্ট পেলেন। আপনার জানানো ভাড়া এখন অন্যদের কাজে লাগবে।` : 'আপনার আগের জানানো ভাড়াটি বদলে দেওয়া হলো।');
+      say(r.pending ? `ধন্যবাদ! আপনার জানানো ভাড়াটি এখন অন্যদের কাজে লাগবে। আমরা যাচাই করে অনুমোদন দিলে ${num(r.pending)} পয়েন্ট পাবেন।` : 'আপনার আগের জানানো ভাড়াটি বদলে দেওয়া হলো।');
       $('give-card').classList.add('won');
       setTimeout(() => $('give-card').classList.remove('won'), 1200);
       fare.value = '';

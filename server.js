@@ -80,6 +80,7 @@ db.exec(`CREATE TABLE IF NOT EXISTS fare_reports (
   updated INTEGER NOT NULL,
   PRIMARY KEY (a, b, device)
 )`);
+if (!db.prepare("SELECT COUNT(*) AS n FROM pragma_table_info('fare_reports') WHERE name = 'ok'").get().n) db.exec('ALTER TABLE fare_reports ADD COLUMN ok INTEGER NOT NULL DEFAULT 1');
 const fq = {
   all:    db.prepare('SELECT a, b, fare FROM fare_reports ORDER BY a, b, fare'),
   upsert: db.prepare(`INSERT INTO fare_reports (a, b, device, fare, updated) VALUES (?, ?, ?, ?, ?)
@@ -2143,7 +2144,7 @@ function peopleApi(req, res, action, query) {
 
 // ---- Community: fares people know, and points for sharing them ----
 // Anyone logged in can say what a trip costs: from one place to another, by which kind of transport. Each new
-// fare earns points; the leaderboard ranks people by points. Reports for the same trip (both ends within
+// fare earns points once an admin approves it; the leaderboard ranks people by points. Reports for the same trip (both ends within
 // 700 m) are combined by their middle value and shown to whoever searches that trip. Points have no cash
 // value: they are kept so that discounts can be offered if rides or tickets are ever sold through the app.
 const POINTS_PER_FARE = 10, FARE_MODES = ['bus', 'cng', 'launch'];   // what can be reported now (older reports of other kinds still show)
@@ -2156,6 +2157,8 @@ db.exec(`CREATE TABLE IF NOT EXISTS contributions (
   fare    INTEGER NOT NULL,
   created INTEGER NOT NULL
 )`);
+// ok: 1 once an admin approved it and its points were given; reports made before approval existed count as approved
+if (!db.prepare("SELECT COUNT(*) AS n FROM pragma_table_info('contributions') WHERE name = 'ok'").get().n) db.exec('ALTER TABLE contributions ADD COLUMN ok INTEGER NOT NULL DEFAULT 1');
 const kmBetween = (lat1, lon1, lat2, lon2) => {
   const r = Math.PI / 180, a = Math.sin((lat2 - lat1) * r / 2) ** 2 + Math.cos(lat1 * r) * Math.cos(lat2 * r) * Math.sin((lon2 - lon1) * r / 2) ** 2;
   return 12742 * Math.asin(Math.sqrt(a));
@@ -2211,13 +2214,13 @@ async function communityApi(req, res, action, query) {
     const mine = sameTrip(from, to, 0.3).find(c => c.user === me.id && c.mode === mode);
     if (mine) {                                        // correcting an earlier report: no new points
       db.prepare('UPDATE contributions SET fare = ?, created = ? WHERE id = ?').run(fare, now, mine.id);
-      return json(res, 200, { points: me.points, earned: 0 });
+      return json(res, 200, { points: me.points, earned: 0, pending: 0 });
     }
     if (count('SELECT COUNT(*) AS n FROM contributions WHERE user = ? AND created > ?', me.id, now - 864e5) >= 15) return json(res, 429, { error: 'slow' });
-    db.prepare('INSERT INTO contributions (user, flabel, flat, flon, tlabel, tlat, tlon, mode, fare, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    db.prepare('INSERT INTO contributions (user, flabel, flat, flon, tlabel, tlat, tlon, mode, fare, created, ok) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)')
       .run(me.id, cleanText(from.label, 80), from.lat, from.lon, cleanText(to.label, 80), to.lat, to.lon, mode, fare, now);
-    db.prepare('UPDATE users SET points = points + ? WHERE id = ?').run(POINTS_PER_FARE, me.id);
-    return json(res, 200, { points: me.points + POINTS_PER_FARE, earned: POINTS_PER_FARE });
+    // the points come when an admin approves it (admin 'approve-contribution')
+    return json(res, 200, { points: me.points, earned: 0, pending: POINTS_PER_FARE });
   }
   json(res, 404, { error: 'not found' });
 }
@@ -2474,8 +2477,9 @@ async function adminApi(req, res, action, query) {
                                FROM reports r JOIN users a ON a.id = r.about JOIN users b ON b.id = r.reporter WHERE ?1 = 'all' OR r.status = ?1 ORDER BY r.id DESC LIMIT 100`).all(status);
       return json(res, 200, { reports: rows });
     }
-    if (action === 'fares') return json(res, 200, { fares: db.prepare('SELECT a, b, device, fare, updated FROM fare_reports ORDER BY updated DESC LIMIT 200').all(),
-      contributions: db.prepare('SELECT c.id, c.flabel, c.tlabel, c.mode, c.fare, c.created, u.name, u.email FROM contributions c JOIN users u ON u.id = c.user ORDER BY c.id DESC LIMIT 200').all() });
+    if (action === 'fares') return json(res, 200, { fares: db.prepare('SELECT a, b, device, fare, updated, ok FROM fare_reports ORDER BY ok, updated DESC LIMIT 200').all(),
+      contributions: db.prepare('SELECT c.id, c.flabel, c.tlabel, c.mode, c.fare, c.created, c.ok, u.name, u.email FROM contributions c JOIN users u ON u.id = c.user ORDER BY c.ok, c.id DESC LIMIT 200').all(),
+      waiting: count('SELECT COUNT(*) AS n FROM contributions WHERE ok = 0') + count("SELECT COUNT(*) AS n FROM fare_reports WHERE ok = 0 AND device LIKE 'u%'") });
     if (action === 'posts') {
       const rows = db.prepare(`${POST_SELECT} AND p.id < ?2 ORDER BY p.id DESC LIMIT 60`).all(-1, Number(query.get('before')) || Number.MAX_SAFE_INTEGER);
       return json(res, 200, { posts: rows.map(p => ({ ...shownPost(p), email: aq.byId.get(p.user).email })) });
@@ -2591,8 +2595,6 @@ async function adminApi(req, res, action, query) {
     if (!to) return json(res, 400, { error: 'bad request' });
     if (g.status !== to) {
       db.prepare('UPDATE gems SET status = ?, decided = ?, by = ? WHERE id = ?').run(to, now, me.id, g.id);
-      if (to === 'ok') db.prepare('UPDATE users SET points = points + ? WHERE id = ?').run(POINTS_PER_GEM, g.user);
-      if (g.status === 'ok') db.prepare('UPDATE users SET points = MAX(0, points - ?) WHERE id = ?').run(POINTS_PER_GEM, g.user);
       log(to === 'ok' ? 'gem approved' : 'gem rejected', 'gem ' + g.id, g.name);
     }
     return json(res, 200, { ok: true });
@@ -2604,8 +2606,6 @@ async function adminApi(req, res, action, query) {
     if (!to) return json(res, 400, { error: 'bad request' });
     if (p.status !== to) {
       db.prepare('UPDATE place_photos SET status = ?, decided = ?, by = ? WHERE id = ?').run(to, now, me.id, p.id);
-      if (to === 'ok' && p.status !== 'ok') db.prepare('UPDATE users SET points = points + ? WHERE id = ?').run(POINTS_PER_PHOTO, p.user);
-      if (p.status === 'ok' && to !== 'ok') db.prepare('UPDATE users SET points = MAX(0, points - ?) WHERE id = ?').run(POINTS_PER_PHOTO, p.user);
       log(to === 'ok' ? 'place photo approved' : 'place photo rejected', 'photo ' + p.id, p.name);
     }
     return json(res, 200, { ok: true });
@@ -2621,7 +2621,29 @@ async function adminApi(req, res, action, query) {
     return json(res, 200, { ok: true });
   }
   if (!admin) return json(res, 403, { error: 'forbidden' });
+  if (action === 'approve-fare') {                   // a Dhaka stop-to-stop fare is right: its sender gets the points
+    const f = db.prepare('SELECT * FROM fare_reports WHERE a = ? AND b = ? AND device = ?').get(String(body.a), String(body.b), String(body.device));
+    if (!f) return json(res, 404, { error: 'not found' });
+    if (!f.ok) {
+      db.prepare('UPDATE fare_reports SET ok = 1 WHERE a = ? AND b = ? AND device = ?').run(f.a, f.b, f.device);
+      if (/^u\d+$/.test(f.device)) db.prepare('UPDATE users SET points = points + ? WHERE id = ?').run(POINTS_PER_FARE, Number(f.device.slice(1)));
+      log('fare approved', `${f.a}>${f.b}`, '৳' + f.fare);
+    }
+    return json(res, 200, { ok: true });
+  }
+  if (action === 'approve-contribution') {           // a reported fare is right: its sender gets the points
+    const c = db.prepare('SELECT * FROM contributions WHERE id = ?').get(Number(body.id));
+    if (!c) return json(res, 404, { error: 'not found' });
+    if (!c.ok) {
+      db.prepare('UPDATE contributions SET ok = 1 WHERE id = ?').run(c.id);
+      db.prepare('UPDATE users SET points = points + ? WHERE id = ?').run(POINTS_PER_FARE, c.user);
+      log('fare approved', `${c.flabel} > ${c.tlabel}`, `${c.mode} ${c.fare}`);
+    }
+    return json(res, 200, { ok: true });
+  }
   if (action === 'fare') {
+    const gone = db.prepare('SELECT * FROM fare_reports WHERE a = ? AND b = ? AND device = ?').get(String(body.a), String(body.b), String(body.device));
+    if (gone && gone.ok && /^u\d+$/.test(gone.device)) db.prepare('UPDATE users SET points = MAX(0, points - ?) WHERE id = ?').run(POINTS_PER_FARE, Number(gone.device.slice(1)));
     db.prepare('DELETE FROM fare_reports WHERE a = ? AND b = ? AND device = ?').run(String(body.a), String(body.b), String(body.device));
     log('fare removed', `${body.a}>${body.b}`);
     return json(res, 200, { ok: true });
@@ -2630,7 +2652,7 @@ async function adminApi(req, res, action, query) {
     const c = db.prepare('SELECT * FROM contributions WHERE id = ?').get(Number(body.id));
     if (!c) return json(res, 404, { error: 'not found' });
     db.prepare('DELETE FROM contributions WHERE id = ?').run(c.id);
-    db.prepare('UPDATE users SET points = MAX(0, points - ?) WHERE id = ?').run(POINTS_PER_FARE, c.user);
+    if (c.ok) db.prepare('UPDATE users SET points = MAX(0, points - ?) WHERE id = ?').run(POINTS_PER_FARE, c.user);   // points only went to approved ones
     log('fare removed', `${c.flabel} > ${c.tlabel}`, `${c.mode} ${c.fare}`);
     return json(res, 200, { ok: true });
   }
@@ -2801,7 +2823,8 @@ async function faresApi(req, res) {
   const voter = voterOf(req, device);
   const isNew = !db.prepare('SELECT 1 FROM fare_reports WHERE a = ? AND b = ? AND device = ?').get(a, b, voter);
   fq.upsert.run(a, b, voter, fare, Date.now());
-  if (isNew && voter !== device) db.prepare('UPDATE users SET points = points + ? WHERE id = ?').run(POINTS_PER_FARE, Number(voter.slice(1)));
+  // points come when an admin approves it (admin 'approve-fare'), not now
+  if (isNew) db.prepare('UPDATE fare_reports SET ok = 0 WHERE a = ? AND b = ? AND device = ?').run(a, b, voter);
   json(res, 200, { ok: true });
 }
 
@@ -2858,7 +2881,7 @@ function serveFile(req, res, pathname, versioned) {
 
 // ---- Places: photos people took there (shown once an admin approves them) and reviews ----
 // A place is keyed "district|article title" (or its name when it has no article). A photo is uploaded the usual way
-// (POST /api/explore/media), then offered here; it waits until approved, and its taker earns POINTS_PER_PHOTO.
+// (POST /api/explore/media), then offered here; it waits until an admin approves it (points are only for fares).
 //   GET  /api/places/summary?d=district  -> { places: { key: { photo, photos, stars, reviews } } }
 //   GET  /api/places/place?key=          -> { photos: [{ id, file, by }], reviews: [{ by, stars, body, created }], stars, n, mine: { review, waiting } }
 //   POST /api/places/photo  { key, name, media }        -> { waiting }        (login)
@@ -2869,7 +2892,6 @@ db.exec(`CREATE TABLE IF NOT EXISTS place_photos (id INTEGER PRIMARY KEY, key TE
 db.exec('CREATE INDEX IF NOT EXISTS place_photos_key ON place_photos (key, status)');
 db.exec(`CREATE TABLE IF NOT EXISTS place_reviews (key TEXT NOT NULL, district TEXT NOT NULL, name TEXT NOT NULL, user INTEGER NOT NULL, stars INTEGER NOT NULL,
   body TEXT NOT NULL DEFAULT '', created INTEGER NOT NULL, PRIMARY KEY (key, user))`);
-const POINTS_PER_PHOTO = 3;
 const placeKey = v => { const k = cleanText(v, 200); return /^[a-z]{3,20}\|.{2,}$/.test(k) ? k : ''; };
 const reviewTally = key => db.prepare('SELECT COALESCE(ROUND(AVG(r.stars), 1), 0) AS stars, COUNT(*) AS n FROM place_reviews r JOIN users u ON u.id = r.user WHERE r.key = ? AND u.banned = 0').get(key);
 const placePerson = (id, name, pic) => ({ id, name, pic });
@@ -2885,7 +2907,7 @@ db.exec(`CREATE TABLE IF NOT EXISTS gems (id INTEGER PRIMARY KEY, user INTEGER N
   place TEXT NOT NULL DEFAULT '', about TEXT NOT NULL DEFAULT '', how TEXT NOT NULL DEFAULT '', lat REAL, lon REAL, files TEXT NOT NULL DEFAULT '[]',
   status TEXT NOT NULL DEFAULT 'pending', created INTEGER NOT NULL, decided INTEGER NOT NULL DEFAULT 0, by INTEGER NOT NULL DEFAULT 0)`);
 db.exec('CREATE INDEX IF NOT EXISTS gems_district ON gems (district, status)');
-const POINTS_PER_GEM = 5, GEM_KINDS = ['water', 'river', 'hill', 'heritage', 'faith', 'wetland', 'village', 'other'];
+const GEM_KINDS = ['water', 'river', 'hill', 'heritage', 'faith', 'wetland', 'village', 'other'];
 const wantKeys = userId => db.prepare('SELECT key FROM place_wants WHERE user = ? ORDER BY created DESC').all(userId).map(r => r.key);
 const shownGem = g => ({ id: g.id, district: g.district, name: g.name, kind: g.kind, place: g.place, about: g.about, how: g.how, lat: g.lat, lon: g.lon,
   photos: JSON.parse(g.files || '[]').map(f => '/media/' + f), by: { id: g.user, name: g.uname, pic: g.upic }, created: g.created });

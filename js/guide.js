@@ -454,7 +454,7 @@ const coverStyle = (img, division) => {
         for (const [i, f] of files.entries()) { note.className = 'pl-givenote'; note.textContent = tl2(`ছবি ${num(i + 1)}/${num(files.length)} পাঠানো হচ্ছে…`, `Sending photo ${i + 1}/${files.length}…`); const b = await shrink(f); media.push(await uploadMedia(b, b.type || 'image/jpeg', () => {})); }
         await placesPost('gem', { district: district.value, name: name.value, kind: kind.value, where: where.value, about: about.value, how: how.value, lat: pos && pos.lat, lon: pos && pos.lon, media });
         card.replaceChildren(x, Object.assign(el('div', 'gm-done'), { innerHTML: '<b>🌿</b>' }), el('h3', null, tl2('ধন্যবাদ!', 'Thank you!')),
-          el('p', null, tl2('আমাদের টিম জায়গাটি যাচাই করে প্রকাশ করবে — তখন আপনার নামসহ সবাই দেখবে, আর আপনি পাবেন ৫ পয়েন্ট।', 'Our team will check it and publish it with your name — and you earn 5 points.')));
+          el('p', null, tl2('আমাদের টিম জায়গাটি যাচাই করে প্রকাশ করবে — তখন আপনার নামসহ সবাই দেখবে।', 'Our team will check it and publish it with your name for everyone to see.')));
       } catch (e) {
         send.disabled = false; note.className = 'pl-givenote bad';
         note.textContent = e.message === 'slow' ? tl2('আজ অনেকগুলো পাঠিয়েছেন — কাল আবার চেষ্টা করুন।', 'You sent many today; try tomorrow.') : tl2('পাঠানো গেল না। ইন্টারনেট দেখে আবার চেষ্টা করুন।', 'Could not send; try again.');
@@ -763,7 +763,7 @@ const coverStyle = (img, division) => {
     const giveBox = el('section', 'pl-card pl-givebox');
     const givenote = el('p', 'pl-givenote');
     giveBox.append(el('h3', null, s.img ? tl2('আপনার চোখে জায়গাটি', 'The place through your eyes') : tl2('এই জায়গার প্রথম ছবিটি আপনিই দিন', 'Be the first to add a photo')),
-      el('p', null, tl2('নিজের তোলা ছবি পাঠান (একসাথে ৩টি পর্যন্ত)। আমাদের টিম দেখে অনুমোদন দিলে ছবিটি সবাই দেখবে, আর আপনি পাবেন প্রতিটিতে ৩ পয়েন্ট।', 'Send photos you took (up to 3). Once our team approves one, everyone sees it and you earn 3 points for each.')));
+      el('p', null, tl2('নিজের তোলা ছবি পাঠান (একসাথে ৩টি পর্যন্ত)। আমাদের টিম দেখে অনুমোদন দিলে ছবিটি আপনার নামসহ সবাই দেখবে।', 'Send photos you took (up to 3). Once our team approves one, everyone sees it with your name.')));
     const pick = el('button', 'btn pl-pick'); pick.append(ic('camera'), el('span', null, tl2('ছবি পাঠান', 'Send photos')));
     const chooser = Object.assign(el('input'), { type: 'file', accept: 'image/jpeg,image/png,image/webp', multiple: true, hidden: true });
     giveBox.append(pick, chooser, givenote);
@@ -956,7 +956,7 @@ const coverStyle = (img, division) => {
     const gemRail = el('div', 'dg-rail');
     const gemAdd = el('button', 'dg-place gm-add');
     gemAdd.append(Object.assign(el('span', 'ph'), { innerHTML: '<span class="gm-plus">+</span>' }), el('span', 't'));
-    gemAdd.querySelector('.t').append(el('b', null, tl2(`${d.bn}-এর কোনো জায়গা জানেন?`, `Know a place in ${d.en}?`)), el('small', null, tl2('খোঁজ দিন · অনুমোদন হলে ৫ পয়েন্ট', 'Share it · 5 points once approved')));
+    gemAdd.querySelector('.t').append(el('b', null, tl2(`${d.bn}-এর কোন জায়গাটা আপনার চোখে সুন্দর?`, `Which place in ${d.en} looks beautiful to you?`)), el('small', null, tl2('সবাইকে জানান', 'Tell everyone')));
     gemAdd.addEventListener('click', () => openGemForm(d));
     gemRail.appendChild(gemAdd);
     gemSec.appendChild(gemRail);

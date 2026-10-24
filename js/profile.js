@@ -265,7 +265,7 @@ async function drawInsights() {
   const tools = el('div', 'card menu');
   const tool = (icon, title, sub, fn) => { const b = el('button'); b.innerHTML = `<i class="mi soft">${svg(icon)}</i>`; const sp = el('span'); sp.append(el('b', null, title), el('em', null, sub)); b.append(sp, ic('chev')); b.addEventListener('click', fn); tools.appendChild(b); };
   tool('plus', 'নতুন পোস্ট', 'ছবি, ভিডিও বা শুধু লেখা', openNewPost);
-  tool('star', 'পয়েন্ট বাড়ান', `ভাড়া জানালে প্রতিবার ${num(10)} পয়েন্ট · এখন ${num(d.points)}`, () => go('community'));
+  tool('star', 'পয়েন্ট বাড়ান', `ভাড়া জানান, অনুমোদন হলে প্রতিবার ${num(10)} পয়েন্ট · এখন ${num(d.points)}`, () => go('community'));
   tool('verified', 'ভেরিফায়েড ব্যাজ', d.verified ? 'আপনার অ্যাকাউন্ট ভেরিফায়েড' : 'কীভাবে পাবেন, আবেদন করুন', openVerifyInfo);
 
   const money = el('div', 'money-wrap');
