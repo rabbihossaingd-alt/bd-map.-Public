@@ -20,9 +20,9 @@ export const NAV = [
     { key: 'team', title: 'টিম ও অনুমতি', ic: 'key', perm: 'team.manage', status: 'v2' }]],
   ['বিশ্বাস ও নিরাপত্তা', [
     { key: 'reports', title: 'রিপোর্ট', ic: 'flag', perm: 'reports.view', status: 'v2', count: 'reports' },
-    { key: 'modqueue', title: 'মডারেশন কিউ', ic: 'shield', perm: 'content.remove', status: 4 },
-    { key: 'strikes', title: 'স্ট্রাইক ও আপিল', ic: 'strike', perm: 'content.remove', status: 4 },
-    { key: 'risk', title: 'ঝুঁকি সংকেত', ic: 'radar', perm: 'users.ban', status: 4 }]],
+    { key: 'modqueue', title: 'মডারেশন কিউ', ic: 'shield', perm: 'content.remove', status: 'v2' },
+    { key: 'strikes', title: 'স্ট্রাইক ও আপিল', ic: 'strike', perm: 'content.remove', status: 'v2', count: 'appeals' },
+    { key: 'risk', title: 'ঝুঁকি সংকেত', ic: 'radar', perm: 'users.ban', status: 'v2' }]],
   ['কনটেন্ট', [
     { key: 'posts', title: 'পোস্ট ও রিল', ic: 'image', perm: 'content.remove', status: 'v2' },
     { key: 'stories', title: 'স্টোরি', ic: 'story', perm: 'content.remove', status: 'v2' },
@@ -38,9 +38,9 @@ export const NAV = [
     { key: 'gems', title: 'মেঠোপথ', ic: 'leaf', perm: 'data.approve', status: 'v2', count: 'gems' },
     { key: 'quality', title: 'ডেটার মান', ic: 'checkc', perm: 'data.edit', status: 'v2' }]],
   ['আয়', [
-    { key: 'creators', title: 'ক্রিয়েটর', ic: 'coins', perm: 'creators.manage', status: 'legacy', legacy: 'creators', count: 'creators' },
-    { key: 'payouts', title: 'পেআউট', ic: 'wallet', perm: 'payouts.view', status: 'legacy', legacy: 'creators', count: 'payouts' },
-    { key: 'ledger', title: 'লেজার', ic: 'book', perm: 'payouts.view', status: 4 }]],
+    { key: 'creators', title: 'ক্রিয়েটর', ic: 'coins', perm: 'creators.manage', status: 'v2', count: 'creators' },
+    { key: 'payouts', title: 'পেআউট', ic: 'wallet', perm: 'payouts.view', status: 'v2', count: 'payouts' },
+    { key: 'ledger', title: 'লেজার', ic: 'book', perm: 'payouts.view', status: 'v2' }]],
   ['অ্যানালিটিক্স', [
     { key: 'growth', title: 'বৃদ্ধি ও ধরে রাখা', ic: 'chart', perm: 'analytics.view', status: 5 },
     { key: 'features', title: 'ফিচার ব্যবহার', ic: 'activity', perm: 'analytics.view', status: 5 },
@@ -56,7 +56,8 @@ const ALL_PAGES = NAV.flatMap(([group, items]) => items.map(p => ({ ...p, group 
 const PAGE_FILES = { command: './pages/command.js', audit: './pages/audit.js', team: './pages/team.js', prefs: './pages/prefs.js', inbox: './pages/inbox.js', tickets: './pages/tickets.js',
   macros: './pages/macros.js', users: './pages/users.js', reports: './pages/reports.js',
   posts: './pages/content.js', stories: './pages/content.js', comments: './pages/content.js', sounds: './pages/content.js', groups: './pages/content.js',
-  media: './pages/media.js', fares: './pages/fares.js', photos: './pages/review.js', gems: './pages/review.js', routes: './pages/routes.js', intercity: './pages/intercity.js', quality: './pages/quality.js' };
+  media: './pages/media.js', fares: './pages/fares.js', photos: './pages/review.js', gems: './pages/review.js', routes: './pages/routes.js', intercity: './pages/intercity.js', quality: './pages/quality.js',
+  creators: './pages/creators.js', payouts: './pages/payouts.js', ledger: './pages/ledger.js', strikes: './pages/strikes.js', modqueue: './pages/modqueue.js', risk: './pages/risk.js' };
 export const pagesFor = () => ALL_PAGES.filter(p => !p.perm || can(p.perm));
 
 let current = { key: '', mod: null, inst: null };
@@ -147,14 +148,14 @@ addEventListener('popstate', e => { if (drawerOpen() && !(e.state && e.state.dra
 
 function bellMenu(anchor) {
   const lines = [['support', 'সাপোর্টে উত্তর বাকি', 'tickets'], ['reports', 'রিপোর্ট দেখা বাকি', 'reports'], ['fares', 'ভাড়া অনুমোদন বাকি', 'fares'], ['photos', 'জায়গার ছবি', 'photos'], ['gems', 'মেঠোপথ', 'gems'],
-    ['payouts', 'পেআউট অপেক্ষায়', 'payouts'], ['creators', 'ক্রিয়েটর আবেদন', 'creators'], ['verify', 'ব্যাজের আবেদন', 'tickets']].filter(([k]) => counts[k]);
+    ['payouts', 'পেআউট অপেক্ষায়', 'payouts'], ['appeals', 'আপিল দেখা বাকি', 'strikes'], ['creators', 'ক্রিয়েটর আবেদন', 'creators'], ['verify', 'ব্যাজের আবেদন', 'tickets']].filter(([k]) => counts[k]);
   menu(anchor, [{ label: lines.length ? 'যা বাকি' : 'সব কাজ শেষ — সাবাস' }, ...lines.map(([k, t, page]) => ({ text: `${t} · ${num(counts[k])}`, run: () => go('#/' + page) }))]);
 }
 
 // ---- badges and the live stream ----
 function paintCounts(c) {
   counts = c;
-  const all = ['support', 'reports', 'photos', 'gems', 'fares', 'payouts', 'creators'].reduce((s, k) => s + (c[k] || 0), 0);
+  const all = ['support', 'reports', 'photos', 'gems', 'fares', 'payouts', 'creators', 'appeals'].reduce((s, k) => s + (c[k] || 0), 0);
   for (const [key, el] of badgeEls) {
     const p = ALL_PAGES.find(x => x.key === key), n = p.count === 'all' ? all : c[p.count] || 0;
     el.textContent = num(n); el.hidden = !n;

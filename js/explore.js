@@ -9,7 +9,7 @@ let restrictedShown = 0;
 function restrictedNotice() {
   if (Date.now() - restrictedShown < 15000 || typeof openModal !== 'function') return;
   restrictedShown = Date.now();
-  openModal('অ্যাকাউন্ট কিছুদিনের জন্য সীমিত', '', [el('div', 'empty', 'নিয়ম ভাঙার জন্য আপনার অ্যাকাউন্ট কিছুদিনের জন্য সীমিত করা হয়েছে — এই সময়ে পোস্ট/মন্তব্য বা মেসেজ পাঠানো যাবে না। ভুল মনে হলে সাহায্য কেন্দ্রে জানান।')]);
+  openModal('অ্যাকাউন্ট কিছুদিনের জন্য সীমিত', '', [el('div', 'empty', 'নিয়ম ভাঙার জন্য আপনার অ্যাকাউন্ট কিছুদিনের জন্য সীমিত করা হয়েছে — এই সময়ে পোস্ট/মন্তব্য বা মেসেজ পাঠানো যাবে না। কারণ আর আপিলের সুযোগ নোটিফিকেশনে আছে।')]);
 }
 async function exploreApi(path, body) {
   const res = await fetch('api/explore/' + path, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {});
@@ -1266,8 +1266,69 @@ const NOTIFY_TEXT = {
   follow: ['আপনাকে ফলো করা শুরু করেছেন।', 'started following you.'],
   followback: ['আপনাকে ফলো ব্যাক করেছেন।', 'followed you back.'],
   tag: ['আপনাকে একটি পোস্টে ট্যাগ করেছেন।', 'tagged you in a post.'],
-  removed: ['টিম আপনার একটি পোস্ট নিয়ম ভাঙার জন্য সরিয়েছে।', 'The team removed one of your posts for breaking the rules.']
+  removed: ['টিম আপনার একটি পোস্ট নিয়ম ভাঙার জন্য সরিয়েছে। কারণ ও আপিল দেখতে চাপুন।', 'The team removed one of your posts for breaking the rules. Tap for why, and to appeal.'],
+  removedComment: ['টিম আপনার একটি মন্তব্য নিয়ম ভাঙার জন্য সরিয়েছে। কারণ ও আপিল দেখতে চাপুন।', 'The team removed one of your comments for breaking the rules. Tap for why, and to appeal.'],
+  strike: ['আপনার অ্যাকাউন্টে একটি স্ট্রাইক দেওয়া হয়েছে। কারণ ও আপিল দেখতে চাপুন।', 'gave your account a strike. Tap for why, and to appeal.'],
+  appeal: ['আপনার আপিলের সিদ্ধান্ত হয়েছে। দেখতে চাপুন।', 'decided on your appeal. Tap to see.']
 };
+const MOD_KINDS = new Set(['removed', 'strike', 'appeal']);
+// A removal, a strike or an appeal's answer, opened from its notification: the reason, what it means, and (within
+// 30 days, once) a form to appeal. The team member who decided does not review the appeal.
+function openModNotice(m) {
+  const T = (bn, en) => LANG === 'en' ? en : bn;
+  const day = ts => new Date(ts).toLocaleDateString(NUM_LOCALE, { day: 'numeric', month: 'long', year: 'numeric' });
+  const outcome = o => o === 'ban' ? T('অ্যাকাউন্ট বন্ধ', 'the account closed') : String(o).startsWith('restrict:') ? T(num(Number(o.split(':')[1])) + ' দিন পোস্ট, স্টোরি ও মন্তব্য বন্ধ', 'no posts, stories or comments for ' + o.split(':')[1] + ' days') : T('সতর্কবার্তা', 'a warning');
+  const quote = text => Object.assign(el('blockquote', 'mod-quote no-tr'), { textContent: text });
+  const body = [];
+  const line = (label, value) => { const r = el('div', 'mod-kv'); r.append(el('span', null, label), Object.assign(el('b', 'no-tr'), { textContent: value })); return r; };
+  if (m.type === 'appeal') {
+    body.push(el('p', 'mod-lead', m.status === 'overturned' ? T('টিম আবার দেখে আপনার আপিল মেনে নিয়েছে। স্ট্রাইক থাকলে তা বাতিল হয়েছে, আর তার কারণে যা বন্ধ ছিল তা খুলে দেওয়া হয়েছে।', 'The team looked again and accepted your appeal. Any strike is cancelled, and what it limited is open again.')
+      : T('টিমের অন্য একজন আবার দেখেছেন — আগের সিদ্ধান্তই থাকছে।', 'Another team member looked again — the decision stays.')));
+    if (m.note) body.push(quote(m.note));
+    openModal(m.status === 'overturned' ? T('আপিল মেনে নেওয়া হয়েছে', 'Your appeal was accepted') : T('সিদ্ধান্ত বহাল থাকছে', 'The decision stays'), '', body, [button('check', T('ঠিক আছে', 'OK'), closeModal)]);
+    return;
+  }
+  const reason = LANG === 'en' ? m.reasonEn : m.reasonBn;
+  let title;
+  if (m.type === 'removal') {
+    title = m.what === 'comment' ? T('আপনার একটি মন্তব্য সরানো হয়েছে', 'One of your comments was removed') : T('আপনার একটি পোস্ট সরানো হয়েছে', 'One of your posts was removed');
+    body.push(line(T('কারণ', 'Why'), reason), line(T('কবে', 'When'), day(m.made)));
+    if (m.snippet) body.push(quote(m.snippet));
+    if (m.strike) body.push(el('p', 'mod-note', T('এর সাথে আপনার অ্যাকাউন্টে একটি স্ট্রাইকও দেওয়া হয়েছে — নোটিফিকেশনে আলাদা করে আছে।', 'A strike was also given to your account — it is in your notifications too.')));
+  } else {
+    title = T('আপনার অ্যাকাউন্টে একটি স্ট্রাইক', 'A strike on your account');
+    body.push(line(T('কারণ', 'Why'), reason), line(T('ফল', 'What happens'), outcome(m.outcome)), line(T('মেয়াদ শেষ', 'Ends'), day(m.expires)));
+    if (m.revoked) body.push(el('p', 'mod-note ok', T('এই স্ট্রাইক পরে বাতিল করা হয়েছে।', 'This strike was later cancelled.')));
+    else body.push(el('p', 'mod-note', T('এখন আপনার চালু স্ট্রাইক ' + num(m.active) + 'টি। নিয়ম: ', 'Active strikes now: ' + m.active + '. The rule: ')
+      + m.policy.steps.map((x, i) => num(i + 1) + T('ম', '') + ': ' + outcome(x)).join(' · ') + T(' — ' + num(m.policy.expireDays) + ' দিন পরে স্ট্রাইকের মেয়াদ শেষ হয়।', ' — a strike ends after ' + m.policy.expireDays + ' days.')));
+  }
+  const actions = [];
+  if (m.appeal) {
+    const st = { open: T('আপনার আপিল জমা আছে — টিমের অন্য একজন দেখে জানাবেন।', 'Your appeal is in — another team member will look and tell you.'), upheld: T('আপিলের পর সিদ্ধান্ত বহাল আছে।', 'After your appeal the decision stays.'), overturned: T('আপিল মেনে নেওয়া হয়েছে।', 'Your appeal was accepted.') }[m.appeal.status];
+    body.push(el('p', 'mod-note' + (m.appeal.status === 'overturned' ? ' ok' : ''), st));
+    if (m.appeal.note) body.push(quote(m.appeal.note));
+  } else if (m.canAppeal) {
+    const ta = Object.assign(el('textarea', 'mod-text'), { rows: 4, maxLength: 1000, placeholder: T('কেন ভুল মনে হচ্ছে, লিখুন (অন্তত ১০ অক্ষর)', 'Why do you think this is wrong? (at least 10 characters)') });
+    const msg = el('div', 'form-note');
+    body.push(el('b', 'mod-sub', T('ভুল মনে হলে আপিল করুন', 'Think this is a mistake? Appeal')), ta, msg);
+    const send = button('send', T('আপিল পাঠান', 'Send appeal'), async () => {
+      if (ta.value.trim().length < 10) { msg.textContent = T('আরেকটু লিখুন।', 'Please write a little more.'); ta.focus(); return; }
+      send.disabled = true;
+      try {
+        const r = await fetch('api/appeal', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: m.type, id: m.id, body: ta.value.trim() }) });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(d.error || 'server');
+        $('m-body').replaceChildren(el('p', 'mod-lead', T('আপিল জমা হয়েছে। যিনি সিদ্ধান্ত নিয়েছিলেন তিনি ছাড়া টিমের অন্য একজন দেখবেন, আর এখানে নোটিফিকেশনে জানাবেন।', 'Your appeal is in. Someone other than the one who decided will look, and tell you here in your notifications.')));
+        $('m-actions').replaceChildren(button('check', T('ঠিক আছে', 'OK'), closeModal));
+      } catch (e) {
+        send.disabled = false;
+        msg.textContent = e.message === 'already' ? T('এর জন্য আপিল আগেই জমা আছে।', 'An appeal is already in.') : e.message === 'late' ? T('৩০ দিন পার হয়ে গেছে — সাহায্য কেন্দ্রে জানান।', 'More than 30 days have passed — write to the help centre.') : T('পাঠানো যায়নি — আবার চেষ্টা করুন।', 'Could not send — try again.');
+      }
+    });
+    actions.push(send);
+  } else body.push(el('p', 'mod-note', T('আপিলের সময় (৩০ দিন) পার হয়ে গেছে। কিছু বলার থাকলে সাহায্য কেন্দ্রে লিখুন।', 'The 30 days to appeal have passed. Write to the help centre if you need to.')));
+  openModal(title, '', body, actions);
+}
 async function openNotifications() {
   if (!ME) { needLogin('নোটিফিকেশন দেখতে লগইন করুন'); return; }
   const box = el('div', 'notif');
@@ -1306,11 +1367,12 @@ async function openNotifications() {
     if (b !== last) { rows.push(el('div', 'notif-label', b)); last = b; }
     const row = el('div', 'notif-row' + (n.seen ? '' : ' new'));
     const t = el('div', 't no-tr');
-    const who = Object.assign(el('b'), { textContent: n.kind === 'removed' ? 'Manzeela' : n.actor.username || n.actor.name });   // a removal comes from the team, not a person
-    if (isVerified(n.actor)) who.appendChild(vbadge());
-    const [bn, en] = NOTIFY_TEXT[n.kind] || ['', ''];
+    const who = Object.assign(el('b'), { textContent: MOD_KINDS.has(n.kind) ? 'Manzeela' : n.actor.username || n.actor.name });   // a removal, a strike or an appeal's answer comes from the team, not a person
+    if (isVerified(n.actor) && !MOD_KINDS.has(n.kind)) who.appendChild(vbadge());
+    const [bn, en] = NOTIFY_TEXT[n.kind === 'removed' && n.mod && n.mod.what === 'comment' ? 'removedComment' : n.kind] || ['', ''];
     t.append(who, document.createTextNode(' ' + (LANG === 'en' ? en : bn) + (n.kind === 'comment' ? ' ' + n.body : '') + ' '), el('time', null, shortAgo(n.created)));
-    row.append(avatar(n.actor), t);
+    row.append(MOD_KINDS.has(n.kind) ? Object.assign(el('span', 'avatar notif-team'), { innerHTML: svg('shield') }) : avatar(n.actor), t);
+    if (MOD_KINDS.has(n.kind) && n.mod) row.addEventListener('click', () => { close(); setTimeout(() => openModNotice(n.mod), 280); });
     if (n.kind === 'follow' || n.kind === 'followback') {
       if (n.actor.relation === 'follower') row.appendChild(followButton(n.actor, null, false));
       else if (n.actor.relation === 'mutual' || n.actor.relation === 'following') row.appendChild(el('span', 'notif-tag', LANG === 'en' ? 'Following' : 'ফলো করছেন'));

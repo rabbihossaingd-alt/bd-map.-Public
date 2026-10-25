@@ -397,7 +397,9 @@ function deleteUser(id) {
   for (const x of db.prepare('SELECT name FROM uploads WHERE user = ? AND used = 0').all(id)) unlinkMedia(x.name);
   for (const sql of ['DELETE FROM friends WHERE a = ?1 OR b = ?1', 'DELETE FROM messages WHERE a = ?1 OR b = ?1 OR sender = ?1', 'DELETE FROM notes WHERE user = ?1', 'DELETE FROM chat_prefs WHERE user = ?1', 'DELETE FROM earnings WHERE user = ?1', 'DELETE FROM payouts WHERE user = ?1', 'DELETE FROM notifications WHERE user = ?1 OR actor = ?1', 'DELETE FROM reports WHERE reporter = ?1 OR about = ?1',
                      'DELETE FROM ticket_msgs WHERE ticket IN (SELECT id FROM tickets WHERE user = ?1)', 'DELETE FROM tickets WHERE user = ?1', 'DELETE FROM contributions WHERE user = ?1', 'DELETE FROM post_likes WHERE user = ?1', 'DELETE FROM post_saves WHERE user = ?1', 'DELETE FROM post_comments WHERE user = ?1',
-                     'DELETE FROM chat_ok WHERE a = ?1 OR b = ?1']) db.prepare(sql).run(id);
+                     'DELETE FROM chat_ok WHERE a = ?1 OR b = ?1',
+                     // the team's record about the person (admin v2): strikes, removals with their text, appeals, kept devices
+                     'DELETE FROM strikes WHERE user = ?1', 'DELETE FROM removals WHERE user = ?1', 'DELETE FROM appeals WHERE user = ?1', 'DELETE FROM banned_devices WHERE user = ?1']) db.prepare(sql).run(id);
   for (const st of db.prepare('SELECT * FROM stories WHERE user = ?').all(id)) deleteStory(st);
   for (const sql of ['DELETE FROM sounds WHERE user = ?', 'DELETE FROM place_photos WHERE user = ?', 'DELETE FROM place_reviews WHERE user = ?', 'DELETE FROM place_wants WHERE user = ?', 'DELETE FROM gems WHERE user = ?', 'DELETE FROM uploads WHERE user = ?']) db.prepare(sql).run(id);
   for (const p of db.prepare('SELECT * FROM posts WHERE user = ?').all(id)) deletePost(p);
@@ -2261,7 +2263,7 @@ const creatorOf = id => (db.prepare('SELECT creator FROM users WHERE id = ?').ge
 function balanceOf(id) {
   const earned = db.prepare('SELECT COALESCE(SUM(amount), 0) AS n FROM earnings WHERE user = ?').get(id).n;
   const paid = db.prepare("SELECT COALESCE(SUM(amount), 0) AS n FROM payouts WHERE user = ? AND status = 'paid'").get(id).n;
-  const pending = db.prepare("SELECT COALESCE(SUM(amount), 0) AS n FROM payouts WHERE user = ? AND status = 'pending'").get(id).n;
+  const pending = db.prepare("SELECT COALESCE(SUM(amount), 0) AS n FROM payouts WHERE user = ? AND status IN ('pending', 'approved')").get(id).n;   // approved: on its way
   return { earned, paid, pending, balance: earned - paid - pending };
 }
 function creatorStanding(u) {
@@ -2269,6 +2271,7 @@ function creatorStanding(u) {
   const reports = count("SELECT COUNT(*) AS n FROM reports WHERE about = ? AND status = 'open'", u.id);
   return { rules, followers: f, posts: p, reports, verified: !!u.verified, eligible: f >= rules.followers && p >= rules.posts && !reports };
 }
+const creatorProgramOpen = () => (sq.setting.get('creator_program') || {}).value !== 'off';
 const shownPayout = x => ({ id: x.id, amount: x.amount, method: x.method, account: x.account, status: x.status, ref: x.ref, note: x.note, created: x.created, updated: x.updated });
 
 //   GET  /api/creator/me             -> { status, standing, money, earnings, payouts }
@@ -2277,7 +2280,7 @@ async function creatorApi(req, res, action) {
   const me = userOf(req);
   if (!me) return json(res, 401, { error: 'login' });
   if (req.method === 'GET' && action === 'me') {
-    return json(res, 200, { status: creatorOf(me.id), standing: creatorStanding(me), money: balanceOf(me.id),
+    return json(res, 200, { status: creatorOf(me.id), standing: creatorStanding(me), money: balanceOf(me.id), program: creatorProgramOpen(),
       earnings: db.prepare('SELECT amount, note, created FROM earnings WHERE user = ? ORDER BY id DESC LIMIT 50').all(me.id),
       payouts: db.prepare('SELECT * FROM payouts WHERE user = ? ORDER BY id DESC LIMIT 50').all(me.id).map(shownPayout) });
   }
@@ -2285,6 +2288,8 @@ async function creatorApi(req, res, action) {
   let body;
   try { body = JSON.parse(await readBody(req, 4000)) || {}; } catch { return json(res, 400, { error: 'bad request' }); }
   const now = Date.now(), status = creatorOf(me.id);
+  // the team can close the program for a while (admin panel → ক্রিয়েটর → নিয়ম): no new applications or payout requests
+  if ((action === 'apply' || action === 'payout') && !creatorProgramOpen()) return json(res, 403, { error: 'closed' });
   if (action === 'apply') {
     if (status === 'approved' || status === 'applied') return json(res, 200, { status });
     if (!creatorStanding(me).eligible) return json(res, 403, { error: 'rules' });
@@ -2297,7 +2302,7 @@ async function creatorApi(req, res, action) {
     if (!WALLETS.includes(body.method) || !/^01[3-9]\d{8}$/.test(account)) return json(res, 400, { error: 'account' });
     const { balance } = balanceOf(me.id), { payoutMin } = creatorRules();
     if (!Number.isInteger(amount) || amount < payoutMin || amount > balance) return json(res, 400, { error: 'amount' });
-    if (count("SELECT COUNT(*) AS n FROM payouts WHERE user = ? AND status = 'pending'", me.id)) return json(res, 409, { error: 'pending' });
+    if (count("SELECT COUNT(*) AS n FROM payouts WHERE user = ? AND status IN ('pending', 'approved')", me.id)) return json(res, 409, { error: 'pending' });
     db.prepare('INSERT INTO payouts (user, amount, method, account, created, updated) VALUES (?, ?, ?, ?, ?, ?)').run(me.id, amount, body.method, account, now, now);
     return json(res, 200, { money: balanceOf(me.id) });
   }
@@ -2384,7 +2389,9 @@ async function notifyApi(req, res, action) {
   if (action === 'list') {
     const rows = db.prepare(`SELECT n.*, u.name, u.username, u.pic_v, u.verified, p.kind AS pkind, p.file, p.poster, p.caption FROM notifications n JOIN users u ON u.id = n.actor
       LEFT JOIN posts p ON p.id = n.post WHERE n.user = ? AND u.banned = 0 ORDER BY n.id DESC LIMIT 80`).all(me.id);
-    return json(res, 200, { unread: rows.filter(r => !r.seen).length, items: rows.map(r => ({ id: r.id, kind: r.kind, body: r.body, created: r.created, seen: !!r.seen,
+    const MOD = new Set(['removed', 'strike', 'appeal']);
+    return json(res, 200, { unread: rows.filter(r => !r.seen).length, items: rows.map(r => ({ id: r.id, kind: r.kind, body: MOD.has(r.kind) ? '' : r.body, created: r.created, seen: !!r.seen,
+      mod: MOD.has(r.kind) && typeof ADMIN_TRUST !== 'undefined' ? ADMIN_TRUST.modInfo(r.body, me.id) : undefined,
       actor: { id: r.actor, name: r.name, username: r.username, pic: r.pic_v, verified: !!r.verified, relation: relationOf(me.id, r.actor) },
       post: r.post && r.pkind ? { id: r.post, kind: r.pkind, thumb: r.pkind === 'video' ? (r.poster ? 'media/' + r.poster : '') : r.pkind === 'photo' ? 'media/' + r.file : '', text: r.pkind === 'text' ? r.caption.slice(0, 60) : '' } : null })) });
   }
@@ -3275,6 +3282,9 @@ require('./lib/admin-ops.cjs')(ADMIN2, { db, json, deleteUser, deletePost, aq, p
   endStreams: id => { for (const s of streams.get(id) || []) s.end(); } });
 const ADMIN_DATA = require('./lib/admin-data.cjs')(ADMIN2, { db, json, fs, path, ROOT, MEDIA_DIR, deletePost, deleteStory, unlinkMedia, leaveGroup, push, videoSecs, groupCalls,
   groupMembers: id => gq.members.all(id).map(m => m.id), publishNow: async () => { await copyMediaUp(); await publishMedia(); } });
+// phase 4: strikes, appeals, the moderation queue, risk signals (lib/admin-trust.cjs); creators, payouts, the ledger (lib/admin-money.cjs)
+const ADMIN_TRUST = require('./lib/admin-trust.cjs')(ADMIN2, { db, json, readBody, deletePost, aq, push, pushTo, followers, endStreams: id => { for (const s of streams.get(id) || []) s.end(); } });
+require('./lib/admin-money.cjs')(ADMIN2, { db, json, push, sendMail, MAILS, mailReady, followers, balanceOf, creatorRules, creatorStanding });
 
 const server = http.createServer((req, res) => {
   const { pathname, searchParams } = new URL(req.url, 'http://localhost');
@@ -3295,6 +3305,7 @@ const server = http.createServer((req, res) => {
     lastTests: relayTests.slice(0, 8).map(t => ({ ago: Math.round((Date.now() - t.at) / 1000) + 's', ok: t.ok, kinds: t.kinds, ms: t.ms })) }));
   if (pathname.startsWith('/api/live/')) return liveApi(req, res, pathname.slice(10)).catch(e => { console.error(e); if (!res.headersSent) json(res, 500, { error: 'server error' }); });
   if (pathname.startsWith('/api/push/')) return pushApi(req, res, pathname.slice(10)).catch(e => { console.error(e); if (!res.headersSent) json(res, 500, { error: 'server error' }); });
+  if (pathname === '/api/appeal') { const me = userOf(req); if (!me) return json(res, 401, { error: 'login' }); return ADMIN_TRUST.appealApi(req, res, me).catch(e => { console.error(e); if (!res.headersSent) json(res, 500, { error: 'server error' }); }); }
   if (pathname.startsWith('/api/notify/')) return notifyApi(req, res, pathname.slice(12)).catch(e => { console.error(e); if (!res.headersSent) json(res, 500, { error: 'server error' }); });
   if (pathname.startsWith('/api/creator/')) return creatorApi(req, res, pathname.slice(13)).catch(e => { console.error(e); if (!res.headersSent) json(res, 500, { error: 'server error' }); });
   if (pathname.startsWith('/api/avatar/')) return avatarApi(req, res, pathname.slice(12));

@@ -278,7 +278,7 @@ async function drawInsights() {
 // Earnings are added by the Manzeela team (a creator bonus, a share of a sponsorship, a prize); the app takes no
 // money from anyone. A payout goes to a bKash, Nagad or Rocket number and is marked with its transaction ID.
 const WALLET_NAMES = { bkash: 'বিকাশ', nagad: 'নগদ', rocket: 'রকেট' };
-const PAYOUT_STATUS = { pending: 'অপেক্ষায়', paid: 'পাঠানো হয়েছে', rejected: 'বাতিল' };
+const PAYOUT_STATUS = { pending: 'অপেক্ষায়', approved: 'অনুমোদিত — শিগগির পাঠানো হবে', paid: 'পাঠানো হয়েছে', rejected: 'বাতিল' };
 async function creatorApi(path, body) {
   const res = await fetch('api/creator/' + path, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {});
   const data = (res.headers.get('content-type') || '').includes('json') ? await res.json() : {};
@@ -316,8 +316,8 @@ async function drawMoney(box) {
       apply.disabled = true;
       try { await creatorApi('apply', {}); drawMoney(box); } catch { apply.disabled = false; }
     });
-    apply.disabled = d.status === 'applied' || !st.eligible;
-    card.append(apply, el('div', 'form-note', d.status === 'applied' ? 'Manzeela টিম আপনার প্রোফাইল দেখে জানাবে।'
+    apply.disabled = d.status === 'applied' || !st.eligible || d.program === false;
+    card.append(apply, el('div', 'form-note', d.program === false && d.status !== 'applied' ? 'ক্রিয়েটর প্রোগ্রামে এখন নতুন আবেদন সাময়িকভাবে বন্ধ আছে।' : d.status === 'applied' ? 'Manzeela টিম আপনার প্রোফাইল দেখে জানাবে।'
       : d.status === 'rejected' ? 'আগের আবেদনটি গৃহীত হয়নি। প্রোফাইল ঠিক করে আবার আবেদন করতে পারেন।' : 'শর্ত পূরণ হলে আবেদন করা যাবে। অনুমোদনের পর থেকে আয় যোগ হবে।'));
     box.replaceChildren(card);
     return;
@@ -329,8 +329,8 @@ async function drawMoney(box) {
   const split = el('div', 'mc-split');
   for (const [label, v] of [['মোট আয়', m.earned], ['পেয়েছেন', m.paid], ['অপেক্ষায়', m.pending]]) { const x = el('div'); x.append(el('b', null, taka(v)), el('span', null, label)); split.appendChild(x); }
   const out = button('wallet', 'টাকা তুলুন', () => openPayout(m, r, () => drawMoney(box)));
-  out.disabled = m.balance < r.payoutMin || m.pending > 0;
-  card.append(bal, split, out, el('div', 'form-note', m.pending ? 'একটি অনুরোধ অপেক্ষায় আছে। সেটি পাঠানো হলে আবার তোলা যাবে।'
+  out.disabled = m.balance < r.payoutMin || m.pending > 0 || d.program === false;
+  card.append(bal, split, out, el('div', 'form-note', d.program === false ? 'টাকা তোলার অনুরোধ এখন সাময়িকভাবে বন্ধ — আপনার ব্যালান্স ঠিক থাকছে।' : m.pending ? 'একটি অনুরোধ অপেক্ষায় আছে। সেটি পাঠানো হলে আবার তোলা যাবে।'
     : m.balance < r.payoutMin ? `কমপক্ষে ${taka(r.payoutMin)} হলে তোলা যায়।` : 'বিকাশ, নগদ বা রকেটে পাঠানো হয়।'));
 
   // The history: what came in, what went out.

@@ -88,18 +88,41 @@ export async function render(box, { params, go }) {
       h('h3', null, `তিনি রিপোর্ট করেছেন (${num(d.reports.by.length)})`), reportList(d.reports.by, 'about'),
       h('h3', null, 'সীমা'), d.restrictions.length ? h('div', 'stack', ...d.restrictions.map(r => h('div', 'feed-row', h('div', 't', h('b', null, `${r.kind === 'post' ? 'পোস্ট' : 'মেসেজ'} বন্ধ · ${REASONS.find(x => x[0] === r.reason)?.[1] || r.reason}`), h('span', 'muted', `${r.by || 'টিম'} · শেষ ${full(r.until)}`)),
         r.lifted ? badge('তুলে নেওয়া', '') : r.until > Date.now() ? (can('users.restrict') ? button('তুলে নিন', { small: true, onClick: () => act('user/unrestrict', { id: r.id }, 'সীমা তুলে নেওয়া হলো।') }) : badge('চলছে', 'warn')) : badge('শেষ', '')))) : h('p', 'muted', 'কখনো সীমিত করা হয়নি।'),
-      h('p', 'hint', icon('strike'), ' স্ট্রাইক ও আপিল ফেজ ৪-এ আসছে।')),
+      strikesBox(u)),
     contrib: (u, d) => h('div', 'stack', h('div', 'stat-grid', ...[['পয়েন্ট', u.points], ['জানানো ভাড়া', d.contributions.fares.length], ['স্টপের ভাড়া', d.contributions.stopFares], ['রেটিং', d.contributions.ratings], ['জায়গার ছবি', d.contributions.photos], ['মেঠোপথ', d.contributions.gems]]
       .map(([l, v]) => h('div', 'stat', h('b', null, num(v)), h('span', null, l)))),
       d.contributions.fares.length ? h('div', 'card flush', ...d.contributions.fares.map(f => h('div', 'feed-row pad', h('div', 't', h('b', null, `${f.flabel} → ${f.tlabel}`), h('span', 'muted', `৳${num(f.fare)} · ${f.mode}`)), f.ok ? badge('অনুমোদিত', 'ok') : badge('অপেক্ষায়', 'warn'), when(f.created)))) : null),
     money: (u, d) => h('div', 'stack', h('div', 'stat-grid', h('div', 'stat', h('b', null, taka(d.money.earned)), h('span', null, 'মোট আয়'))),
-      d.money.payouts.length ? h('div', 'card flush', ...d.money.payouts.map(p => h('div', 'feed-row pad', h('div', 't', h('b', null, taka(p.amount)), h('span', 'muted', `${p.method}${p.ref ? ' · ' + p.ref : ''}`)), badge(p.status, p.status === 'paid' ? 'ok' : p.status === 'pending' ? 'warn' : ''), when(p.created)))) : empty('কোনো পেআউট নেই।')),
+      d.money.payouts.length ? h('div', 'card flush', ...d.money.payouts.map(p => h('div', 'feed-row pad', h('div', 't', h('b', null, taka(p.amount)), h('span', 'muted', `${p.method}${p.ref ? ' · ' + p.ref : ''}`)), badge({ pending: 'অনুমোদন বাকি', approved: 'অনুমোদিত, পাঠানো বাকি', paid: 'পাঠানো', rejected: 'বাতিল' }[p.status] || p.status, p.status === 'paid' ? 'ok' : p.status === 'rejected' ? '' : 'warn'), when(p.created)))) : empty('কোনো পেআউট নেই।')),
     notes: (u, d) => {
       const ta = attrs(h('textarea', 'input'), { rows: '3', maxlength: '1000', placeholder: 'টিমের জন্য নোট (ব্যবহারকারী দেখবেন না)' });
       return h('div', 'stack', h('div', 'composer', ta, button('নোট রাখুন', { kind: 'primary', small: true, onClick: () => { if (ta.value.trim()) act('user/note', { user: u.id, body: ta.value }, 'নোট রাখা হলো।'); } })),
         ...d.notes.map(n => h('div', 'tmsg note', h('small', null, `${n.name || 'টিম'} · `, when(n.at)), h('p', null, n.body))), d.notes.length ? null : h('p', 'muted', 'এখনো কোনো নোট নেই।'));
     }
   };
+  // strikes, removals and appeals (phase 4), loaded when this tab opens
+  function strikesBox(u) {
+    const box = h('div', 'stack', h('h3', null, 'স্ট্রাইক'), skeleton(2));
+    api('strikes/user?id=' + u.id).then(d => {
+      const OUT = o => o === 'ban' ? 'অ্যাকাউন্ট বন্ধ' : o.startsWith('restrict:') ? `${num(Number(o.split(':')[1]))} দিন পোস্ট বন্ধ` : 'সতর্কবার্তা';
+      const active = d.strikes.filter(s => s.active).length;
+      box.replaceChildren(h('h3', null, `স্ট্রাইক — চালু ${num(active)}টি`),
+        d.strikes.length ? h('div', 'stack', ...d.strikes.map(s => h('div', 'feed-row', h('div', 't', h('b', null, `${REASONS.find(x => x[0] === s.reason)?.[1] || s.reason} · ${OUT(s.outcome)}`),
+          h('span', 'muted', `${s.by.name || 'টিম'} · মেয়াদ ${full(s.expires)}${s.appeal ? ' · আপিল: ' + ({ open: 'অপেক্ষায়', upheld: 'বহাল', overturned: 'বাতিল' })[s.appeal.status] : ''}`)),
+          s.revoked ? badge('বাতিল', '') : s.active ? badge('চালু', 'danger') : badge('মেয়াদ শেষ', ''), when(s.made)))) : h('p', 'muted', 'কোনো স্ট্রাইক নেই।'),
+        h('h3', null, `সরানো কনটেন্ট (${num(d.removals.length)})`),
+        d.removals.length ? h('div', 'stack', ...d.removals.map(r => h('div', 'feed-row', h('div', 't', h('b', null, `${r.type === 'post' ? 'পোস্ট' : 'মন্তব্য'} · ${REASONS.find(x => x[0] === r.reason)?.[1] || r.reason}`), h('span', 'muted', `${r.snippet || '—'} · ${r.by || 'টিম'}`)), when(r.made)))) : h('p', 'muted', 'কিছু সরানো হয়নি।'),
+        h('p', 'hint', 'নীতি: ', d.policy.steps.map((s, i) => `${num(i + 1)}ম: ${OUT(s)}`).join(' · '), ` · ${num(d.policy.expireDays)} দিনে স্ট্রাইকের মেয়াদ শেষ`));
+    }).catch(e => box.replaceChildren(errorBox(e)));
+    return box;
+  }
+  async function strike(u) {
+    let next;
+    try { next = await api('strikes/next?user=' + u.id); } catch (e) { toast(errText(e), { bad: true }); return; }
+    const what = next.step === 'ban' ? 'অ্যাকাউন্ট বন্ধ হবে' : next.step.startsWith('restrict:') ? `${num(Number(next.step.split(':')[1]))} দিন পোস্ট, স্টোরি ও মন্তব্য বন্ধ থাকবে` : 'শুধু সতর্কবার্তা যাবে';
+    const ok = await confirmAction({ tier: 2, title: `${u.name}-কে স্ট্রাইক দেবেন?`, text: `এটা হবে তাঁর ${num(next.number)}ম চালু স্ট্রাইক — নীতি অনুযায়ী ${what}।`, preview: 'আপনার অ্যাকাউন্টে একটি স্ট্রাইক দেওয়া হয়েছে — কারণ ও আপিলের সুযোগ নোটিফিকেশনে।', confirmText: 'স্ট্রাইক দিন' });
+    if (ok) act('strikes/give', { user: u.id, ...ok, source: 'user360' }, 'স্ট্রাইক দেওয়া হলো — তিনি নোটিফিকেশনে কারণ দেখবেন।');
+  }
   function reportList(list, who) {
     if (!list.length) return h('p', 'muted', 'নেই।');
     return h('div', 'stack', ...list.map(r => h('div', 'feed-row', h('div', 't', h('b', null, r.reason), h('span', 'muted', `${r[who] || '—'} · ${r.status === 'open' ? 'খোলা' : r.outcome === 'dismissed' ? 'ব্যবস্থা লাগেনি' : r.outcome === 'actioned' ? 'ব্যবস্থা নেওয়া হয়েছে' : 'দেখা হয়েছে'}`)), when(r.made))));
@@ -123,6 +146,7 @@ export async function render(box, { params, go }) {
       if (ok) act('user/verify', { user: u.id, on: !u.verified, ...ok }, u.verified ? 'ব্যাজ সরানো হলো।' : 'ব্যাজ দেওয়া হলো।');
     } });
     if (can('users.restrict') && !self) items.push({ text: 'সীমিত করুন…', ic: 'clock', run: () => restrict(u) });
+    if (can('content.remove') && !self && !u.role) items.push({ text: 'স্ট্রাইক দিন…', ic: 'strike', run: () => strike(u) });
     if (can('users.ban') && !self) {
       items.push({ text: u.banned && !u.deletedAt ? 'অ্যাকাউন্ট চালু করুন' : 'অ্যাকাউন্ট বন্ধ করুন', ic: 'shield', danger: !u.banned, run: async () => {
         if (u.banned) { const ok = await confirmAction({ tier: 2, title: 'অ্যাকাউন্ট আবার চালু করবেন?', danger: false, reasons: null, confirmText: 'চালু করুন' }); if (ok) act('user/ban', { user: u.id, on: false, ...ok }, 'অ্যাকাউন্ট চালু হলো।'); return; }

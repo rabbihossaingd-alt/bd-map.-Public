@@ -4498,3 +4498,14 @@ button.dg-wiki { background: none; border: 0; padding: 0; cursor: pointer; font:
 .dg-rail.only-add .gm-add .ph::after { display: none; }
 .dg-rail.only-add .gm-plus { font-size: 30px; }
 .dg-rail.only-add .gm-add .t { display: grid; gap: 3px; padding: 0; }
+
+/* A removal, a strike or an appeal's answer (opened from its notification), and the appeal form */
+.notif-row > .notif-team { display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); border-radius: 50%; flex: none; }
+.notif-row > .notif-team svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; }
+.mod-lead { margin: 0 0 6px; line-height: 1.6; }
+.mod-kv { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 14.5px; }
+.mod-kv span { color: var(--muted); } .mod-kv b { text-align: right; }
+.mod-quote { margin: 12px 0 0; padding: 10px 14px; border-left: 3px solid var(--line); background: var(--raised); border-radius: 0 var(--r-sm) var(--r-sm) 0; color: var(--muted); white-space: pre-wrap; overflow-wrap: anywhere; }
+.mod-note { margin: 12px 0 0; font-size: 13.5px; line-height: 1.55; color: var(--muted); } .mod-note.ok { color: var(--accent); font-weight: 600; }
+.mod-sub { display: block; margin: 18px 0 8px; font-size: 14.5px; }
+.mod-text { width: 100%; box-sizing: border-box; border: 0; outline: none; background: var(--raised); color: var(--ink); border-radius: var(--r-sm); padding: 12px 14px; font: inherit; font-size: 16px; resize: vertical; }

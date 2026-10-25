@@ -5,7 +5,7 @@ import { attrs, badge, button, empty, errorBox, h, icon, select, skeleton, tabs,
 import { num, waited } from '../fmt.js';
 
 const TYPES = [['ticket', 'সাপোর্ট', 'life'], ['report', 'রিপোর্ট', 'flag'], ['fare', 'ভাড়া', 'tag'], ['stopfare', 'স্টপের ভাড়া', 'bus'], ['photo', 'জায়গার ছবি', 'pin'], ['gem', 'মেঠোপথ', 'leaf'],
-  ['payout', 'পেআউট', 'wallet'], ['creator', 'ক্রিয়েটর', 'coins'], ['verify', 'ব্যাজ', 'checkc']];
+  ['payout', 'পেআউট · অনুমোদন', 'wallet'], ['payout-send', 'পেআউট · পাঠানো', 'wallet'], ['appeal', 'আপিল', 'strike'], ['creator', 'ক্রিয়েটর', 'coins'], ['verify', 'ব্যাজ', 'checkc']];
 const typeInfo = t => TYPES.find(x => x[0] === t) || [t, t, 'dot'];
 
 export async function render(box, { params, go }) {
@@ -67,7 +67,7 @@ export async function render(box, { params, go }) {
   const onAssign = () => load(), onCounts = () => { if (document.visibilityState === 'visible') load(); };
   document.addEventListener('mz:assign', onAssign);
   let last = '';
-  const countsChanged = e => { const s = JSON.stringify([e.detail.support, e.detail.reports, e.detail.fares, e.detail.photos, e.detail.gems, e.detail.payouts]); if (last && s !== last) onCounts(); last = s; };
+  const countsChanged = e => { const s = JSON.stringify([e.detail.support, e.detail.reports, e.detail.fares, e.detail.photos, e.detail.gems, e.detail.payouts, e.detail.appeals]); if (last && s !== last) onCounts(); last = s; };
   document.addEventListener('mz:counts', countsChanged);
   if (params[0] === 'next') { await load(); takeNext(); } else await load();
   return { key, destroy: () => { document.removeEventListener('mz:assign', onAssign); document.removeEventListener('mz:counts', countsChanged); }, onParams: p => { type = p[0] && p[0] !== 'next' ? p[0] : ''; typeSel.value = type; load(); } };
