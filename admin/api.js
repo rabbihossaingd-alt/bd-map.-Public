@@ -1,4 +1,4 @@
-// Talking to /api/admin/v2 (and, until each page moves, the older /api/admin). Every change carries the CSRF token;
+// Talking to /api/admin/v2. Every change carries the CSRF token;
 // a locked panel shows the unlock screen; an action that needs a fresh code asks for it once and tries again.
 export const session = { me: null, csrf: '' };
 const listeners = { locked: [], stepup: [] };
@@ -32,5 +32,4 @@ async function call(base, path, body, { retry = true } = {}) {
   throw err;
 }
 export const api = (path, body, opt) => call('api/admin/v2/', path, body, opt);
-export const legacy = (path, body) => call('api/admin/', path, body);
 export const can = perm => !!(session.me && session.me.perms.includes(perm));

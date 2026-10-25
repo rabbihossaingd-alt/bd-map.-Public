@@ -1,12 +1,12 @@
 // The frame around every page: the menu (grouped, collapsible, with waiting-work badges, only what the role may
 // use), the top bar (where you are, search, who is online, the bell, theme, profile), the phone's tab bar, the
 // address-driven router (#/page/id — links and the back button work), shortcuts, and the live stream.
-import { api, can, legacy, on, session, errText } from './api.js';
+import { api, can, on, session, errText } from './api.js';
 import { attrs, avatar, button, closeAllModals, closeDrawer, drawerOpen, drawerStep, h, icon, menu, modal, modalOpen, openDrawer, toast, badge } from './ui.js';
 import { num, ago } from './fmt.js';
 import { openPalette, paletteOpen } from './palette.js';
 
-// The menu. status: 'v2' (built), 'legacy' (still in the older panel; opens there), or the phase it comes in.
+// The menu (every page is built; the older panel is gone).
 // count: which waiting-work number shows beside it.
 export const NAV = [
   ['প্রধান', [
@@ -42,14 +42,14 @@ export const NAV = [
     { key: 'payouts', title: 'পেআউট', ic: 'wallet', perm: 'payouts.view', status: 'v2', count: 'payouts' },
     { key: 'ledger', title: 'লেজার', ic: 'book', perm: 'payouts.view', status: 'v2' }]],
   ['অ্যানালিটিক্স', [
-    { key: 'growth', title: 'বৃদ্ধি ও ধরে রাখা', ic: 'chart', perm: 'analytics.view', status: 5 },
-    { key: 'features', title: 'ফিচার ব্যবহার', ic: 'activity', perm: 'analytics.view', status: 5 },
-    { key: 'searches', title: 'সার্চ ইনসাইট', ic: 'search', perm: 'analytics.view', status: 5 }]],
+    { key: 'growth', title: 'বৃদ্ধি ও ধরে রাখা', ic: 'chart', perm: 'analytics.view', status: 'v2' },
+    { key: 'features', title: 'ফিচার ব্যবহার', ic: 'activity', perm: 'analytics.view', status: 'v2' },
+    { key: 'searches', title: 'সার্চ ইনসাইট', ic: 'search', perm: 'analytics.view', status: 'v2' }]],
   ['সিস্টেম', [
-    { key: 'flags', title: 'ফিচার ফ্ল্যাগ', ic: 'toggle', perm: 'flags.manage', status: 'legacy', legacy: 'settings' },
-    { key: 'notices', title: 'ঘোষণা ও নোটিফিকেশন', ic: 'megaphone', perm: 'notice.manage', status: 'legacy', legacy: 'settings' },
+    { key: 'flags', title: 'ফিচার ফ্ল্যাগ', ic: 'toggle', perm: 'flags.manage', status: 'v2' },
+    { key: 'notices', title: 'ঘোষণা ও নোটিফিকেশন', ic: 'megaphone', perm: 'notice.manage', status: 'v2' },
     { key: 'audit', title: 'কাজের খতিয়ান', ic: 'list', perm: 'audit.view', status: 'v2' },
-    { key: 'health', title: 'সিস্টেমের অবস্থা', ic: 'server', perm: 'system.view', status: 'legacy', legacy: 'settings' },
+    { key: 'health', title: 'সিস্টেমের অবস্থা', ic: 'server', perm: 'system.view', status: 'v2' },
     { key: 'prefs', title: 'প্যানেল সেটিংস', ic: 'cog', perm: null, status: 'v2' }]]
 ];
 const ALL_PAGES = NAV.flatMap(([group, items]) => items.map(p => ({ ...p, group })));
@@ -57,6 +57,7 @@ const PAGE_FILES = { command: './pages/command.js', audit: './pages/audit.js', t
   macros: './pages/macros.js', users: './pages/users.js', reports: './pages/reports.js',
   posts: './pages/content.js', stories: './pages/content.js', comments: './pages/content.js', sounds: './pages/content.js', groups: './pages/content.js',
   media: './pages/media.js', fares: './pages/fares.js', photos: './pages/review.js', gems: './pages/review.js', routes: './pages/routes.js', intercity: './pages/intercity.js', quality: './pages/quality.js',
+  growth: './pages/analytics.js', features: './pages/analytics.js', searches: './pages/analytics.js', flags: './pages/flags.js', notices: './pages/notices.js', health: './pages/health.js',
   creators: './pages/creators.js', payouts: './pages/payouts.js', ledger: './pages/ledger.js', strikes: './pages/strikes.js', modqueue: './pages/modqueue.js', risk: './pages/risk.js' };
 export const pagesFor = () => ALL_PAGES.filter(p => !p.perm || can(p.perm));
 
@@ -81,7 +82,6 @@ export function buildShell(root) {
     navList.append(h('div', 'nav-group', group));
     for (const p of allowed) {
       const a = attrs(h('a', 'nav-item', icon(p.ic), h('span', 'label', p.title)), { href: '#/' + p.key, title: p.title, 'data-key': p.key });
-      if (typeof p.status === 'number') a.append(h('small', 'phase', `ফেজ ${num(p.status)}`));
       if (p.count) { const b = h('em', 'nbadge'); b.hidden = true; a.append(b); badgeEls.set(p.key, b); }
       a.addEventListener('click', () => document.body.classList.remove('side-open'));
       navList.append(a);
@@ -134,14 +134,13 @@ function toggleTheme(btn) {
 }
 async function lockNow() { try { await api('lock', {}); } catch { /* locked anyway */ } location.reload(); }
 function palette() { openPalette({ pages: pagesFor(), go, openPerson: u => can('users.view') ? go('#/users/' + u.id) : openPerson(u) }); }
-// a person from the palette: the short card until the full 360 view comes (phase 2)
+// a person from the palette, for a role that cannot open the full 360 view: a short card
 function openPerson(u) {
   openDrawer({ title: 'ব্যবহারকারী', ref: 'user:' + u.id, body: h('div', 'stack',
     h('div', 'person lg', avatar(u, 'lg'), h('div', 't', h('b', null, u.name), h('span', null, `@${u.username} · ID ${num(u.id)}`))),
     h('div', 'kv', h('span', null, 'ই-মেইল'), h('b', 'mono', u.email), can('pii.unmask') || can('pii.unmask.ticket') ? button('দেখান', { small: true, ic: 'eye', onClick: async e => { try { const r = await api('pii', { user: u.id, kind: 'email' }); e.currentTarget.previousSibling.textContent = r.value; toast('দেখানো হলো — খতিয়ানে লেখা থাকল।'); } catch (er) { toast(errText(er), { bad: true }); } } }) : null),
     h('div', 'kv', h('span', null, 'অবস্থা'), u.banned ? badge('বন্ধ', 'danger') : badge('সক্রিয়', 'ok'), u.verified ? badge('ভেরিফায়েড', 'info') : null),
-    h('p', 'hint', 'পূর্ণ "ব্যবহারকারী ৩৬০" ফেজ ২-এ আসছে। এখনকার মতো পুরনো প্যানেলে সব কাজ করা যায়।')),
-    foot: [attrs(h('a', 'btn secondary', icon('ext'), h('span', null, 'পুরনো প্যানেলে খুলুন')), { href: 'admin-old.html#users', target: '_blank' })] });
+    h('p', 'hint', 'পূর্ণ ৩৬০ দেখতে ব্যবহারকারী দেখার অনুমতি লাগে।')) });
   history.pushState({ drawer: 1 }, '', location.hash);
 }
 addEventListener('popstate', e => { if (drawerOpen() && !(e.state && e.state.drawer)) closeDrawer(); });
@@ -208,14 +207,9 @@ async function route() {
   current = { key: page.key, inst: null };
   const box = h('div', 'page');
   shell.main.replaceChildren(box);
-  if (page.status === 'v2') {
-    const mod = await import(PAGE_FILES[page.key]);
-    if (current.key !== page.key) return;
-    current.inst = await mod.render(box, { params, page, go, counts });
-  } else {
-    const mod = await import('./pages/later.js');
-    current.inst = mod.render(box, { page });
-  }
+  const mod = await import(PAGE_FILES[page.key]);
+  if (current.key !== page.key) return;
+  current.inst = await mod.render(box, { params, page, go, counts });
   shell.main.focus({ preventScroll: true });
   scrollTo(0, 0);
 }

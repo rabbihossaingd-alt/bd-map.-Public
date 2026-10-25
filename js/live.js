@@ -221,6 +221,7 @@ async function startStream() {
 
 // ---- watch: full screen, or inside a page of the Stream pager (`into`) ----
 async function watchLive(card, into) {
+  mzPage('live');
   if (!ME) { needLogin('লাইভ দেখতে লগইন করুন'); return; }
   if (LIVE && LIVE.host) return;
   if (LIVE && LIVE.close) LIVE.close();
@@ -293,6 +294,7 @@ async function watchLive(card, into) {
 
 // ---- Stream: only lives, one per screen, swiped up and down like reels ----
 async function openLiveHub() {
+  mzPage('live');
   const box = el('div', 'live-hub');
   const top = el('div', 'lh-top');
   const x = el('button', 'lv-icon');

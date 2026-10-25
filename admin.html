@@ -13,6 +13,9 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anek+Bangla:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="css/admin2.css">
+<!-- the panel's modules, fetched together instead of one after another (on a slow phone network that is ~1 s) -->
+<link rel="modulepreload" href="admin/app.js"><link rel="modulepreload" href="admin/api.js"><link rel="modulepreload" href="admin/ui.js"><link rel="modulepreload" href="admin/fmt.js">
+<link rel="modulepreload" href="admin/shell.js"><link rel="modulepreload" href="admin/palette.js"><link rel="modulepreload" href="admin/table.js"><link rel="modulepreload" href="admin/chart.js">
 </head>
 <body>
 <div id="app"><div class="gate"><div class="gate-card"><span class="logo lg"></span><p class="muted">লোড হচ্ছে…</p></div></div></div>

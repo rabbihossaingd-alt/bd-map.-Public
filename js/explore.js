@@ -1269,13 +1269,15 @@ const NOTIFY_TEXT = {
   removed: ['টিম আপনার একটি পোস্ট নিয়ম ভাঙার জন্য সরিয়েছে। কারণ ও আপিল দেখতে চাপুন।', 'The team removed one of your posts for breaking the rules. Tap for why, and to appeal.'],
   removedComment: ['টিম আপনার একটি মন্তব্য নিয়ম ভাঙার জন্য সরিয়েছে। কারণ ও আপিল দেখতে চাপুন।', 'The team removed one of your comments for breaking the rules. Tap for why, and to appeal.'],
   strike: ['আপনার অ্যাকাউন্টে একটি স্ট্রাইক দেওয়া হয়েছে। কারণ ও আপিল দেখতে চাপুন।', 'gave your account a strike. Tap for why, and to appeal.'],
-  appeal: ['আপনার আপিলের সিদ্ধান্ত হয়েছে। দেখতে চাপুন।', 'decided on your appeal. Tap to see.']
+  appeal: ['আপনার আপিলের সিদ্ধান্ত হয়েছে। দেখতে চাপুন।', 'decided on your appeal. Tap to see.'],
+  broadcast: ['', '']
 };
-const MOD_KINDS = new Set(['removed', 'strike', 'appeal']);
+const MOD_KINDS = new Set(['removed', 'strike', 'appeal', 'broadcast']);
 // A removal, a strike or an appeal's answer, opened from its notification: the reason, what it means, and (within
 // 30 days, once) a form to appeal. The team member who decided does not review the appeal.
 function openModNotice(m) {
   const T = (bn, en) => LANG === 'en' ? en : bn;
+  if (m.type === 'broadcast') { openModal(m.title || 'Manzeela', '', [Object.assign(el('p', 'mod-lead no-tr'), { textContent: LANG === 'en' && m.bodyEn ? m.bodyEn : m.body })], [button('check', T('ঠিক আছে', 'OK'), closeModal)]); return; }
   const day = ts => new Date(ts).toLocaleDateString(NUM_LOCALE, { day: 'numeric', month: 'long', year: 'numeric' });
   const outcome = o => o === 'ban' ? T('অ্যাকাউন্ট বন্ধ', 'the account closed') : String(o).startsWith('restrict:') ? T(num(Number(o.split(':')[1])) + ' দিন পোস্ট, স্টোরি ও মন্তব্য বন্ধ', 'no posts, stories or comments for ' + o.split(':')[1] + ' days') : T('সতর্কবার্তা', 'a warning');
   const quote = text => Object.assign(el('blockquote', 'mod-quote no-tr'), { textContent: text });
@@ -1370,7 +1372,8 @@ async function openNotifications() {
     const who = Object.assign(el('b'), { textContent: MOD_KINDS.has(n.kind) ? 'Manzeela' : n.actor.username || n.actor.name });   // a removal, a strike or an appeal's answer comes from the team, not a person
     if (isVerified(n.actor) && !MOD_KINDS.has(n.kind)) who.appendChild(vbadge());
     const [bn, en] = NOTIFY_TEXT[n.kind === 'removed' && n.mod && n.mod.what === 'comment' ? 'removedComment' : n.kind] || ['', ''];
-    t.append(who, document.createTextNode(' ' + (LANG === 'en' ? en : bn) + (n.kind === 'comment' ? ' ' + n.body : '') + ' '), el('time', null, shortAgo(n.created)));
+    const said = n.kind === 'broadcast' && n.mod ? (LANG === 'en' && n.mod.bodyEn ? n.mod.bodyEn : n.mod.body) : (LANG === 'en' ? en : bn) + (n.kind === 'comment' ? ' ' + n.body : '');
+    t.append(who, document.createTextNode(' ' + said + ' '), el('time', null, shortAgo(n.created)));
     row.append(MOD_KINDS.has(n.kind) ? Object.assign(el('span', 'avatar notif-team'), { innerHTML: svg('shield') }) : avatar(n.actor), t);
     if (MOD_KINDS.has(n.kind) && n.mod) row.addEventListener('click', () => { close(); setTimeout(() => openModNotice(n.mod), 280); });
     if (n.kind === 'follow' || n.kind === 'followback') {

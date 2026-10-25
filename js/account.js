@@ -500,14 +500,15 @@ acctApi('me').then(reply => { if (reply.user) signedIn(reply); }).catch(() => {
 });
 
 // A notice from the people who run the app, shown once at the top of Home until it is closed or changed.
-fetch('api/notice').then(r => r.json()).then(({ text }) => {
+fetch('api/notice').then(r => r.json()).then(({ text, kind, readonly }) => {
+  if (readonly && readonly.on) mzReadonly(readonly.message);
   let closed = '';
   try { closed = localStorage.getItem('bdmap.notice') || ''; } catch { /* storage unavailable */ }
   if (!text || text === closed) return;
-  const bar = el('div', 'notice');
+  const bar = el('div', 'notice' + (kind === 'warn' || kind === 'urgent' ? ' ' + kind : ''));
   const x = el('button', 'icon-btn');
   x.innerHTML = svg('close');
   x.addEventListener('click', () => { bar.remove(); try { localStorage.setItem('bdmap.notice', text); } catch { /* storage unavailable */ } });
-  bar.append(Object.assign(el('i'), { innerHTML: svg('bell') }), Object.assign(el('span', 'no-tr'), { textContent: text }), x);
+  bar.append(Object.assign(el('i'), { innerHTML: svg(kind === 'urgent' || kind === 'warn' ? 'info' : 'bell') }), Object.assign(el('span', 'no-tr'), { textContent: text }), x);
   $('page-home').prepend(bar);
 }).catch(() => {});

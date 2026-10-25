@@ -4509,3 +4509,9 @@ button.dg-wiki { background: none; border: 0; padding: 0; cursor: pointer; font:
 .mod-note { margin: 12px 0 0; font-size: 13.5px; line-height: 1.55; color: var(--muted); } .mod-note.ok { color: var(--accent); font-weight: 600; }
 .mod-sub { display: block; margin: 18px 0 8px; font-size: 14.5px; }
 .mod-text { width: 100%; box-sizing: border-box; border: 0; outline: none; background: var(--raised); color: var(--ink); border-radius: var(--r-sm); padding: 12px 14px; font: inherit; font-size: 16px; resize: vertical; }
+
+/* the banner's kinds (admin panel → ঘোষণা), and the read-only bar */
+.notice.warn { background: color-mix(in srgb, #f59e0b 16%, var(--surface)); } .notice.warn > i svg { stroke: #b45309; }
+.notice.urgent { background: color-mix(in srgb, #ef4444 14%, var(--surface)); } .notice.urgent > i svg { stroke: #dc2626; }
+.ro-bar { position: sticky; top: 0; z-index: 900; display: flex; align-items: center; gap: 10px; padding: 10px 16px; background: #b45309; color: #fff; font-size: 14px; font-weight: 600; }
+.ro-bar i svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; display: block; } .ro-bar span { flex: 1; }

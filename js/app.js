@@ -267,6 +267,7 @@ function route() {
   for (const a of document.querySelectorAll('[data-nav]')) a.classList.toggle('on', a.dataset.nav === current);
   document.body.style.overflow = current === 'trip' ? 'hidden' : '';
   document.body.dataset.page = current;
+  mzPage(current);
   scrollTo(0, 0);
   if (enter[current]) enter[current]();
   requestAnimationFrame(() => revealOnScroll($('page-' + current)));
@@ -299,7 +300,7 @@ function wireSuggest(input, box, onPick, onType) {
     t.append(el('b', null, title), el('span', null, sub));
     s.append(ic(icon), t);
     // mousedown so the pick lands before the input's blur hides the list
-    s.addEventListener('mousedown', e => { e.preventDefault(); box.hidden = true; input.blur(); onPick({ lat, lon, label: title }); });   // the keyboard goes; onPick may open the next field
+    s.addEventListener('mousedown', e => { e.preventDefault(); if (input.value.trim().length >= 2) mzTrack({ s: input.value, k: 'place', n: box.querySelectorAll('.sug').length, p: title }); box.hidden = true; input.blur(); onPick({ lat, lon, label: title }); });   // the keyboard goes; onPick may open the next field
     box.appendChild(s);
   };
   // Nothing typed yet: offer the places most people go to.
@@ -324,7 +325,7 @@ function wireSuggest(input, box, onPick, onType) {
       // Late answers are dropped: the text has changed, or the user has already left the field.
       if (mine !== seq || document.activeElement !== input) return;
       for (const p of list) addItem('pin', p.title, p.sub, p.lat, p.lon);
-      if (!box.children.length) box.appendChild(el('div', 'empty', 'কিছু পাওয়া যায়নি — অন্য বানানে লিখে দেখুন, অথবা ম্যাপে চাপ দিয়ে বেছে নিন।'));
+      if (!box.children.length) { box.appendChild(el('div', 'empty', 'কিছু পাওয়া যায়নি — অন্য বানানে লিখে দেখুন, অথবা ম্যাপে চাপ দিয়ে বেছে নিন।')); mzTrack({ s: q, k: 'place', n: 0 }); }
       box.hidden = false;
     }, 450);
   });

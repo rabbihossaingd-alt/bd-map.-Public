@@ -370,3 +370,32 @@ audio { height: 32px; max-width: 240px; }
 .stack.tight .badge { white-space: normal; text-align: left; line-height: 1.35; }
 .dt td .person .t b { white-space: nowrap; }
 @media (max-width: 600px) { .kpi-grid { grid-template-columns: 1fr 1fr; } .kpi-grid .kpi { padding: 12px; } .kpi-grid .k-val { font-size: 20px; } }
+
+/* ===== phase 5 ===== */
+.av.xs { width: 18px; height: 18px; font-size: 9px; }
+.seg { display: inline-flex; gap: 2px; padding: 2px; border-radius: var(--r2); background: var(--raised); }
+.tbl.cohort td.heat { font-variant-numeric: tabular-nums; }
+.tbl.cohort td.heat[data-level="1"] { background: color-mix(in srgb, var(--brand) 10%, transparent); } .tbl.cohort td.heat[data-level="2"] { background: color-mix(in srgb, var(--brand) 20%, transparent); }
+.tbl.cohort td.heat[data-level="3"] { background: color-mix(in srgb, var(--brand) 32%, transparent); } .tbl.cohort td.heat[data-level="4"] { background: color-mix(in srgb, var(--brand) 46%, transparent); }
+.tbl.cohort td.heat[data-level="5"] { background: color-mix(in srgb, var(--brand) 62%, transparent); color: #fff; }
+.card.funnel { display: grid; gap: 12px; padding: 16px; } .f-step { display: grid; gap: 6px; } .f-step .t { display: flex; justify-content: space-between; gap: 10px; }
+.f-bar { height: 10px; border-radius: 999px; background: var(--raised); overflow: hidden; } .f-bar i { display: block; height: 100%; border-radius: 999px; background: var(--brand); }
+.card.flag-card { display: grid; gap: 8px; padding: 14px 16px; } .card.flag-card.off { border-color: color-mix(in srgb, var(--danger) 40%, var(--border)); }
+.flag-head { display: flex; align-items: center; gap: 14px; } .flag-head .t { display: grid; gap: 2px; flex: 1; min-width: 0; }
+.flag-more { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.chip-p { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px 2px 3px; border-radius: 999px; background: var(--raised); font-size: 12px; }
+.card.kill { display: flex; align-items: center; gap: 16px; padding: 16px; border-color: color-mix(in srgb, var(--danger) 35%, var(--border)); } .card.kill .t { display: grid; gap: 4px; flex: 1; }
+.card.kill.on { background: var(--danger-soft); }
+.banner.flat { border: 0; border-radius: var(--r2); margin-bottom: 14px; }
+input.range { width: 100%; accent-color: var(--brand); }
+.card.notice-form { display: grid; gap: 12px; padding: 16px; }
+.preview-box { display: grid; gap: 6px; padding: 12px; border-radius: var(--r2); background: var(--raised); }
+.app-notice { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 16px; background: var(--info-soft); color: var(--text); font-size: 14px; }
+.app-notice span { flex: 1; } .app-notice .i { flex: none; } .app-notice.warn { background: var(--warn-soft); } .app-notice.urgent { background: var(--danger-soft); } .app-notice.urgent .i:first-child { color: var(--danger); }
+.card.ann-row { display: grid; gap: 6px; padding: 12px 14px; } .card.ann-row p { margin: 0; white-space: pre-wrap; word-break: break-word; }
+.reach { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 13.5px; } .reach b { color: var(--text); }
+.health-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; margin-bottom: 14px; }
+.card.hcheck { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; } .card.hcheck .t { display: grid; gap: 2px; min-width: 0; } .card.hcheck .sdot { margin-top: 6px; }
+.card.hcheck.danger { border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); } .card.hcheck.warn { border-color: color-mix(in srgb, var(--warn) 45%, var(--border)); }
+@media (max-width: 600px) { .card.kill { flex-direction: column; align-items: stretch; } .two-col { grid-template-columns: 1fr; } .page-head .row-acts { width: 100%; } }
+.tip[hidden] { display: none; }   /* the chart tooltip stays hidden until the pointer is over the chart */

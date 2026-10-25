@@ -774,3 +774,37 @@ function dragSheet(sheet, grip, { snaps, onClose, onTap, box = () => innerHeight
   grip.addEventListener('pointercancel', end);
   return { snap(i, animate = true) { setH(snaps[i] * box(), animate); } };
 }
+
+// ---- How many use each part of the app, and what they search for (admin panel → অ্যানালিটিক্স) ----
+// A page's name once a day on this device, or a search's words with how many results it had and what was picked —
+// never who searched. A random id for this device (no account needed) keeps one person from counting twice a day.
+const MZ_DEVICE = (() => { try { let d = localStorage.getItem('bdmap.dev'); if (!d) { d = Math.random().toString(36).slice(2, 12) + Date.now().toString(36); localStorage.setItem('bdmap.dev', d); } return d; } catch { return ''; } })();
+function mzTrack(body) {
+  try {
+    const b = JSON.stringify({ ...body, d: MZ_DEVICE });
+    if (navigator.sendBeacon && navigator.sendBeacon('api/t', new Blob([b], { type: 'application/json' }))) return;
+    fetch('api/t', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: b, keepalive: true }).catch(() => {});
+  } catch { /* counting is never worth an error */ }
+}
+const mzSeen = new Set();
+function mzPage(name) { const k = new Date().toDateString() + '|' + name; if (mzSeen.has(k)) return; mzSeen.add(k); mzTrack({ f: name }); }
+
+// ---- The read-only switch (admin panel → ফিচার ফ্ল্যাগ → কিল-সুইচ) ----
+// While it is on the server answers every change with 503 'readonly': a bar at the top says so, once, with the team's message.
+function mzReadonly(message) {
+  if (document.getElementById('ro-bar')) return;
+  const bar = el('div', 'ro-bar');
+  bar.id = 'ro-bar';
+  bar.setAttribute('role', 'status');
+  bar.append(Object.assign(el('i'), { innerHTML: svg('clock') }), Object.assign(el('span', 'no-tr'), { textContent: message || 'রক্ষণাবেক্ষণ চলছে — কিছুক্ষণের জন্য নতুন কিছু পাঠানো যাবে না।' }));
+  document.body.prepend(bar);
+  document.body.classList.add('readonly');
+}
+{
+  const mzFetch = window.fetch.bind(window);
+  window.fetch = async (...args) => {
+    const res = await mzFetch(...args);
+    if (res.status === 503 && (res.headers.get('content-type') || '').includes('json')) res.clone().json().then(d => { if (d && d.error === 'readonly') mzReadonly(d.message); }).catch(() => {});
+    return res;
+  };
+}

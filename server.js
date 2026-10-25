@@ -127,7 +127,10 @@ const mimeBody = (text, html, b64) => {
   return [`Content-Type: multipart/alternative; boundary="${edge}"`, '', `--${edge}`, ...part('text/plain', text), `--${edge}`, ...part('text/html', html), `--${edge}--`];
 };
 // m: a mail from lib/mail.cjs — { subject, text, html }
-function sendMail(to, m) {
+const MAIL_STATS = { day: '', sent: 0, failed: 0 };
+const mailTally = ok => { const d = new Date(Date.now() + 6 * 36e5).toISOString().slice(0, 10); if (MAIL_STATS.day !== d) Object.assign(MAIL_STATS, { day: d, sent: 0, failed: 0 }); MAIL_STATS[ok ? 'sent' : 'failed']++; };
+function sendMail(to, m) { return sendMailNow(to, m).then(r => { mailTally(true); return r; }, e => { mailTally(false); throw e; }); }
+function sendMailNow(to, m) {
   const { subject, text, html } = m;
   if (BREVO || RESEND) return sendByApi(to, subject, text, html);
   return new Promise((resolve, reject) => {
@@ -348,7 +351,9 @@ function backupOk(userId, code) {
 const secondStep = new Map();  // ticket -> { user, device, expires }: a correct e-mail code waiting for the second step
 setInterval(() => { const now = Date.now(); for (const [k, v] of secondStep) if (v.expires < now) secondStep.delete(k); }, 60_000).unref();
 // Switches the owner can flip from the admin panel.
-const flagOn = (key, def = true) => { const v = (db.prepare('SELECT value FROM settings WHERE key = ?').get('flag_' + key) || {}).value; return v == null ? def : v === '1'; };
+// Since admin v2 phase 5 the panel's feature_flags table decides (lib/admin-system.cjs), per person for a share rollout.
+let SYS = null;
+const flagOn = (key, def = true, uid = 0) => { if (SYS) return SYS.flag(key, uid, def); const v = (db.prepare('SELECT value FROM settings WHERE key = ?').get('flag_' + key) || {}).value; return v == null ? def : v === '1'; };
 
 function cleanEmail(e) {
   if (typeof e !== 'string') return null;
@@ -1231,6 +1236,7 @@ async function chatApi(req, res, action, query) {
   // Calls need an open conversation. A message does not: until it is accepted it is a request, and limited.
   if (action !== 'send' && !open) return json(res, 403, { error: 'friends' });
   if (action === 'send') {
+    if (!flagOn('chat', true, me.id) && me.role === 'user') return json(res, 403, { error: 'off' });
     if (restricted(me.id, 'message')) return json(res, 403, { error: 'restricted' });
     if (!allowSend(me.id)) return json(res, 429, { error: 'slow' });
     if (!open && count('SELECT COUNT(*) AS n FROM messages WHERE a = ? AND b = ? AND sender = ?', a, b, me.id) >= REQUEST_LIMIT) return json(res, 403, { error: 'request' });
@@ -1252,6 +1258,7 @@ async function chatApi(req, res, action, query) {
   }
   if (action === 'signal') {                         // call set-up, passed straight to the other person
     if (!body.data || typeof body.data !== 'object') return json(res, 400, { error: 'bad request' });
+    if (body.data.type === 'offer' && !flagOn('chat', true, me.id) && me.role === 'user') return json(res, 403, { error: 'off' });   // no new calls while switched off
     push(other, 'signal', { from: me.id, data: body.data });
     // A call to someone whose app is closed: their phone gets an "incoming call" notification, and the call waits here
     // for 40 seconds (with the caller's network details), handed to their app the moment it opens (see 'stream').
@@ -1294,6 +1301,7 @@ function groupAction(res, me, action, body) {
   const gid = Number(body.group), mem = gq.member.get(gid, me.id);
   if (!mem) return json(res, 403, { error: 'group' });
   if (action === 'group-send') {
+    if (!flagOn('chat', true, me.id) && me.role === 'user') return json(res, 403, { error: 'off' });
     if (restricted(me.id, 'message')) return json(res, 403, { error: 'restricted' });
     if (!allowSend(me.id)) return json(res, 429, { error: 'slow' });
     if (body.kind === 'call') return json(res, 400, { error: 'bad request' });
@@ -1319,6 +1327,7 @@ function groupAction(res, me, action, body) {
     return json(res, 200, { ok: true });
   }
   if (action === 'group-typing') { tellGroup(gid, 'typing', { from: me.id, group: gid }, me.id); return json(res, 200, { ok: true }); }
+  if (action === 'group-call' && !flagOn('chat', true, me.id) && me.role === 'user') return json(res, 403, { error: 'off' });
   if (action === 'group-call') {                     // start the group's call, or join the one going on
     let c = groupCalls.get(gid);
     const ring = !c;
@@ -1946,7 +1955,7 @@ async function exploreApi(req, res, action, query) {
   let body;
   try { body = JSON.parse(await readBody(req, 600_000)) || {}; } catch { return json(res, 400, { error: 'bad request' }); }
 
-  if ((action === 'post' || action === 'story') && !flagOn('posts') && me.role === 'user') return json(res, 403, { error: 'closed' });
+  if ((action === 'post' || action === 'story') && !flagOn('posts', true, me.id) && me.role === 'user') return json(res, 403, { error: 'closed' });
   // an account an admin restricted from posting (admin v2): no posts, stories or comments until it ends
   if ((action === 'post' || action === 'story' || action === 'comment') && restricted(me.id, 'post')) return json(res, 403, { error: 'restricted' });
   if (action === 'post' && !body.media) {              // words only
@@ -2290,6 +2299,7 @@ async function creatorApi(req, res, action) {
   const now = Date.now(), status = creatorOf(me.id);
   // the team can close the program for a while (admin panel → ক্রিয়েটর → নিয়ম): no new applications or payout requests
   if ((action === 'apply' || action === 'payout') && !creatorProgramOpen()) return json(res, 403, { error: 'closed' });
+  if (action === 'payout' && !flagOn('payouts', true, me.id)) return json(res, 403, { error: 'closed' });
   if (action === 'apply') {
     if (status === 'approved' || status === 'applied') return json(res, 200, { status });
     if (!creatorStanding(me).eligible) return json(res, 403, { error: 'rules' });
@@ -2337,7 +2347,7 @@ async function liveApi(req, res, action) {
   let body;
   try { body = JSON.parse(await readBody(req, 20_000)) || {}; } catch { return json(res, 400, { error: 'bad request' }); }
   if (action === 'start') {
-    if (!flagOn('posts') && me.role === 'user') return json(res, 403, { error: 'closed' });
+    if (!flagOn('live', true, me.id) && me.role === 'user') return json(res, 403, { error: 'closed' });
     for (const l of lives.values()) if (l.user === me.id) endLive(l);
     const l = { id: ++liveSeq, user: me.id, title: cleanText(body.title, 80), started: Date.now(), last: Date.now(), viewers: new Set(), comments: [] };
     lives.set(l.id, l);
@@ -2389,9 +2399,9 @@ async function notifyApi(req, res, action) {
   if (action === 'list') {
     const rows = db.prepare(`SELECT n.*, u.name, u.username, u.pic_v, u.verified, p.kind AS pkind, p.file, p.poster, p.caption FROM notifications n JOIN users u ON u.id = n.actor
       LEFT JOIN posts p ON p.id = n.post WHERE n.user = ? AND u.banned = 0 ORDER BY n.id DESC LIMIT 80`).all(me.id);
-    const MOD = new Set(['removed', 'strike', 'appeal']);
+    const MOD = new Set(['removed', 'strike', 'appeal', 'broadcast']);
     return json(res, 200, { unread: rows.filter(r => !r.seen).length, items: rows.map(r => ({ id: r.id, kind: r.kind, body: MOD.has(r.kind) ? '' : r.body, created: r.created, seen: !!r.seen,
-      mod: MOD.has(r.kind) && typeof ADMIN_TRUST !== 'undefined' ? ADMIN_TRUST.modInfo(r.body, me.id) : undefined,
+      mod: r.kind === 'broadcast' && SYS ? SYS.broadcastInfo(r.body) : MOD.has(r.kind) && typeof ADMIN_TRUST !== 'undefined' ? ADMIN_TRUST.modInfo(r.body, me.id) : undefined,
       actor: { id: r.actor, name: r.name, username: r.username, pic: r.pic_v, verified: !!r.verified, relation: relationOf(me.id, r.actor) },
       post: r.post && r.pkind ? { id: r.post, kind: r.pkind, thumb: r.pkind === 'video' ? (r.poster ? 'media/' + r.poster : '') : r.pkind === 'photo' ? 'media/' + r.file : '', text: r.pkind === 'text' ? r.caption.slice(0, 60) : '' } : null })) });
   }
@@ -2402,371 +2412,10 @@ async function notifyApi(req, res, action) {
   json(res, 404, { error: 'not found' });
 }
 
-// ---- Admin ----
-// For accounts whose role is staff or admin. Staff answer tickets and handle reports; only an admin changes
-// roles, deletes accounts, edits the notice or removes fare reports. Private messages are never shown here:
-// the panel only counts them. Every change is written to the audit log.
+// ---- Shared helpers (the admin panel itself is lib/admin-v2.cjs and the modules beside it) ----
 const DAY = 864e5, TZ = 6 * 36e5;                       // days are counted in Bangladesh time
 const dayOf = ts => Math.floor((ts + TZ) / DAY);
-function series(table, column, days) {
-  const from = (dayOf(Date.now()) - days + 1) * DAY - TZ;
-  const rows = db.prepare(`SELECT CAST((${column} + ${TZ}) / ${DAY} AS INTEGER) AS d, COUNT(*) AS n FROM ${table} WHERE ${column} >= ? GROUP BY d`).all(from);
-  const by = Object.fromEntries(rows.map(r => [r.d, r.n])), today = dayOf(Date.now());
-  return Array.from({ length: days }, (_, i) => by[today - days + 1 + i] || 0);
-}
 const count = (sql, ...args) => db.prepare(sql).get(...args).n;
-const briefUser = u => u && ({ id: u.id, name: u.name, email: u.email, pic: u.pic_v, role: u.role, banned: u.banned, verified: !!u.verified, created: u.created, seen: u.seen, online: isOnline(u.id) });
-
-async function adminApi(req, res, action, query) {
-  const me = userOf(req);
-  if (!me || (me.role !== 'admin' && me.role !== 'staff')) return json(res, 403, { error: 'forbidden' });
-  // the older panel sits behind the same lock as v2: it answers only while a panel session (opened with a code) is open
-  if (!ADMIN2.panelOpen(req, me)) return json(res, 401, { error: 'locked' });
-  if (!ADMIN2.legacyAllowed(req, me, action)) return json(res, 403, { error: 'forbidden' });
-  const admin = me.role === 'admin', now = Date.now();
-  const log = (what, target, detail = '') => { sq.audit.run(me.id, what, String(target), detail, now); ADMIN2.legacyAudit(me.id, what, String(target), detail, req); };
-
-  if (req.method === 'GET') {
-    if (action === 'me') return json(res, 200, { user: publicUser(me).user });
-    if (action === 'gems') {                          // hidden gems people sent: waiting, approved or turned down
-      const status = ['pending', 'ok', 'no'].includes(query.get('status')) ? query.get('status') : 'pending';
-      const rows = db.prepare(`SELECT g.*, u.name AS uname, u.email AS uemail, u.pic_v AS upic, u.points AS upoints FROM gems g JOIN users u ON u.id = g.user
-        WHERE g.status = ? ORDER BY ${status === 'pending' ? 'g.id' : 'g.decided DESC'} LIMIT 200`).all(status);
-      return json(res, 200, { gems: rows.map(g => ({ ...shownGem(g), decided: g.decided, user: { id: g.user, name: g.uname, email: g.uemail, pic: g.upic, points: g.upoints } })),
-        waiting: count("SELECT COUNT(*) AS n FROM gems WHERE status = 'pending'") });
-    }
-    if (action === 'place-photos') {                  // photos of places, waiting for a yes or no (or the latest decided)
-      const status = ['pending', 'ok', 'no'].includes(query.get('status')) ? query.get('status') : 'pending';
-      const rows = db.prepare(`SELECT p.*, u.name AS uname, u.email AS uemail, u.pic_v AS upic, u.points AS upoints FROM place_photos p JOIN users u ON u.id = p.user
-        WHERE p.status = ? ORDER BY ${status === 'pending' ? 'p.id' : 'p.decided DESC'} LIMIT 200`).all(status);
-      return json(res, 200, { photos: rows.map(p => ({ id: p.id, key: p.key, district: p.district, name: p.name, src: '/media/' + p.file, created: p.created, decided: p.decided,
-        user: { id: p.user, name: p.uname, email: p.uemail, pic: p.upic, points: p.upoints } })), waiting: count("SELECT COUNT(*) AS n FROM place_photos WHERE status = 'pending'") });
-    }
-    if (action === 'overview') {
-      const dayStart = dayOf(now) * DAY - TZ;
-      return json(res, 200, {
-        users: count('SELECT COUNT(*) AS n FROM users'), usersToday: count('SELECT COUNT(*) AS n FROM users WHERE created >= ?', dayStart),
-        activeToday: count('SELECT COUNT(*) AS n FROM users WHERE seen >= ?', dayStart), active7: count('SELECT COUNT(*) AS n FROM users WHERE seen >= ?', now - 7 * DAY),
-        online: streams.size, banned: count('SELECT COUNT(*) AS n FROM users WHERE banned = 1'),
-        messages: count('SELECT COUNT(*) AS n FROM messages'), messagesToday: count('SELECT COUNT(*) AS n FROM messages WHERE sent >= ?', dayStart),
-        friendships: count("SELECT COUNT(*) AS n FROM friends WHERE state = 'friends'"),
-        ticketsOpen: count("SELECT COUNT(*) AS n FROM tickets WHERE status = 'open'"), tickets: count('SELECT COUNT(*) AS n FROM tickets'),
-        reportsOpen: count("SELECT COUNT(*) AS n FROM reports WHERE status = 'open'"), placePhotosWaiting: count("SELECT COUNT(*) AS n FROM place_photos WHERE status = 'pending'"),
-        faresWaiting: count('SELECT COUNT(*) AS n FROM contributions WHERE ok = 0') + count("SELECT COUNT(*) AS n FROM fare_reports WHERE ok = 0 AND device LIKE 'u%'"), gemsWaiting: count("SELECT COUNT(*) AS n FROM gems WHERE status = 'pending'"),
-        ratings: count('SELECT COUNT(*) AS n FROM ratings'), fares: count('SELECT COUNT(*) AS n FROM fare_reports') + count('SELECT COUNT(*) AS n FROM contributions'),
-        posts: count('SELECT COUNT(*) AS n FROM posts'), postsToday: count('SELECT COUNT(*) AS n FROM posts WHERE created >= ?', dayStart),
-        signups: series('users', 'created', 14), chats: series('messages', 'sent', 14), support: series('tickets', 'created', 14),
-        postsSeries: series('posts', 'created', 14), likesSeries: series('post_likes', 'made', 14), faresSeries: series('contributions', 'created', 14),
-        groups: count('SELECT COUNT(*) AS n FROM chat_groups'), stories: count('SELECT COUNT(*) AS n FROM stories'), comments: count('SELECT COUNT(*) AS n FROM post_comments'),
-        calls: groupCalls.size, verified: count('SELECT COUNT(*) AS n FROM users WHERE verified = 1'), twofa: count('SELECT COUNT(*) AS n FROM users WHERE totp_on = 1'),
-        creatorsWaiting: count("SELECT COUNT(*) AS n FROM users WHERE creator = 'applied'"), payoutsWaiting: count("SELECT COUNT(*) AS n FROM payouts WHERE status = 'pending'"),
-        payoutsPendingTaka: db.prepare("SELECT COALESCE(SUM(amount), 0) AS n FROM payouts WHERE status = 'pending'").get().n,
-        verifyWaiting: count("SELECT COUNT(*) AS n FROM tickets WHERE category = 'verify' AND status <> 'closed'"),
-        topPosters: db.prepare(`SELECT u.id, u.name, u.pic_v AS pic, COUNT(p.id) AS n FROM posts p JOIN users u ON u.id = p.user GROUP BY u.id ORDER BY n DESC LIMIT 5`).all(),
-        flags: { signups: flagOn('signups'), posts: flagOn('posts') },
-        latestUsers: db.prepare(`SELECT ${USER_COLS} FROM users ORDER BY id DESC LIMIT 6`).all().map(briefUser),
-        latestTickets: db.prepare("SELECT t.id, t.subject, t.status, t.updated, u.name FROM tickets t JOIN users u ON u.id = t.user ORDER BY t.updated DESC LIMIT 6").all()
-      });
-    }
-    if (action === 'users') {
-      const q = '%' + (query.get('q') || '').trim().toLowerCase().replace(/[%_]/g, '') + '%', filter = query.get('filter') || 'all';
-      const where = filter === 'banned' ? 'AND banned = 1' : filter === 'team' ? "AND role <> 'user'" : filter === 'new' ? `AND created >= ${now - 7 * DAY}` : '';
-      const page = Math.max(0, Number(query.get('page')) || 0);
-      const total = count(`SELECT COUNT(*) AS n FROM users WHERE (lower(name) LIKE ?1 OR email LIKE ?1) ${where}`, q);
-      const rows = db.prepare(`SELECT ${USER_COLS} FROM users WHERE (lower(name) LIKE ?1 OR email LIKE ?1) ${where} ORDER BY id DESC LIMIT 25 OFFSET ?2`).all(q, page * 25);
-      return json(res, 200, { total, page, users: rows.map(briefUser) });
-    }
-    if (action === 'user') {
-      const u = aq.byId.get(Number(query.get('id')));
-      if (!u) return json(res, 404, { error: 'not found' });
-      return json(res, 200, { user: { ...briefUser(u), bio: u.bio, username: u.username, twofa: !!u.totp_on, creator: creatorOf(u.id) }, stats: {
-        friends: count("SELECT COUNT(*) AS n FROM friends WHERE (a = ?1 OR b = ?1) AND state = 'friends'", u.id),
-        messages: count('SELECT COUNT(*) AS n FROM messages WHERE sender = ?', u.id),
-        tickets: count('SELECT COUNT(*) AS n FROM tickets WHERE user = ?', u.id),
-        reportsAbout: count('SELECT COUNT(*) AS n FROM reports WHERE about = ?', u.id), reportsBy: count('SELECT COUNT(*) AS n FROM reports WHERE reporter = ?', u.id),
-        ratings: count('SELECT COUNT(*) AS n FROM ratings WHERE device = ?', 'u' + u.id), fares: count('SELECT COUNT(*) AS n FROM fare_reports WHERE device = ?', 'u' + u.id),
-        sessions: count('SELECT COUNT(*) AS n FROM sessions WHERE user = ? AND expires > ?', u.id, now) } });
-    }
-    if (action === 'tickets') {
-      const status = query.get('status') || 'open';
-      const rows = db.prepare(`SELECT t.id, t.category, t.subject, t.status, t.created, t.updated, u.id AS uid, u.name, u.email, u.pic_v AS pic,
-                               (SELECT COUNT(*) FROM ticket_msgs m WHERE m.ticket = t.id) AS n FROM tickets t JOIN users u ON u.id = t.user
-                               WHERE ?1 = 'all' OR t.status = ?1 ORDER BY t.updated DESC LIMIT 100`).all(status);
-      return json(res, 200, { tickets: rows });
-    }
-    if (action === 'ticket') {
-      const t = sq.one.get(Number(query.get('id')));
-      if (!t) return json(res, 404, { error: 'not found' });
-      return json(res, 200, { ticket: t, user: briefUser(aq.byId.get(t.user)), messages: sq.msgs.all(t.id) });
-    }
-    if (action === 'reports') {
-      const status = query.get('status') || 'open';
-      const rows = db.prepare(`SELECT r.id, r.reason, r.made, r.status, a.id AS aid, a.name AS aname, a.email AS aemail, a.pic_v AS apic, a.banned AS abanned,
-                               b.id AS bid, b.name AS bname, b.email AS bemail, (SELECT COUNT(*) FROM reports x WHERE x.about = r.about) AS total
-                               FROM reports r JOIN users a ON a.id = r.about JOIN users b ON b.id = r.reporter WHERE ?1 = 'all' OR r.status = ?1 ORDER BY r.id DESC LIMIT 100`).all(status);
-      return json(res, 200, { reports: rows });
-    }
-    if (action === 'fares') return json(res, 200, { fares: db.prepare('SELECT a, b, device, fare, updated, ok FROM fare_reports ORDER BY ok, updated DESC LIMIT 200').all(),
-      contributions: db.prepare('SELECT c.id, c.flabel, c.tlabel, c.mode, c.fare, c.created, c.ok, u.name, u.email FROM contributions c JOIN users u ON u.id = c.user ORDER BY c.ok, c.id DESC LIMIT 200').all(),
-      waiting: count('SELECT COUNT(*) AS n FROM contributions WHERE ok = 0') + count("SELECT COUNT(*) AS n FROM fare_reports WHERE ok = 0 AND device LIKE 'u%'") });
-    if (action === 'posts') {
-      const rows = db.prepare(`${POST_SELECT} AND p.id < ?2 ORDER BY p.id DESC LIMIT 60`).all(-1, Number(query.get('before')) || Number.MAX_SAFE_INTEGER);
-      return json(res, 200, { posts: rows.map(p => ({ ...shownPost(p), email: aq.byId.get(p.user).email })) });
-    }
-    if (action === 'flags') return json(res, 200, { flags: { signups: flagOn('signups'), posts: flagOn('posts'), chat: flagOn('chat') } });
-    if (action === 'search') {                          // one box for people, posts and groups
-      const q = '%' + (query.get('q') || '').trim().toLowerCase().replace(/[%_]/g, '') + '%';
-      return json(res, 200, {
-        users: db.prepare(`SELECT ${USER_COLS} FROM users WHERE lower(name) LIKE ?1 OR email LIKE ?1 OR username LIKE ?1 ORDER BY id DESC LIMIT 12`).all(q).map(briefUser),
-        posts: db.prepare(`${POST_SELECT} AND lower(p.caption) LIKE ?2 ORDER BY p.id DESC LIMIT 12`).all(-1, q).map(shownPost),
-        groups: db.prepare('SELECT id, name, created FROM chat_groups WHERE lower(name) LIKE ? ORDER BY id DESC LIMIT 12').all(q) });
-    }
-    if (action === 'groups') {                          // group chats: names and numbers only, never their messages
-      const rows = db.prepare(`SELECT g.id, g.name, g.created, u.name AS owner, (SELECT COUNT(*) FROM group_members m WHERE m.grp = g.id) AS members,
-        (SELECT COUNT(*) FROM messages x WHERE x.grp = g.id AND x.kind <> 'sys') AS messages, (SELECT MAX(sent) FROM messages x WHERE x.grp = g.id) AS active
-        FROM chat_groups g LEFT JOIN users u ON u.id = g.owner ORDER BY active DESC LIMIT 200`).all();
-      return json(res, 200, { groups: rows.map(g => ({ ...g, call: callOf(g.id) })), calls: groupCalls.size });
-    }
-    if (action === 'stories') return json(res, 200, { stories: db.prepare('SELECT s.id, s.kind, s.file, s.poster, s.created, u.id AS uid, u.name, u.email, u.pic_v AS pic FROM stories s JOIN users u ON u.id = s.user ORDER BY s.id DESC LIMIT 200').all()
-      .map(s => ({ id: s.id, kind: s.kind, src: 'media/' + s.file, poster: s.poster ? 'media/' + s.poster : '', created: s.created, user: { id: s.uid, name: s.name, email: s.email, pic: s.pic } })) });
-    if (action === 'sounds') return json(res, 200, { sounds: db.prepare('SELECT s.id, s.title, s.file, s.created, u.id AS uid, u.name, u.email, (SELECT COUNT(*) FROM posts x WHERE x.music = \'snd:\' || s.id) AS uses FROM sounds s JOIN users u ON u.id = s.user ORDER BY s.id DESC LIMIT 200').all()
-      .map(s => ({ id: s.id, title: s.title, src: 'media/' + s.file, created: s.created, uses: s.uses, user: { id: s.uid, name: s.name, email: s.email } })) });
-    if (action === 'comments') return json(res, 200, { comments: db.prepare(`SELECT c.id, c.body, c.created, c.post, u.id AS uid, u.name, u.email, u.pic_v AS pic FROM post_comments c JOIN users u ON u.id = c.user ORDER BY c.id DESC LIMIT 200`).all()
-      .map(c => ({ id: c.id, body: c.body, created: c.created, post: c.post, user: { id: c.uid, name: c.name, email: c.email, pic: c.pic } })) });
-    if (action === 'sessions') {                        // where one person is signed in
-      const rows = db.prepare('SELECT token, agent, made, last, ip FROM sessions WHERE user = ? AND expires > ? ORDER BY last DESC').all(Number(query.get('id')), now);
-      return json(res, 200, { sessions: rows.map(s => ({ id: s.token.slice(0, 16), agent: s.agent || 'Browser', made: s.made, last: s.last, ip: s.ip })) });
-    }
-    if (action === 'export') {                          // every account, as a spreadsheet
-      const rows = db.prepare(`SELECT ${USER_COLS} FROM users ORDER BY id`).all();
-      const cell = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
-      const csv = '\ufeff' + [['id', 'name', 'username', 'email', 'role', 'verified', 'banned', 'points', 'followers', 'posts', 'joined', 'last seen'].join(','),
-        ...rows.map(u => [u.id, u.name, u.username, u.email, u.role, u.verified ? 'yes' : '', u.banned ? 'yes' : '', u.points, followers(u.id), count('SELECT COUNT(*) AS n FROM posts WHERE user = ?', u.id),
-          new Date(u.created).toISOString().slice(0, 10), u.seen ? new Date(u.seen).toISOString().slice(0, 10) : ''].map(cell).join(','))].join('\r\n');
-      log('export', 'users', rows.length + ' rows');
-      res.writeHead(200, { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="bdmap-users-${new Date().toISOString().slice(0, 10)}.csv"`, 'Cache-Control': 'no-store' });
-      res.end(csv);
-      return;
-    }
-    if (action === 'creators') {
-      const rows = db.prepare(`SELECT ${USER_COLS}, creator FROM users WHERE creator <> '' ORDER BY CASE creator WHEN 'applied' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END, id DESC LIMIT 200`).all();
-      return json(res, 200, { rules: creatorRules(), creators: rows.map(u => ({ ...briefUser(u), creator: u.creator, standing: creatorStanding(u), money: balanceOf(u.id) })),
-        totals: { earned: db.prepare('SELECT COALESCE(SUM(amount), 0) AS n FROM earnings').get().n, paid: db.prepare("SELECT COALESCE(SUM(amount), 0) AS n FROM payouts WHERE status = 'paid'").get().n,
-                  pending: db.prepare("SELECT COALESCE(SUM(amount), 0) AS n FROM payouts WHERE status = 'pending'").get().n } });
-    }
-    if (action === 'payouts') {
-      const status = query.get('status') || 'pending';
-      const rows = db.prepare(`SELECT x.*, u.name, u.email, u.pic_v AS pic FROM payouts x JOIN users u ON u.id = x.user WHERE ?1 = 'all' OR x.status = ?1 ORDER BY x.id DESC LIMIT 200`).all(status);
-      return json(res, 200, { payouts: rows.map(x => ({ ...shownPayout(x), user: { id: x.user, name: x.name, email: x.email, pic: x.pic } })) });
-    }
-    if (action === 'audit') return json(res, 200, { audit: db.prepare('SELECT x.id, x.action, x.target, x.detail, x.at, u.name FROM audit x LEFT JOIN users u ON u.id = x.actor ORDER BY x.id DESC LIMIT 150').all() });
-    if (action === 'system') {
-      let size = 0;
-      try { size = fs.statSync(path.join(DATA_DIR, 'ratings.db')).size; } catch { /* not created yet */ }
-      return json(res, 200, { mail: mailReady, mailFrom: MAIL.from || '', turn: hasTurn(), admins: ADMIN_EMAILS, dbBytes: size, dataDir: process.env.DATA_DIR ? 'DATA_DIR' : 'app folder',
-                              uptime: Math.round(process.uptime()), node: process.version, notice: (sq.setting.get('notice') || {}).value || '' });
-    }
-    return json(res, 404, { error: 'not found' });
-  }
-
-  if (req.method !== 'POST' || !(req.headers['content-type'] || '').startsWith('application/json')) return json(res, 400, { error: 'bad request' });
-  let body;
-  try { body = JSON.parse(await readBody(req, 12_000)) || {}; } catch { return json(res, 400, { error: 'bad request' }); }
-
-  if (action === 'user') {
-    const u = aq.byId.get(Number(body.id));
-    if (!u) return json(res, 404, { error: 'not found' });
-    if (body.do === 'verify' || body.do === 'unverify') {          // the badge: an admin may give it, also to themselves
-      if (!admin) return json(res, 403, { error: 'forbidden' });
-      db.prepare('UPDATE users SET verified = ? WHERE id = ?').run(body.do === 'verify' ? 1 : 0, u.id);
-      log(body.do, u.email);
-      return json(res, 200, { ok: true });
-    }
-    if (u.id === me.id) return json(res, 400, { error: 'self' });
-    if (u.role === 'admin' && !admin) return json(res, 403, { error: 'forbidden' });
-    if (body.do === 'ban' || body.do === 'unban') {
-      aq.setBanned.run(body.do === 'ban' ? 1 : 0, u.id);
-      if (body.do === 'ban') { aq.endAll.run(u.id); for (const s of streams.get(u.id) || []) s.end(); }
-      log(body.do, u.email, cleanText(body.note, 200));
-    } else if (body.do === 'signout') { aq.endAll.run(u.id); log('signout', u.email); }
-    else if (!admin) return json(res, 403, { error: 'forbidden' });
-    else if (body.do === 'role') return json(res, 400, { error: 'use-team' });   // roles: the new panel's টিম ও অনুমতি (reason, step-up, audit)
-    else if (body.do === 'delete') return json(res, 400, { error: 'use-new' });   // the new panel deletes with a reason, a fresh code and 30 days to undo
-    else return json(res, 400, { error: 'bad request' });
-    return json(res, 200, { ok: true });
-  }
-  if (action === 'ticket') {
-    const t = sq.one.get(Number(body.id));
-    if (!t) return json(res, 404, { error: 'not found' });
-    const text = cleanText(body.body, 3000);
-    if (text) {
-      sq.addMsg.run(t.id, me.id, 1, text, now);
-      sq.touch.run(body.close ? 'closed' : 'answered', now, 1, t.id);
-      push(t.user, 'support', { id: t.id });
-      const owner = aq.byId.get(t.user);
-      if (mailReady && owner) sendMail(owner.email, MAILS.supportMail(t.subject, text)).catch(e => console.error('mail failed:', e.message));
-      log('reply', 'ticket ' + t.id);
-    } else if (['open', 'answered', 'closed'].includes(body.status)) { sq.touch.run(body.status, now, t.unread, t.id); log('ticket ' + body.status, 'ticket ' + t.id); }
-    else return json(res, 400, { error: 'bad request' });
-    return json(res, 200, { ok: true });
-  }
-  if (action === 'post') {                            // take a post down
-    const p = db.prepare('SELECT * FROM posts WHERE id = ?').get(Number(body.id));
-    if (!p) return json(res, 404, { error: 'not found' });
-    deletePost(p);
-    log('post removed', 'post ' + p.id, cleanText(p.caption, 80));
-    return json(res, 200, { ok: true });
-  }
-  if (action === 'gem') {                            // approve a hidden gem (its sender earns points) or turn it down
-    const g = db.prepare('SELECT * FROM gems WHERE id = ?').get(Number(body.id));
-    if (!g) return json(res, 404, { error: 'not found' });
-    const to = body.do === 'approve' ? 'ok' : body.do === 'reject' ? 'no' : '';
-    if (!to) return json(res, 400, { error: 'bad request' });
-    if (g.status !== to) {
-      db.prepare('UPDATE gems SET status = ?, decided = ?, by = ? WHERE id = ?').run(to, now, me.id, g.id);
-      log(to === 'ok' ? 'gem approved' : 'gem rejected', 'gem ' + g.id, g.name);
-    }
-    return json(res, 200, { ok: true });
-  }
-  if (action === 'place-photo') {                    // approve a place photo (its taker earns points) or turn it down
-    const p = db.prepare('SELECT * FROM place_photos WHERE id = ?').get(Number(body.id));
-    if (!p) return json(res, 404, { error: 'not found' });
-    const to = body.do === 'approve' ? 'ok' : body.do === 'reject' ? 'no' : '';
-    if (!to) return json(res, 400, { error: 'bad request' });
-    if (p.status !== to) {
-      db.prepare('UPDATE place_photos SET status = ?, decided = ?, by = ? WHERE id = ?').run(to, now, me.id, p.id);
-      log(to === 'ok' ? 'place photo approved' : 'place photo rejected', 'photo ' + p.id, p.name);
-    }
-    return json(res, 200, { ok: true });
-  }
-  if (action === 'report') {
-    const r = db.prepare('SELECT * FROM reports WHERE id = ?').get(Number(body.id));
-    if (!r) return json(res, 404, { error: 'not found' });
-    if (body.do === 'ban') {
-      const u = aq.byId.get(r.about);
-      if (u && u.role === 'user') { aq.setBanned.run(1, u.id); aq.endAll.run(u.id); for (const s of streams.get(u.id) || []) s.end(); log('ban', u.email, 'report ' + r.id); }
-      db.prepare("UPDATE reports SET status = 'done' WHERE about = ?").run(r.about);
-    } else { db.prepare("UPDATE reports SET status = 'done' WHERE id = ?").run(r.id); log('report dismissed', 'report ' + r.id); }
-    return json(res, 200, { ok: true });
-  }
-  if (!admin) return json(res, 403, { error: 'forbidden' });
-  if (action === 'approve-fare') {                   // a Dhaka stop-to-stop fare is right: its sender gets the points
-    const f = db.prepare('SELECT * FROM fare_reports WHERE a = ? AND b = ? AND device = ?').get(String(body.a), String(body.b), String(body.device));
-    if (!f) return json(res, 404, { error: 'not found' });
-    if (!f.ok) {
-      db.prepare('UPDATE fare_reports SET ok = 1 WHERE a = ? AND b = ? AND device = ?').run(f.a, f.b, f.device);
-      if (/^u\d+$/.test(f.device)) db.prepare('UPDATE users SET points = points + ? WHERE id = ?').run(POINTS_PER_FARE, Number(f.device.slice(1)));
-      log('fare approved', `${f.a}>${f.b}`, '৳' + f.fare);
-    }
-    return json(res, 200, { ok: true });
-  }
-  if (action === 'approve-contribution') {           // a reported fare is right: its sender gets the points
-    const c = db.prepare('SELECT * FROM contributions WHERE id = ?').get(Number(body.id));
-    if (!c) return json(res, 404, { error: 'not found' });
-    if (!c.ok) {
-      db.prepare('UPDATE contributions SET ok = 1 WHERE id = ?').run(c.id);
-      db.prepare('UPDATE users SET points = points + ? WHERE id = ?').run(POINTS_PER_FARE, c.user);
-      log('fare approved', `${c.flabel} > ${c.tlabel}`, `${c.mode} ${c.fare}`);
-    }
-    return json(res, 200, { ok: true });
-  }
-  if (action === 'fare') {
-    const gone = db.prepare('SELECT * FROM fare_reports WHERE a = ? AND b = ? AND device = ?').get(String(body.a), String(body.b), String(body.device));
-    if (gone && gone.ok && /^u\d+$/.test(gone.device)) db.prepare('UPDATE users SET points = MAX(0, points - ?) WHERE id = ?').run(POINTS_PER_FARE, Number(gone.device.slice(1)));
-    db.prepare('DELETE FROM fare_reports WHERE a = ? AND b = ? AND device = ?').run(String(body.a), String(body.b), String(body.device));
-    log('fare removed', `${body.a}>${body.b}`);
-    return json(res, 200, { ok: true });
-  }
-  if (action === 'contribution') {                    // a wrong or made-up fare: remove it and take the points back
-    const c = db.prepare('SELECT * FROM contributions WHERE id = ?').get(Number(body.id));
-    if (!c) return json(res, 404, { error: 'not found' });
-    db.prepare('DELETE FROM contributions WHERE id = ?').run(c.id);
-    if (c.ok) db.prepare('UPDATE users SET points = MAX(0, points - ?) WHERE id = ?').run(POINTS_PER_FARE, c.user);   // points only went to approved ones
-    log('fare removed', `${c.flabel} > ${c.tlabel}`, `${c.mode} ${c.fare}`);
-    return json(res, 200, { ok: true });
-  }
-  if (action === 'flags') {                           // switch sign-ups or posting off and on for everyone
-    for (const k of ['signups', 'posts']) if (typeof body[k] === 'boolean') { sq.setSet.run('flag_' + k, body[k] ? '1' : '0'); log('flag', k, body[k] ? 'on' : 'off'); }
-    return json(res, 200, { flags: { signups: flagOn('signups'), posts: flagOn('posts') } });
-  }
-  if (action === 'story') {
-    const st = db.prepare('SELECT * FROM stories WHERE id = ?').get(Number(body.id));
-    if (st) { deleteStory(st); log('story removed', 'story ' + st.id); }
-    return json(res, 200, { ok: true });
-  }
-  if (action === 'sound') {
-    const s = db.prepare('SELECT * FROM sounds WHERE id = ?').get(Number(String(body.id).replace('snd:', '')));
-    if (s) { unlinkMedia(s.file); db.prepare('DELETE FROM sounds WHERE id = ?').run(s.id); db.prepare("UPDATE posts SET music = '' WHERE music = ?").run('snd:' + s.id); log('sound removed', 'sound ' + s.id, s.title); }
-    return json(res, 200, { ok: true });
-  }
-  if (action === 'comment') {
-    const c = db.prepare('SELECT * FROM post_comments WHERE id = ?').get(Number(body.id));
-    if (c) { db.prepare('DELETE FROM post_comments WHERE id = ?').run(c.id); log('comment removed', 'post ' + c.post, cleanText(c.body, 80)); }
-    return json(res, 200, { ok: true });
-  }
-  if (action === 'session-end') {
-    db.prepare('DELETE FROM sessions WHERE user = ? AND substr(token, 1, 16) = ?').run(Number(body.user), String(body.id || ''));
-    log('signout', 'user ' + body.user, 'one device');
-    return json(res, 200, { ok: true });
-  }
-  if (action === 'group') {                            // close a group (its messages go with it)
-    const g = db.prepare('SELECT * FROM chat_groups WHERE id = ?').get(Number(body.id));
-    if (!g) return json(res, 404, { error: 'not found' });
-    const members = gq.members.all(g.id).map(m => m.id);
-    for (const id of members) leaveGroup(g.id, id);
-    for (const id of members) push(id, 'friends', {});
-    log('group removed', 'group ' + g.id, g.name);
-    return json(res, 200, { ok: true });
-  }
-  if (action === 'creator') {                         // approve, refuse or end a creator; credit earnings
-    const u = aq.byId.get(Number(body.id));
-    if (!u) return json(res, 404, { error: 'not found' });
-    if (body.do === 'approve' || body.do === 'reject' || body.do === 'revoke') {
-      db.prepare('UPDATE users SET creator = ? WHERE id = ?').run(body.do === 'approve' ? 'approved' : body.do === 'reject' ? 'rejected' : '', u.id);
-      log('creator ' + body.do, u.email, cleanText(body.note, 200));
-    } else if (body.do === 'credit') {
-      const amount = Math.round(Number(body.amount)), note = cleanText(body.note, 120);
-      if (creatorOf(u.id) !== 'approved') return json(res, 400, { error: 'creator' });
-      if (!Number.isInteger(amount) || amount === 0 || Math.abs(amount) > 1_000_000 || !note) return json(res, 400, { error: 'bad request' });
-      if (amount < 0 && balanceOf(u.id).balance + amount < 0) return json(res, 400, { error: 'balance' });
-      db.prepare('INSERT INTO earnings (user, amount, note, by, created) VALUES (?, ?, ?, ?, ?)').run(u.id, amount, note, me.id, now);
-      log('earning', u.email, `${amount} ৳ — ${note}`);
-    } else return json(res, 400, { error: 'bad request' });
-    push(u.id, 'creator', {});
-    return json(res, 200, { ok: true });
-  }
-  if (action === 'payout') {                          // after sending the money from the business wallet
-    const x = db.prepare('SELECT * FROM payouts WHERE id = ?').get(Number(body.id));
-    if (!x || x.status !== 'pending') return json(res, 404, { error: 'not found' });
-    if (body.do === 'paid') {
-      const ref = cleanText(body.ref, 40);
-      if (ref.length < 4) return json(res, 400, { error: 'ref' });
-      db.prepare("UPDATE payouts SET status = 'paid', ref = ?, updated = ? WHERE id = ?").run(ref, now, x.id);
-      log('payout paid', 'payout ' + x.id, `${x.amount} ৳ · ${x.method} · ${ref}`);
-      const owner = aq.byId.get(x.user);
-      if (mailReady && owner) sendMail(owner.email, MAILS.payoutMail(x.amount, x.method, ref)).catch(e => console.error('mail failed:', e.message));
-    } else if (body.do === 'reject') {
-      db.prepare("UPDATE payouts SET status = 'rejected', note = ?, updated = ? WHERE id = ?").run(cleanText(body.note, 200) || 'বাতিল', now, x.id);
-      log('payout rejected', 'payout ' + x.id, cleanText(body.note, 200));
-    } else return json(res, 400, { error: 'bad request' });
-    push(x.user, 'creator', {});
-    return json(res, 200, { ok: true });
-  }
-  if (action === 'rules') {
-    for (const [key, v, max] of [['creator_followers', body.followers, 1e6], ['creator_posts', body.posts, 1e5], ['payout_min', body.min, 1e6]]) {
-      const n = Math.round(Number(v));
-      if (Number.isFinite(n) && n >= 0 && n <= max) sq.setSet.run(key, String(n));
-    }
-    log('creator rules', 'app', JSON.stringify(creatorRules()));
-    return json(res, 200, { rules: creatorRules() });
-  }
-  if (action === 'notice') {
-    sq.setSet.run('notice', cleanText(body.text, 240));
-    log('notice', 'app', cleanText(body.text, 240));
-    return json(res, 200, { ok: true });
-  }
-  json(res, 404, { error: 'not found' });
-}
 
 // ---- Small guards: keep one client from flooding the tables ----
 const WINDOW_MS = 60_000, MAX_WRITES = 30;
@@ -3285,9 +2934,14 @@ const ADMIN_DATA = require('./lib/admin-data.cjs')(ADMIN2, { db, json, fs, path,
 // phase 4: strikes, appeals, the moderation queue, risk signals (lib/admin-trust.cjs); creators, payouts, the ledger (lib/admin-money.cjs)
 const ADMIN_TRUST = require('./lib/admin-trust.cjs')(ADMIN2, { db, json, readBody, deletePost, aq, push, pushTo, followers, endStreams: id => { for (const s of streams.get(id) || []) s.end(); } });
 require('./lib/admin-money.cjs')(ADMIN2, { db, json, push, sendMail, MAILS, mailReady, followers, balanceOf, creatorRules, creatorStanding });
+// phase 5: switches, the read-only switch, announcements and broadcasts, analytics, system health (lib/admin-system.cjs)
+SYS = require('./lib/admin-system.cjs')(ADMIN2, { db, json, readBody, push, pushTo, clientIp, userOf, hasTurn, backupOn, lastBackup: () => lastBackupAt,
+  mailInfo: () => ({ ready: mailReady, provider: BREVO ? 'Brevo' : RESEND ? 'Resend' : MAIL.host ? 'SMTP' : '', sent: MAIL_STATS.day === new Date(Date.now() + 6 * 36e5).toISOString().slice(0, 10) ? MAIL_STATS.sent : 0, failed: MAIL_STATS.day === new Date(Date.now() + 6 * 36e5).toISOString().slice(0, 10) ? MAIL_STATS.failed : 0 }),
+  dbBytes: () => { try { return fs.statSync(path.join(DATA_DIR, 'ratings.db')).size; } catch { return 0; } } });
 
 const server = http.createServer((req, res) => {
   const { pathname, searchParams } = new URL(req.url, 'http://localhost');
+  if (pathname.startsWith('/api/')) res.on('finish', () => SYS.noteStatus(res.statusCode));
   for (const [k, v] of Object.entries(SECURITY_HEADERS)) res.setHeader(k, v);
   const host = String(req.headers.host || '').toLowerCase();
   if (host.endsWith('.onrender.com') && (req.method === 'GET' || req.method === 'HEAD') && !pathname.startsWith('/api/') && !pathname.startsWith('/media/')) {
@@ -3296,6 +2950,8 @@ const server = http.createServer((req, res) => {
   }
   if (pathname === '/robots.txt') { res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'public, max-age=86400' }); return res.end(req.method === 'HEAD' ? '' : ROBOTS); }
   if (pathname === '/sitemap.xml') { res.writeHead(200, { 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': 'public, max-age=86400' }); return res.end(req.method === 'HEAD' ? '' : sitemap()); }
+  // the read-only switch (admin panel): before any route that writes
+  { const ro = SYS.blocked(req, pathname); if (ro) return json(res, 503, { error: 'readonly', message: ro }); }
   if (pathname === '/api/ratings') return api(req, res).catch(() => json(res, 500, { error: 'server error' }));
   if (pathname === '/api/fares') return faresApi(req, res).catch(() => json(res, 500, { error: 'server error' }));
   if (pathname.startsWith('/api/chat/')) return chatApi(req, res, pathname.slice(10), searchParams).catch(e => { console.error(e); if (!res.headersSent) json(res, 500, { error: 'server error' }); });
@@ -3316,7 +2972,7 @@ const server = http.createServer((req, res) => {
   if (pathname.startsWith('/api/community/')) return communityApi(req, res, pathname.slice(15), searchParams).catch(e => { console.error(e); json(res, 500, { error: 'server error' }); });
   if (pathname.startsWith('/api/support/')) return supportApi(req, res, pathname.slice(13), searchParams).catch(() => json(res, 500, { error: 'server error' }));
   if (pathname.startsWith('/api/admin/v2/')) return ADMIN2.handle(req, res, pathname.slice(14), searchParams).catch(e => { console.error(e); if (!res.headersSent) json(res, 500, { error: 'server error' }); });
-  if (pathname.startsWith('/api/admin/')) return adminApi(req, res, pathname.slice(11), searchParams).catch(e => { console.error(e); json(res, 500, { error: 'server error' }); });
+  if (pathname.startsWith('/api/admin/')) return json(res, 410, { error: 'moved' });   // the older panel is gone; everything is under /api/admin/v2/
   if (pathname.startsWith('/api/geo/') && req.method === 'GET') return geoApi(req, res, pathname.slice(9), searchParams).catch(() => json(res, 500, { error: 'server error' }));
   if (pathname === '/api/pois') return poisApi(req, res, searchParams);
   if (pathname === '/api/pois/search') return poisSearch(res, (searchParams.get('q') || '').slice(0, 80), parseFloat(searchParams.get('lat')), parseFloat(searchParams.get('lon')));
@@ -3324,7 +2980,8 @@ const server = http.createServer((req, res) => {
   // The map's imagery key (ArcGIS Location Platform, Basemaps only). It travels to every browser anyway — tiles are
   // fetched there — so it is limited to basemaps; it lives in the environment (ESRI_KEY), not in the code.
   if (pathname === '/api/map-config') { const k = (process.env.ESRI_KEY || '').trim(); return json(res, 200, { esriKey: k.length >= 40 ? k : '' }); }   // a placeholder like '.env' is not a key
-  if (pathname === '/api/notice') return json(res, 200, { text: (sq.setting.get('notice') || {}).value || '' });
+  if (pathname === '/api/notice') return json(res, 200, SYS.currentNotice());
+  if (pathname === '/api/t') return SYS.trackApi(req, res).catch(() => { if (!res.headersSent) json(res, 500, { error: 'server error' }); });
   if (pathname.startsWith('/api/auth/')) return authApi(req, res, pathname.slice(10)).catch(() => json(res, 500, { error: 'server error' }));
   if (pathname.startsWith('/api/')) return json(res, 404, { error: 'not found' });
   if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405).end(); return; }

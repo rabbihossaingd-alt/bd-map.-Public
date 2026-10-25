@@ -19,6 +19,8 @@ export async function render(box, { params, go }) {
     const t = tabs([['all', 'সবাই'], ['new', 'এই সপ্তাহে নতুন'], ['team', 'টিম'], ['banned', 'বন্ধ'], ['risky', 'ঝুঁকিপূর্ণ'], ['deleted', 'মোছা']], tab, v => { tab = v; draw(); });
     table = dataTable({
       page: 'users', search: 'নাম, @username, ই-মেইল বা #ID',
+      // every account as a spreadsheet, with e-mails (was in the older panel): only for a role that may see e-mails
+      exportUrl: can('pii.unmask') ? () => 'api/admin/v2/users.csv' : null,
       columns: [
         { key: 'name', label: 'ব্যবহারকারী', render: u => h('div', 'person', avatar(u), h('div', 't', h('b', null, u.name, u.verified ? icon('checkc', 'vbadge') : null), h('span', null, '@' + u.username))), sort: u => u.name },
         { key: 'email', label: 'ই-মেইল', render: u => h('span', 'mono', u.email), sortable: false },

@@ -1,7 +1,7 @@
 // কমান্ড সেন্টার: what needs doing first (with how long the oldest has waited, red past its SLA), then how the app is
 // doing over a chosen range compared with the range before, anything unusual, the health of the system, the latest
 // changes and newcomers, and the two emergency switches.
-import { api, can, errText, legacy, session } from '../api.js';
+import { api, can, errText, session } from '../api.js';
 import { attrs, badge, button, confirmAction, dot, empty, errorBox, h, icon, person, skeleton, tabs, toast, when } from '../ui.js';
 import { num, pct, taka, waited } from '../fmt.js';
 import { lineChart, sparkline } from '../chart.js';
@@ -89,14 +89,15 @@ export async function render(box, ctx) {
   // the two emergency switches (tier 2: a reason, written in the log)
   function switches() {
     const card = h('div', 'card', h('h3', null, 'দ্রুত সুইচ'));
-    legacy('flags').then(({ flags }) => {
+    api('flags2').then(({ flags: list }) => {
+      const flags = Object.fromEntries(list.map(f => [f.key, f.on]));
       const row = (key, title, sub) => {
         const sw = attrs(h('button', 'switch' + (flags[key] ? ' on' : ''), h('i')), { role: 'switch', 'aria-checked': String(!!flags[key]), 'aria-label': title, type: 'button' });
         sw.addEventListener('click', async () => {
           const next = !flags[key];
-          const ok = await confirmAction({ tier: 2, title: `${title} ${next ? 'চালু' : 'বন্ধ'} করবেন?`, text: next ? 'সবাই আবার এটা করতে পারবেন।' : 'পুরো অ্যাপের জন্য সঙ্গে সঙ্গে বন্ধ হবে (টিম ছাড়া)।', danger: !next, confirmText: next ? 'চালু করুন' : 'বন্ধ করুন' });
+          const ok = await confirmAction({ tier: 2, title: `${title} ${next ? 'চালু' : 'বন্ধ'} করবেন?`, text: next ? 'সবাই আবার এটা করতে পারবেন।' : 'পুরো অ্যাপের জন্য সঙ্গে সঙ্গে বন্ধ হবে (টিম ছাড়া)।', danger: !next, reasons: [['incident', 'সমস্যা চলছে'], ['spam', 'স্প্যামের ঢল'], ['maintenance', 'রক্ষণাবেক্ষণ'], ['resolved', 'সমস্যা মিটেছে'], ['other', 'অন্য']], confirmText: next ? 'চালু করুন' : 'বন্ধ করুন' });
           if (!ok) return;
-          try { await legacy('flags', { [key]: next }); flags[key] = next; sw.classList.toggle('on', next); sw.setAttribute('aria-checked', String(next)); toast(next ? 'চালু করা হলো।' : 'বন্ধ করা হলো।'); }
+          try { await api('flags2/set', { key, on: next, ...ok }); flags[key] = next; sw.classList.toggle('on', next); sw.setAttribute('aria-checked', String(next)); toast(next ? 'চালু করা হলো।' : 'বন্ধ করা হলো।'); }
           catch (e) { toast(errText(e), { bad: true }); }
         });
         return h('div', 'sw-row', h('div', 't', h('b', null, title), h('span', 'muted', sub)), sw);
