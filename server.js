@@ -81,8 +81,9 @@ db.exec(`CREATE TABLE IF NOT EXISTS fare_reports (
   PRIMARY KEY (a, b, device)
 )`);
 if (!db.prepare("SELECT COUNT(*) AS n FROM pragma_table_info('fare_reports') WHERE name = 'ok'").get().n) db.exec('ALTER TABLE fare_reports ADD COLUMN ok INTEGER NOT NULL DEFAULT 1');
+if (!db.prepare("SELECT COUNT(*) AS n FROM pragma_table_info('fare_reports') WHERE name = 'hidden'").get().n) db.exec('ALTER TABLE fare_reports ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0');
 const fq = {
-  all:    db.prepare('SELECT a, b, fare FROM fare_reports ORDER BY a, b, fare'),
+  all:    db.prepare('SELECT a, b, fare FROM fare_reports WHERE hidden = 0 ORDER BY a, b, fare'),   // hidden: taken off by the team
   upsert: db.prepare(`INSERT INTO fare_reports (a, b, device, fare, updated) VALUES (?, ?, ?, ?, ?)
                       ON CONFLICT (a, b, device) DO UPDATE SET fare = excluded.fare, updated = excluded.updated`)
 };
@@ -2175,6 +2176,7 @@ db.exec(`CREATE TABLE IF NOT EXISTS contributions (
 )`);
 // ok: 1 once an admin approved it and its points were given; reports made before approval existed count as approved
 if (!db.prepare("SELECT COUNT(*) AS n FROM pragma_table_info('contributions') WHERE name = 'ok'").get().n) db.exec('ALTER TABLE contributions ADD COLUMN ok INTEGER NOT NULL DEFAULT 1');
+if (!db.prepare("SELECT COUNT(*) AS n FROM pragma_table_info('contributions') WHERE name = 'hidden'").get().n) db.exec('ALTER TABLE contributions ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0');
 const kmBetween = (lat1, lon1, lat2, lon2) => {
   const r = Math.PI / 180, a = Math.sin((lat2 - lat1) * r / 2) ** 2 + Math.cos(lat1 * r) * Math.cos(lat2 * r) * Math.sin((lon2 - lon1) * r / 2) ** 2;
   return 12742 * Math.asin(Math.sqrt(a));
@@ -2182,7 +2184,7 @@ const kmBetween = (lat1, lon1, lat2, lon2) => {
 const inBangladesh = p => p && Number.isFinite(p.lat) && Number.isFinite(p.lon) && p.lat > 20.3 && p.lat < 26.8 && p.lon > 87.9 && p.lon < 92.8 && cleanText(p.label, 80).length >= 2;
 // Contributions whose two ends are within `km` of the given two points, in either direction.
 function sameTrip(from, to, km = 0.7) {
-  return db.prepare('SELECT * FROM contributions').all().filter(c =>
+  return db.prepare('SELECT * FROM contributions WHERE hidden = 0').all().filter(c =>
     (kmBetween(c.flat, c.flon, from.lat, from.lon) <= km && kmBetween(c.tlat, c.tlon, to.lat, to.lon) <= km) ||
     (kmBetween(c.flat, c.flon, to.lat, to.lon) <= km && kmBetween(c.tlat, c.tlon, from.lat, from.lon) <= km));
 }
@@ -2202,7 +2204,7 @@ async function communityApi(req, res, action, query) {
       return json(res, 200, { top, me: mine, total: count('SELECT COUNT(*) AS n FROM users WHERE points > 0 AND banned = 0'), fares: count('SELECT COUNT(*) AS n FROM contributions') });
     }
     if (action === 'recent') {
-      const rows = db.prepare(`SELECT c.flabel, c.tlabel, c.mode, c.fare, c.created, u.name, u.id, u.pic_v FROM contributions c JOIN users u ON u.id = c.user ORDER BY c.id DESC LIMIT 12`).all();
+      const rows = db.prepare(`SELECT c.flabel, c.tlabel, c.mode, c.fare, c.created, u.name, u.id, u.pic_v FROM contributions c JOIN users u ON u.id = c.user WHERE c.hidden = 0 ORDER BY c.id DESC LIMIT 12`).all();
       return json(res, 200, { recent: rows.map(r => ({ from: r.flabel, to: r.tlabel, mode: r.mode, fare: r.fare, created: r.created, user: { id: r.id, name: r.name, pic: r.pic_v } })) });
     }
     if (action === 'near') {
@@ -2859,6 +2861,7 @@ const PRIVATE = ['db', 'tools', 'node_modules', 'docs', 'lib'];   // never serve
 // version in the name. The pages themselves stay no-cache, so a new version is seen on the next visit.
 const assetHashes = new Map();     // path -> { key: mtime+size, v }
 function assetVersion(rel) {
+  if (rel === 'data/dhaka-buses.js' && typeof ADMIN_DATA !== 'undefined') { const t = ADMIN_DATA.busesJs(); if (t) return crypto.createHash('sha1').update(t).digest('hex').slice(0, 10); }
   const file = path.join(ROOT, rel);
   let st; try { st = fs.statSync(file); } catch { return ''; }
   const key = st.mtimeMs + ':' + st.size, hit = assetHashes.get(rel);
@@ -2892,6 +2895,10 @@ function serveFile(req, res, pathname, versioned) {
       return;
     }
     const forever = versioned || parts[0] === 'vendor';
+    if (rel.replace(/^\/+/, '') === 'data/dhaka-buses.js' && typeof ADMIN_DATA !== 'undefined') {
+      const t = ADMIN_DATA.busesJs();
+      if (t) { const buf = Buffer.from(t); res.writeHead(200, { 'Content-Type': type, 'Content-Length': buf.length, 'Cache-Control': forever ? 'public, max-age=31536000, immutable' : 'no-cache' }); res.end(req.method === 'HEAD' ? undefined : buf); return; }
+    }
     // no-cache: the browser keeps a copy but checks it is current, so app updates show up on refresh.
     res.writeHead(200, { 'Content-Type': type, 'Content-Length': stat.size,
                          'Cache-Control': forever ? 'public, max-age=31536000, immutable' : 'no-cache' });
@@ -3266,6 +3273,8 @@ const ADMIN2 = require('./lib/admin-v2.cjs')({ db, json, readBody, userOf, sessi
 require('./lib/admin-ops.cjs')(ADMIN2, { db, json, deleteUser, deletePost, aq, push, sendMail, MAILS, mailReady, groupCalls, hasTurn, backupOn, dhakaDay, clientIp, isOnline,
   onlineCount: () => streams.size, lastBackup: () => lastBackupAt,
   endStreams: id => { for (const s of streams.get(id) || []) s.end(); } });
+const ADMIN_DATA = require('./lib/admin-data.cjs')(ADMIN2, { db, json, fs, path, ROOT, MEDIA_DIR, deletePost, deleteStory, unlinkMedia, leaveGroup, push, videoSecs, groupCalls,
+  groupMembers: id => gq.members.all(id).map(m => m.id), publishNow: async () => { await copyMediaUp(); await publishMedia(); } });
 
 const server = http.createServer((req, res) => {
   const { pathname, searchParams } = new URL(req.url, 'http://localhost');

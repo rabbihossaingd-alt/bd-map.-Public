@@ -107,10 +107,15 @@ export function toast(text, { undo, bad, ms } = {}) {
 
 // ---- modal dialogs ----
 let openModals = 0;
+const modalClosers = new Set();
+// moving to another page closes whatever dialog was open (as cancelled)
+export const closeAllModals = () => { for (const c of [...modalClosers]) c(); };
 export function modal({ title, body, actions, wide, onClose }) {
   const back = h('div', 'modal-back'), box = h('div', 'modal' + (wide ? ' wide' : ''));
   attrs(box, { role: 'dialog', 'aria-modal': 'true', 'aria-label': title });
-  const close = () => { back.remove(); openModals--; document.removeEventListener('keydown', key); if (onClose) onClose(); };
+  let closed = false;
+  const close = () => { if (closed) return; closed = true; modalClosers.delete(close); back.remove(); openModals--; document.removeEventListener('keydown', key); if (onClose) onClose(); };
+  modalClosers.add(close);
   const key = e => { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
   box.append(h('div', 'modal-head', h('h2', null, title), button('', { kind: 'ghost', ic: 'x', title: 'বন্ধ', onClick: close })), h('div', 'modal-body', body));
   if (actions) box.append(h('div', 'modal-foot', actions));

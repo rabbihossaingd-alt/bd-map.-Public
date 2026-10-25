@@ -1265,7 +1265,8 @@ const NOTIFY_TEXT = {
   comment: ['মন্তব্য করেছেন:', 'commented:'],
   follow: ['আপনাকে ফলো করা শুরু করেছেন।', 'started following you.'],
   followback: ['আপনাকে ফলো ব্যাক করেছেন।', 'followed you back.'],
-  tag: ['আপনাকে একটি পোস্টে ট্যাগ করেছেন।', 'tagged you in a post.']
+  tag: ['আপনাকে একটি পোস্টে ট্যাগ করেছেন।', 'tagged you in a post.'],
+  removed: ['টিম আপনার একটি পোস্ট নিয়ম ভাঙার জন্য সরিয়েছে।', 'The team removed one of your posts for breaking the rules.']
 };
 async function openNotifications() {
   if (!ME) { needLogin('নোটিফিকেশন দেখতে লগইন করুন'); return; }
@@ -1305,7 +1306,7 @@ async function openNotifications() {
     if (b !== last) { rows.push(el('div', 'notif-label', b)); last = b; }
     const row = el('div', 'notif-row' + (n.seen ? '' : ' new'));
     const t = el('div', 't no-tr');
-    const who = Object.assign(el('b'), { textContent: n.actor.username || n.actor.name });
+    const who = Object.assign(el('b'), { textContent: n.kind === 'removed' ? 'Manzeela' : n.actor.username || n.actor.name });   // a removal comes from the team, not a person
     if (isVerified(n.actor)) who.appendChild(vbadge());
     const [bn, en] = NOTIFY_TEXT[n.kind] || ['', ''];
     t.append(who, document.createTextNode(' ' + (LANG === 'en' ? en : bn) + (n.kind === 'comment' ? ' ' + n.body : '') + ' '), el('time', null, shortAgo(n.created)));

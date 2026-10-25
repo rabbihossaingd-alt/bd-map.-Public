@@ -2,7 +2,7 @@
 // use), the top bar (where you are, search, who is online, the bell, theme, profile), the phone's tab bar, the
 // address-driven router (#/page/id — links and the back button work), shortcuts, and the live stream.
 import { api, can, legacy, on, session, errText } from './api.js';
-import { attrs, avatar, button, closeDrawer, drawerOpen, drawerStep, h, icon, menu, modal, modalOpen, openDrawer, toast, badge } from './ui.js';
+import { attrs, avatar, button, closeAllModals, closeDrawer, drawerOpen, drawerStep, h, icon, menu, modal, modalOpen, openDrawer, toast, badge } from './ui.js';
 import { num, ago } from './fmt.js';
 import { openPalette, paletteOpen } from './palette.js';
 
@@ -24,19 +24,19 @@ export const NAV = [
     { key: 'strikes', title: 'স্ট্রাইক ও আপিল', ic: 'strike', perm: 'content.remove', status: 4 },
     { key: 'risk', title: 'ঝুঁকি সংকেত', ic: 'radar', perm: 'users.ban', status: 4 }]],
   ['কনটেন্ট', [
-    { key: 'posts', title: 'পোস্ট ও রিল', ic: 'image', perm: 'content.remove', status: 'legacy', legacy: 'posts' },
-    { key: 'stories', title: 'স্টোরি', ic: 'story', perm: 'content.remove', status: 'legacy', legacy: 'stories' },
-    { key: 'comments', title: 'মন্তব্য', ic: 'comment', perm: 'content.remove', status: 'legacy', legacy: 'comments' },
-    { key: 'sounds', title: 'সাউন্ড', ic: 'music', perm: 'content.remove', status: 'legacy', legacy: 'sounds' },
-    { key: 'groups', title: 'গ্রুপ', ic: 'group', perm: 'content.remove', status: 'legacy', legacy: 'groups' },
-    { key: 'media', title: 'মিডিয়া', ic: 'cpu', perm: 'system.view', status: 3 }]],
+    { key: 'posts', title: 'পোস্ট ও রিল', ic: 'image', perm: 'content.remove', status: 'v2' },
+    { key: 'stories', title: 'স্টোরি', ic: 'story', perm: 'content.remove', status: 'v2' },
+    { key: 'comments', title: 'মন্তব্য', ic: 'comment', perm: 'content.remove', status: 'v2' },
+    { key: 'sounds', title: 'সাউন্ড', ic: 'music', perm: 'content.remove', status: 'v2' },
+    { key: 'groups', title: 'গ্রুপ', ic: 'group', perm: 'content.remove', status: 'v2' },
+    { key: 'media', title: 'মিডিয়া', ic: 'cpu', perm: 'system.view', status: 'v2' }]],
   ['যাতায়াত ডেটা', [
-    { key: 'fares', title: 'জানানো ভাড়া', ic: 'tag', perm: 'data.approve', status: 'legacy', legacy: 'fares', count: 'fares' },
-    { key: 'routes', title: 'ঢাকার বাস রুট ও স্টপ', ic: 'bus', perm: 'data.edit', status: 3 },
-    { key: 'intercity', title: 'দূরপাল্লা · ট্রেন · লঞ্চ', ic: 'train', perm: 'data.edit', status: 3 },
-    { key: 'photos', title: 'জায়গার ছবি', ic: 'pin', perm: 'data.approve', status: 'legacy', legacy: 'photos', count: 'photos' },
-    { key: 'gems', title: 'মেঠোপথ', ic: 'leaf', perm: 'data.approve', status: 'legacy', legacy: 'gems', count: 'gems' },
-    { key: 'quality', title: 'ডেটার মান', ic: 'checkc', perm: 'data.edit', status: 3 }]],
+    { key: 'fares', title: 'জানানো ভাড়া', ic: 'tag', perm: 'data.approve', status: 'v2', count: 'fares' },
+    { key: 'routes', title: 'ঢাকার বাস রুট ও স্টপ', ic: 'bus', perm: 'data.edit', status: 'v2' },
+    { key: 'intercity', title: 'দূরপাল্লা · ট্রেন · লঞ্চ', ic: 'train', perm: 'data.edit', status: 'v2' },
+    { key: 'photos', title: 'জায়গার ছবি', ic: 'pin', perm: 'data.approve', status: 'v2', count: 'photos' },
+    { key: 'gems', title: 'মেঠোপথ', ic: 'leaf', perm: 'data.approve', status: 'v2', count: 'gems' },
+    { key: 'quality', title: 'ডেটার মান', ic: 'checkc', perm: 'data.edit', status: 'v2' }]],
   ['আয়', [
     { key: 'creators', title: 'ক্রিয়েটর', ic: 'coins', perm: 'creators.manage', status: 'legacy', legacy: 'creators', count: 'creators' },
     { key: 'payouts', title: 'পেআউট', ic: 'wallet', perm: 'payouts.view', status: 'legacy', legacy: 'creators', count: 'payouts' },
@@ -54,7 +54,9 @@ export const NAV = [
 ];
 const ALL_PAGES = NAV.flatMap(([group, items]) => items.map(p => ({ ...p, group })));
 const PAGE_FILES = { command: './pages/command.js', audit: './pages/audit.js', team: './pages/team.js', prefs: './pages/prefs.js', inbox: './pages/inbox.js', tickets: './pages/tickets.js',
-  macros: './pages/macros.js', users: './pages/users.js', reports: './pages/reports.js' };
+  macros: './pages/macros.js', users: './pages/users.js', reports: './pages/reports.js',
+  posts: './pages/content.js', stories: './pages/content.js', comments: './pages/content.js', sounds: './pages/content.js', groups: './pages/content.js',
+  media: './pages/media.js', fares: './pages/fares.js', photos: './pages/review.js', gems: './pages/review.js', routes: './pages/routes.js', intercity: './pages/intercity.js', quality: './pages/quality.js' };
 export const pagesFor = () => ALL_PAGES.filter(p => !p.perm || can(p.perm));
 
 let current = { key: '', mod: null, inst: null };
@@ -201,7 +203,7 @@ async function route() {
   // the same page with a new id: let it open or close its drawer without drawing again
   if (current.key === page.key && current.inst && current.inst.onParams) { current.inst.onParams(params); return; }
   if (current.inst && current.inst.destroy) current.inst.destroy();
-  closeDrawer(true);
+  closeDrawer(true); closeAllModals();
   current = { key: page.key, inst: null };
   const box = h('div', 'page');
   shell.main.replaceChildren(box);
