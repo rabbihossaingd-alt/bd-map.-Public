@@ -544,11 +544,12 @@ function addMessage(m) {
   if (ME && m.sender !== ME.id) {
     CHAT.typing.delete(key);
     if (m.kind !== 'sys') {
-      if (viewing) { (t.members ? chatApi('group-read', { group: t.id }) : chatApi('read', { with: key })).catch(() => {}); if (!t.muted && m.kind !== 'call' && typeof messageChime === 'function') messageChime(true); }
+      if (viewing) (t.members ? chatApi('group-read', { group: t.id }) : chatApi('read', { with: key })).catch(() => {});
       else {
         t.unread++;
         if (!t.muted) {
-          if (m.kind !== 'call' && typeof messageChime === 'function') messageChime(false);
+          // inside the inbox it stays quiet (the list and the badge show it); elsewhere in the app a soft chime
+          if (m.kind !== 'call' && current !== 'chat' && typeof messageChime === 'function') messageChime();
           const from = senderIn(t, m.sender);
           chatToast(from, t.members ? `${firstName(from.name)}: ${preview(m, null)}` : preview(m, t), () => { go('chat'); openThread(key); }, t.members ? titleOf(t) : from.name);
         }

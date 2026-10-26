@@ -59,12 +59,32 @@ function ringFor(kind) {
 // call states (chat.js): 'calling' — I rang; 'ringing' — they ring me; anything else is quiet
 const ringForCall = state => ringFor(state === 'calling' ? 'out' : state === 'ringing' ? 'in' : '');
 
-// a new message: a two-note chime, or a soft tick when that chat is already open
+// A new message while the app is open on another page (never inside the inbox; with the app closed the phone's own
+// notification sound plays): two soft glass-like notes rising a fifth, quiet, ringing out under half a second.
+// Each note is a sine with a few gentle overtones, rounded by a low-pass filter so nothing is sharp.
 let lastChime = 0;
-function messageChime(open) {
+function chimeNote(ctx, out, freq, at, dur, vol) {
+  const t = ctx.currentTime + at, g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(vol, t + 0.008);
+  g.gain.exponentialRampToValueAtTime(vol * 0.35, t + 0.09);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  g.connect(out);
+  for (const [mult, level] of [[1, 1], [2, 0.22], [3, 0.07], [4.2, 0.03]]) {
+    const o = ctx.createOscillator(), og = ctx.createGain();
+    o.type = 'sine'; o.frequency.value = freq * mult; og.gain.value = level;
+    o.connect(og); og.connect(g); o.start(t); o.stop(t + dur + 0.05);
+  }
+}
+function messageChime() {
   const now = Date.now();
-  if (now - lastChime < 900 || document.hidden || ringKind) return;    // not a burst, not over a ring, not unseen
+  if (now - lastChime < 1500 || document.hidden || ringKind) return;   // not a burst, not over a ring, not unseen
+  const ctx = ringAudio();
+  if (!ctx) return;
   lastChime = now;
-  if (open) ringNote(1319, 0, 0.12, 0.07, 0.1);
-  else { ringNote(880, 0, 0.22, 0.14); ringNote(1319, 0.11, 0.3, 0.13); }
+  const soft = ctx.createBiquadFilter();
+  soft.type = 'lowpass'; soft.frequency.value = 3200; soft.Q.value = 0.5;
+  soft.connect(ctx.destination);
+  chimeNote(ctx, soft, 1046.5, 0, 0.42, 0.075);    // C6
+  chimeNote(ctx, soft, 1568, 0.085, 0.55, 0.06);   // G6
 }
