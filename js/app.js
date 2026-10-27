@@ -3,7 +3,7 @@
 for (const n of document.querySelectorAll('[data-ic]')) n.innerHTML = svg(n.dataset.ic);
 
 const BD_LNGLAT = [[87.8, 20.3], [92.9, 26.9]];   // Bangladesh, as [lon, lat] corners
-const PAGES = ['home', 'trip', 'buses', 'train', 'districts', 'nearby', 'tour', 'fares', 'more', 'chat', 'support', 'community', 'profile', 'settings', 'explore', 'insights'];
+const PAGES = ['home', 'trip', 'train', 'districts', 'nearby', 'tour', 'fares', 'more', 'chat', 'support', 'community', 'profile', 'settings', 'explore', 'insights'];
 const trip = { from: null, to: null };          // each: { lat, lon, label }
 const enter = {};                               // page name -> function run when the page opens
 const searches = [];
@@ -261,7 +261,8 @@ function route() {
   if (name === 'tour') { try { localStorage.setItem('bdmap.rb', 'tour'); } catch { /* storage off */ } history.replaceState(null, '', '#/districts'); name = 'districts'; }   // now a tab of রূপসী বাংলা
   let scrollToSel = '';
   if (name === 'leaderboard') { scrollToSel = '.lead-card'; name = 'community'; }   // the fare tab, at the leaderboard
-  if (name === 'community') { try { localStorage.setItem('bdmap.cx', 'fare'); } catch { /* storage off */ } history.replaceState(null, '', '#/buses'); name = 'buses'; }   // now a tab of নগরপথ
+  // the Dhaka bus page is gone (buses show on the map for a trip); its fare tab, and the old community page, are ভাড়া → ভাড়া জানান
+  if (name === 'community' || name === 'buses') { try { localStorage.setItem('bdmap.fx', 'give'); } catch { /* storage off */ } history.replaceState(null, '', '#/fares'); name = 'fares'; }
   current = PAGES.includes(name) ? name : 'home';
   for (const p of PAGES) $('page-' + p).classList.toggle('on', p === current);
   for (const a of document.querySelectorAll('[data-nav]')) a.classList.toggle('on', a.dataset.nav === current);
@@ -491,7 +492,7 @@ function renderRecent() {
 // MapLibre GL with vector tiles: text and roads are drawn on the device, so the map stays sharp on any
 // screen, can tilt into 3D, and can be restyled. Tiles: OpenFreeMap (OpenStreetMap data), no API key.
 let map = null, mapReady = null, driverMarker = null, rideTimer = null, is3D = false, stopPopup = null;
-let lastKey = '', pendingBus = null, pendingPath = null;
+let lastKey = '', pendingPath = null;
 const markers = { from: null, to: null };
 const drawTokens = {};
 const EMPTY = { type: 'FeatureCollection', features: [] };
@@ -1310,6 +1311,97 @@ $('tool-home').addEventListener('click', () => { if (map) fit(BD_LNGLAT); });
 $('tool-in').addEventListener('click', () => { if (map) map.zoomIn(); });
 $('tool-out').addEventListener('click', () => { if (map) map.zoomOut(); });
 
+// ---- A bus's roads ----
+// The roads come from OSRM driving through the bus's stops in order, five stops at a time (the server's route lookup
+// takes six points), with each road's name. Kept for the visit. On the map: first the straight stop-to-stop line,
+// then the line along the roads as soon as it comes. If the roads cannot be had, the straight line stays.
+const busRoadCache = new Map();
+function busRoads(r) {
+  if (busRoadCache.has(r)) return busRoadCache.get(r);
+  const p = (async () => {
+    const pts = r.stops.map(id => STOPS[id]), starts = [];
+    for (let i = 0; i < pts.length - 1; i += 5) starts.push(i);
+    const routes = await Promise.all(starts.map(i => getRoute(pts.slice(i, i + 6), true)));
+    const pair = new Map(), names = [];
+    routes.forEach((route, c) => route.legs.forEach((leg, k) => {
+      const a = r.stops[starts[c] + k], b = r.stops[starts[c] + k + 1];
+      pair.set(a + '>' + b, leg.steps.flatMap(s => s.geometry.coordinates));
+      // a road counts once, in the order the bus meets it; short links and unnamed lanes are left out
+      for (const s of leg.steps) {
+        const n = (s.name || '').normalize('NFC').replace(/\s+/g, ' ').trim();
+        // map codes such as "road -06" or "Road 12" say nothing to a rider
+        if (n && s.distance >= 250 && !/^(road|rd|lane|সড়ক|রোড)\s*[-#.]?\s*[\d০-৯]+$/i.test(n) && !names.includes(n)) names.push(n);
+      }
+    }));
+    return { pair, names };
+  })();
+  busRoadCache.set(r, p);
+  p.catch(() => busRoadCache.delete(r));
+  return p;
+}
+// the line along the roads for some of a route's stops, in the order given (a ride may go the route's other way)
+const roadLine = (roads, seg) => seg.slice(1).flatMap((b, i) => {
+  const a = seg[i], fwd = roads.pair.get(a + '>' + b);
+  if (fwd) return fwd;
+  const back = roads.pair.get(b + '>' + a);
+  return back ? [...back].reverse() : [[STOPS[a].lon, STOPS[a].lat], [STOPS[b].lon, STOPS[b].lat]];
+});
+const BUS_COLORS = ['#0a8f62', '#6b4de6'];
+function showRoadsOnMap(lines, stops) {
+  fit(lines.flatMap(l => l.coords));
+  drawLines('bus', lines);
+  map.getSource('stops').setData({ type: 'FeatureCollection', features: stops.map(p => ({
+    type: 'Feature', properties: { name: p.name, color: p.color }, geometry: { type: 'Point', coordinates: [p.lon, p.lat] } })) });
+}
+let busPick = null;
+// Under the chosen bus: for each bus of the trip, the roads it takes and all its stops (the part you ride marked),
+// and a button to see its whole route on the map.
+function openBusDetail(node, t) {
+  const open = node.nextElementSibling && node.nextElementSibling.classList.contains('bus-detail');
+  for (const d of node.parentNode.querySelectorAll('.bus-detail')) d.remove();
+  if (open) { busPick = null; return; }
+  const mine = busPick = {};
+  const box = el('div', 'bus-detail');
+  const rideLines = [];
+  t.legs.forEach((l, n) => {
+    const r = l.r, color = BUS_COLORS[n % 2], on = l.seg[0], off = l.seg[l.seg.length - 1];
+    const sec = el('div', 'bd-bus');
+    const head = el('div', 'bd-head');
+    head.append(Object.assign(el('i', 'bd-dot'), { style: '' }), el('b', null, r.bn), el('span', null, `${STOPS[r.stops[0]].bn} – ${STOPS[r.stops[r.stops.length - 1]].bn} · ${num(r.stops.length)} স্টপ`));
+    head.firstChild.style.background = color;
+    const roads = el('div', 'bd-roads');
+    roads.append(el('span', 'bd-label', 'যে রাস্তা দিয়ে যায়'), el('span', 'bd-wait', 'রাস্তা খোঁজা হচ্ছে…'));
+    // the stops: the part you ride stands out, with where to get on and off
+    const ul = el('ul', 'timeline bd-stops');
+    const i = r.stops.indexOf(on), j = r.stops.indexOf(off), lo = Math.min(i, j), hi = Math.max(i, j);
+    r.stops.forEach((id, k) => {
+      const li = el('li', k >= lo && k <= hi ? 'ride' : '', STOPS[id].bn);
+      if (id === on) li.appendChild(el('em', 'bd-tag', 'উঠুন'));
+      if (id === off) li.appendChild(el('em', 'bd-tag off', 'নামুন'));
+      ul.appendChild(li);
+    });
+    const whole = button('route', 'পুরো রুট ম্যাপে', async () => {
+      busPick = mine;
+      showBusOnMap([r.stops]);
+      try { const rd = await busRoads(r); if (busPick === mine) showRoadsOnMap([{ color, coords: roadLine(rd, r.stops) }], r.stops.map(id => ({ ...STOPS[id], name: STOPS[id].bn, color }))); } catch { /* the straight line stays */ }
+    }, true);
+    sec.append(head, roads, ul, whole);
+    box.appendChild(sec);
+    // the roads' names, and the ride drawn along them
+    busRoads(r).then(rd => {
+      const chain = el('div', 'bd-chain no-tr');
+      // in the order you meet them: the route's order, or the other way round when you ride it back
+      (i > j ? [...rd.names].reverse() : rd.names).forEach((n, k) => { if (k) chain.appendChild(el('i', 'bd-arrow', '›')); chain.appendChild(el('span', 'bd-road', n)); });
+      roads.replaceChildren(el('span', 'bd-label', 'যে রাস্তা দিয়ে যায়'), rd.names.length ? chain : el('span', 'bd-wait', 'রাস্তার নাম পাওয়া যায়নি'));
+      rideLines[n] = { color, coords: roadLine(rd, l.seg) };
+      if (busPick === mine && rideLines.filter(Boolean).length === t.legs.length)
+        showRoadsOnMap(rideLines, t.legs.flatMap((x, m) => x.seg.map(id => ({ ...STOPS[id], name: STOPS[id].bn, color: BUS_COLORS[m % 2] }))));
+    }).catch(() => roads.replaceChildren(el('span', 'bd-label', 'যে রাস্তা দিয়ে যায়'), el('span', 'bd-wait', 'এখন রাস্তার তথ্য আনা যায়নি — ম্যাপে স্টপ ধরে সোজা রেখা দেখানো হলো।')));
+  });
+  node.after(box);
+  requestAnimationFrame(() => box.classList.add('in'));
+}
+
 function renderBusPane(km) {
   const pane = $('pane-bus');
   pane.replaceChildren();
@@ -1317,6 +1409,7 @@ function renderBusPane(km) {
   const rule = busRule(trip.from, trip.to);
   if (trips.length) {
     pane.appendChild(el('div', 'label', `যে বাসে যেতে পারেন · ${perKmText(rule.perKm)}`));
+    pane.appendChild(el('div', 'bus-hint', 'বাসে চাপ দিলে দেখবেন বাসটি কোন কোন রাস্তা দিয়ে যায়।'));
     const list = el('div');
     for (const t of trips.slice(0, 6)) {
       const first = t.legs[0], last = t.legs[t.legs.length - 1];
@@ -1325,6 +1418,7 @@ function renderBusPane(km) {
       const card = item('bus', t.legs.map(l => l.r.bn).join(' → '), `${STOPS[first.seg[0]].bn} থেকে উঠুন · ${getOff} · ${fmtSpan(t.minLo, t.minHi)}`, taka(t.fare), node => {
         selectOnly(node);
         showBusOnMap(t.legs.map(l => l.seg));
+        openBusDetail(node, t);
       });
       if (t.legs.length > 1) card.querySelector('.t').appendChild(el('span', 'badge v', `${STOPS[last.seg[0]].bn}-এ বাস বদল`));
       else if (fareIsConfirmed(first.seg[0], first.seg[first.seg.length - 1])) card.querySelector('.t').appendChild(el('span', 'badge g', 'যাচাই করা ভাড়া'));
@@ -1509,17 +1603,14 @@ function clearTrip() {
 // if the browser's permission prompt is turned down, the map simply stays on Bangladesh.
 let locateMe = () => {}, locatedOnce = false, quietLocate = false;
 enter.trip = async () => {
-  if (trip.from || trip.to || pendingPath || pendingBus) $('page-trip').classList.add('dir-on');
+  if (trip.from || trip.to || pendingPath) $('page-trip').classList.add('dir-on');
   try { await ensureMap(); } catch { return; }
   if (current !== 'trip') return;
   drawMarkers();
-  if (!locatedOnce && !pendingPath && !pendingBus && !trip.from && !trip.to && navigator.geolocation) { locatedOnce = true; locateMe(); }
+  if (!locatedOnce && !pendingPath && !trip.from && !trip.to && navigator.geolocation) { locatedOnce = true; locateMe(); }
   if (pendingPath) {
     showPathOnMap(pendingPath);
     pendingPath = null;
-  } else if (pendingBus) {
-    showBusOnMap([pendingBus]);
-    pendingBus = null;
   } else if (trip.from && trip.to) {
     calculate();
   } else if (trip.from || trip.to) {
@@ -1650,127 +1741,6 @@ function showPlace(pl) {
   }
 })();
 for (const b of $('seg').children) b.addEventListener('click', () => showPane(b.dataset.pane));
-
-// ---- Dhaka buses ----
-(function initBuses() {
-  const hubs = ['farmgate', 'mirpur10', 'jatrabari', 'uttara', 'gulistan', 'gabtoli', 'mohakhali', 'notunbazar'];
-  let hub = null;
-
-  let timer = null, seq = 0;
-
-  // `getOff` maps a route to the stop nearest the searched place, when the search was for a place.
-  function show(list, note, getOff) {
-    $('bus-note').textContent = note || '';
-    $('bus-note').hidden = !note;
-    const grid = $('bus-grid');
-    grid.replaceChildren();
-    for (const r of list) {
-      const card = el('button', 'card bus-card');
-      card.append(
-        el('b', null, r.bn),
-        el('span', null, `${STOPS[r.stops[0]].bn} – ${STOPS[r.stops[r.stops.length - 1]].bn}`),
-        getOff ? el('span', 'badge v', `${STOPS[getOff.get(r)].bn} স্টপে নামুন`) : el('span', 'badge g', `${num(r.stops.length)} স্টপ`)
-      );
-      card.addEventListener('click', () => open(r));
-      grid.appendChild(card);
-    }
-    stagger(grid);
-  }
-
-  // Buses that pass within walking distance of a place (a park, hospital, road, neighbourhood…).
-  function showNear(place, pool) {
-    const near = nearStops(place);
-    const getOff = new Map();
-    for (const r of pool) {
-      const id = near.find(id => r.stops.includes(id));
-      if (id) getOff.set(r, id);
-    }
-    if (!getOff.size) { show([], `${place.title}-এর কাছে (১.২ কিমির মধ্যে) কোনো বাস স্টপ আমাদের তালিকায় নেই।`); return; }
-    const stops = [...new Set(getOff.values())].map(id => STOPS[id].bn).join(', ');
-    show([...getOff.keys()], `${place.title} — কাছের স্টপ: ${stops} · ${num(getOff.size)} টি বাস যায়`, getOff);
-  }
-
-  function render() {
-    clearTimeout(timer);
-    const mine = ++seq;
-    const q = $('bus-filter').value.trim();
-    const pool = LOCAL_ROUTES.filter(r => !hub || r.stops.includes(hub));
-    if (!q) { show(pool); return; }
-
-    // 1) a bus or stop name, 2) a known place, 3) anything else through the online search.
-    const direct = pool.filter(r => matches(r, q) || r.stops.some(id => matches(STOPS[id], q)));
-    if (direct.length) {
-      // a stop's name: say how many buses pass it; a bus's name: how many were found
-      const byStop = !pool.some(r => matches(r, q));
-      show(direct, byStop ? `${tr(q)} দিয়ে যায়: ${num(direct.length)}টি বাস` : `${num(direct.length)}টি বাস পাওয়া গেছে`);
-      return;
-    }
-    const place = searchLocal(q).find(p => p.icon === 'pin');
-    if (place) { showNear(place, pool); return; }
-    if (q.length < 3) { show([], 'কোনো বাস পাওয়া যায়নি।'); return; }
-    show([], 'জায়গাটি খোঁজা হচ্ছে…');
-    timer = setTimeout(async () => {
-      const found = (await searchOnline(q)).find(p => inZone(p, FARES.zones.dtca));
-      if (mine !== seq) return;
-      if (found) showNear(found, pool);
-      else show([], 'এই নামে ঢাকায় কোনো বাস বা জায়গা পাওয়া যায়নি — অন্য বানানে লিখে দেখুন।');
-    }, 500);
-  }
-
-  function open(r) {
-    const ul = el('ul', 'timeline');
-    ul.append(...r.stops.map(id => el('li', null, STOPS[id].bn)));
-    stagger(ul);
-    openModal(r.bn, `${r.en} · ${num(r.stops.length)} স্টপ`, [ul],
-      [button('route', 'ম্যাপে দেখুন', () => { closeModal(); pendingBus = r.stops; go('trip'); })]);
-  }
-
-  for (const id of hubs) {
-    const chip = el('button', 'chip', STOPS[id].bn);
-    chip.addEventListener('click', () => {
-      hub = hub === id ? null : id;
-      for (const c of $('hubs').children) c.classList.toggle('on', c === chip && hub === id);
-      render();
-    });
-    $('hubs').appendChild(chip);
-  }
-  // Suggestions as you type: buses by name first, then stops and places (any spelling).
-  const filter = $('bus-filter'), sugBox = $('bus-suggest');
-  function suggest() {
-    const q = filter.value.trim();
-    sugBox.replaceChildren();
-    const rows = [];
-    if (q.length < 2) {                              // nothing typed: the busiest stops
-      sugBox.appendChild(el('div', 'sug-head', 'জনপ্রিয় স্টপ'));
-      for (const s of busiestStops(7)) rows.push(['pin', s.bn, `বাস স্টপ · ${num(s.use)} টি বাস`, s.bn]);
-    } else {
-    // A bus whose own name starts with what was typed comes first; then places; then buses that merely match.
-    const low = q.toLowerCase(), named = [], loose = [];
-    for (const r of LOCAL_ROUTES) {
-      if (!matches(r, q)) continue;
-      const row = ['bus', r.bn, `${STOPS[r.stops[0]].bn} – ${STOPS[r.stops[r.stops.length - 1]].bn}`, r.bn];
-      (r.bn.startsWith(q) || (r.en || '').toLowerCase().startsWith(low) ? named : loose).push(row);
-    }
-    rows.push(...named.slice(0, 4));
-    for (const p of searchLocal(q, 5)) rows.push([p.icon === 'bus' ? 'pin' : p.icon, p.title, p.sub, p.title]);
-    rows.push(...loose.slice(0, Math.max(0, 3 - named.length)));
-    }
-    for (const [icon, title, sub, value] of rows) {
-      const row = el('div', 'sug');
-      const t = el('div', 't');
-      t.append(el('b', null, title), el('span', null, sub));
-      row.append(ic(icon), t);
-      row.addEventListener('mousedown', e => { e.preventDefault(); filter.value = tr(value); sugBox.hidden = true; filter.blur(); render(); });
-      sugBox.appendChild(row);
-    }
-    sugBox.hidden = !rows.length;
-  }
-  filter.addEventListener('input', () => { suggest(); render(); });
-  filter.addEventListener('focus', suggest);
-  filter.addEventListener('blur', () => { sugBox.hidden = true; });
-  filter.addEventListener('keydown', e => { if (e.key === 'Enter') { sugBox.hidden = true; filter.blur(); } });
-  render();
-})();
 
 // ---- Districts: 64 district cards, district-to-district fares, bus companies ----
 (function initDistricts() {

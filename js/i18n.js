@@ -13,6 +13,15 @@ function setLang(lang) {
 }
 
 const EXACT = {
+  // ভাড়া (calculator and telling a fare in one page), and a bus's roads on the map
+  'ভাড়া কত?': 'What does it cost?', 'সরকারি হারে হিসাব করুন — আর যে ভাড়া আপনি নিজে দিয়েছেন, তা জানিয়ে অন্যদের ঠকা থেকে বাঁচান।': 'Work it out at the government rate — and tell the fare you really paid, so others are not overcharged.',
+  'দূরত্ব দিন, সাথে সাথে ভাড়া': 'Set the distance, see the fare', 'অনুমোদন হলে +১০ পয়েন্ট · লিডারবোর্ড': '+10 points once approved · leaderboard',
+  'কোন বাসে যাবেন': 'Which bus to take', 'ম্যাপে কোথা থেকে কোথায় দিন — বাস ও তার রাস্তা': 'Set from and to on the map — the buses and their roads',
+  'ভাড়ার হিসাব · ভাড়া জানান ও পয়েন্ট': 'Fare calculator · tell a fare, earn points',
+  'বাসে চাপ দিলে দেখবেন বাসটি কোন কোন রাস্তা দিয়ে যায়।': 'Tap a bus to see the roads it takes.', 'যে রাস্তা দিয়ে যায়': 'Roads it takes',
+  'রাস্তা খোঁজা হচ্ছে…': 'Finding the roads…', 'রাস্তার নাম পাওয়া যায়নি': 'No road names found', 'পুরো রুট ম্যাপে': 'Whole route on the map',
+  'এখন রাস্তার তথ্য আনা যায়নি — ম্যাপে স্টপ ধরে সোজা রেখা দেখানো হলো।': 'Could not get the roads now — the map shows straight lines between stops.',
+  'উঠুন': 'Get on', 'নামুন': 'Get off',
   // tour plan
   'ট্যুর': 'Tour', 'ট্যুর প্ল্যান': 'Tour plan', 'ট্যুর প্ল্যান করুন': 'Plan a tour',
   'কোথায় যাবেন, কতজন, কত দিন — খরচের হিসাব আর শেয়ার করার মতো একটি কার্ড।': 'Where, how many people, how many days — a cost estimate and a card worth sharing.',

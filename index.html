@@ -38,7 +38,6 @@
     <a href="#/" data-nav="home"><i data-ic="home"></i><span>হোম</span></a>
     <a href="#/explore" data-nav="explore"><i data-ic="feed"></i><span>এক্সপ্লোর</span><em class="ndot" data-notify-dot hidden></em></a>
     <a href="#/trip" data-nav="trip"><i data-ic="route"></i><span>ম্যাপ</span></a>
-    <a href="#/buses" data-nav="buses" class="desk-only"><i data-ic="busFront"></i><span>ঢাকার বাস</span></a>
     <a href="#/train" data-nav="train" class="desk-only"><i data-ic="trainFront"></i><span>বাস · ট্রেন · লঞ্চ</span></a>
     <a href="#/chat" data-nav="chat" class="phone-only"><i data-ic="chat"></i><span>মেসেজ</span><em class="nbadge" data-chat-badge hidden></em></a>
     <a href="#/districts" data-nav="districts" class="desk-only"><i data-ic="compass"></i><span>রূপসী বাংলা</span></a>
@@ -68,12 +67,12 @@
       <!-- Everything the app does, one tap away -->
       <div class="apps">
         <a href="#/trip"><i class="mi c-green" data-ic="route"></i><span>ম্যাপ</span></a>
-        <a href="#/buses"><i class="mi c-teal" data-ic="bus"></i><span>ঢাকার বাস</span></a>
         <a href="#/train"><i class="mi c-blue" data-ic="trainFront"></i><span>বাস · ট্রেন · লঞ্চ</span></a>
         <a href="#/nearby"><i class="mi c-violet" data-ic="locate"></i><span>কাছাকাছি</span></a>
         <a href="#/districts"><i class="mi c-pink" data-ic="compass"></i><span>রূপসী বাংলা</span></a>
-        <a href="#/community"><i class="mi c-amber" data-ic="star"></i><span>ভাড়া জানান</span></a>
-        <a href="#/fares"><i class="mi c-ink" data-ic="tag"></i><span>ভাড়ার হিসাব</span></a>
+        <a href="#/fares"><i class="mi c-amber" data-ic="tag"></i><span>ভাড়া</span></a>
+        <a href="#/explore"><i class="mi c-teal" data-ic="feed"></i><span>এক্সপ্লোর</span></a>
+        <a href="#/chat"><i class="mi c-ink" data-ic="chat"></i><span>মেসেজ</span></a>
         <a href="#/support"><i class="mi c-gray" data-ic="help"></i><span>সাহায্য</span></a>
       </div>
 
@@ -165,75 +164,6 @@
 
   <!-- Dhaka buses -->
   <!-- নগরপথ: getting about the city — local buses, and the fares people report -->
-  <section class="page" id="page-buses">
-    <button class="pg-back phone-only" type="button" aria-label="ফিরে যান" title="ফিরে যান"><i data-ic="back"></i></button>
-    <div class="wrap tx cx">
-      <div class="tx-hero">
-        <span class="tx-eyebrow"><i data-ic="pin"></i><span>ঢাকার বাস</span></span>
-        <h2>শহরে কীভাবে যাবেন?</h2>
-        <p>কোন লোকাল বাস কোথায় যায়, আর আসল ভাড়া কত — যাঁরা যান, তাঁদের কাছ থেকে।</p>
-      </div>
-      <div class="tmode two" id="cx-seg" role="tablist" aria-label="ঢাকার বাস">
-        <button role="tab" data-m="bus" class="m-city" aria-selected="true"><span class="mi2"><i data-ic="busFront"></i></span><span class="mt"><b>লোকাল বাস</b><small id="cx-c-bus"></small></span></button>
-        <button role="tab" data-m="fare" class="m-fare" aria-selected="false"><span class="mi2"><i data-ic="coin"></i></span><span class="mt"><b>ভাড়া জানান</b><small>অনুমোদন হলে +১০ পয়েন্ট · লিডারবোর্ড</small></span></button>
-      </div>
-      <div class="tx-pane" id="cx-bus" role="tabpanel">
-        <div class="tx-sub"><h3>লোকাল বাস</h3><p>বাসের নাম বা যেকোনো জায়গা লিখুন — কোন বাস যায় দেখাবে।</p></div>
-      <div class="filter tx-find" style="position: relative">
-        <i data-ic="search"></i>
-        <input id="bus-filter" autocomplete="off" placeholder="যেমন: তুরাগ, jatrabari, ঢাকা মেডিকেল" aria-label="বাস বা জায়গা খুঁজুন">
-        <div class="suggest" id="bus-suggest" style="left: 0; right: 0" hidden></div>
-      </div>
-      <div class="chips" id="hubs"></div>
-      <div class="label note" id="bus-note" hidden></div>
-      <div class="grid" id="bus-grid"></div>
-      </div>
-      <div class="tx-pane give-wrap" id="cx-fare" role="tabpanel" hidden>
-      <div class="lead-head">
-        <span class="eyebrow">সবাই মিলে</span>
-        <h2>আপনি জানেন,<br>অন্যরা জানে না।</h2>
-        <p>যে পথের ভাড়া আপনি জানেন, তা জানিয়ে দিন। একজন যাত্রী ঠকবে না — আর যাচাইয়ের পর আপনি পাবেন পয়েন্ট।</p>
-      </div>
-      <div class="give-grid">
-        <div class="card give-card" id="give-card">
-          <h3>ভাড়া জানান <em>অনুমোদন হলে +১০ পয়েন্ট</em></h3>
-          <div class="od">
-            <div class="dots"><i class="a"></i><i class="l"></i><i class="b"></i></div>
-            <div class="inputs">
-              <div class="field"><input id="give-from" autocomplete="off" placeholder="কোথা থেকে" aria-label="কোথা থেকে"><div class="suggest" id="give-from-suggest" hidden></div></div>
-              <div class="field"><input id="give-to" autocomplete="off" placeholder="কোথায়" aria-label="কোথায়"><div class="suggest" id="give-to-suggest" hidden></div></div>
-            </div>
-          </div>
-          <div class="label">কীসে গিয়েছেন?</div>
-          <div class="chips" id="give-modes"></div>
-          <label class="money"><span>ভাড়া কত দিয়েছেন? (টাকা)</span><input id="give-fare" type="number" inputmode="numeric" min="5" max="20000" placeholder="৳"></label>
-          <div class="form-note" id="give-note">শুধু নিজে দেওয়া আসল ভাড়াটি জানান। আমরা যাচাই করে অনুমোদন দিলে ১০ পয়েন্ট পাবেন; ভুল তথ্য সরিয়ে দেওয়া হয়।</div>
-          <button class="btn" id="give-send"><i data-ic="check"></i>জমা দিন</button>
-        </div>
-
-        <div class="card lead-card">
-          <h3>লিডারবোর্ড</h3>
-          <div class="podium" id="podium"></div>
-          <div class="person mine" id="my-points" hidden></div>
-          <button class="btn quiet lead-more" id="lead-more" hidden>সেরা ৫০ জন দেখুন <i data-ic="arrow"></i></button>
-          <div class="foot" id="lead-stats"></div>
-        </div>
-      </div>
-
-      <div class="label">পয়েন্ট দিয়ে কী হবে?</div>
-      <div class="card points-info">
-        <i class="mi soft" data-ic="star"></i>
-        <span><b>এখন: সম্মান। সামনে: ছাড়।</b><em>Manzeela-তে রাইড বা টিকিট কাটার ব্যবস্থা চালু হলে জমানো পয়েন্ট দিয়ে ছাড় পাওয়া যাবে। সেটি এখনো চালু হয়নি — ততদিন পয়েন্ট জমতে থাকবে।</em></span>
-      </div>
-
-      <div class="label row-label"><span>সচেতন থাকুন</span><span class="arrows"><button class="icon-btn" id="tips-prev" aria-label="আগের"><i data-ic="back"></i></button><button class="icon-btn" id="tips-next" aria-label="পরের"><i data-ic="chev"></i></button></span></div>
-      <div class="tips" id="tips"></div>
-
-      <div class="label" id="recent-label" hidden>সম্প্রতি যাঁরা জানিয়েছেন</div>
-      <div class="recent-fares" id="recent-fares"></div>
-      </div>
-    </div>
-  </section>
 
   <!-- Community: awareness, fares people know, points -->
   <section class="page" id="page-community" hidden></section>
@@ -479,13 +409,13 @@
 
       <div class="label">শহরে চলাচল</div>
       <div class="card menu">
-        <a href="#/buses"><i class="mi c-teal" data-ic="busFront"></i><span><b>ঢাকার বাস</b><em>লোকাল বাস · ভাড়া জানান ও পয়েন্ট</em></span><i class="chev" data-ic="chev"></i></a>
+        <a href="#/trip"><i class="mi c-teal" data-ic="busFront"></i><span><b>কোন বাসে যাবেন</b><em>ম্যাপে কোথা থেকে কোথায় দিন — বাস ও তার রাস্তা</em></span><i class="chev" data-ic="chev"></i></a>
+        <a href="#/fares"><i class="mi c-amber" data-ic="tag"></i><span><b>ভাড়া</b><em>ভাড়ার হিসাব · ভাড়া জানান ও পয়েন্ট</em></span><i class="chev" data-ic="chev"></i></a>
       </div>
 
       <div class="label">দূরপাল্লা</div>
       <div class="card menu">
         <a href="#/train"><i class="mi c-blue" data-ic="trainFront"></i><span><b>বাস · ট্রেন · লঞ্চ</b><em>জেলা থেকে জেলা, ট্রেন, লঞ্চ</em></span><i class="chev" data-ic="chev"></i></a>
-        <a href="#/fares"><i class="mi c-green" data-ic="tag"></i><span><b>ভাড়ার হিসাব</b><em>কিমি প্রতি কত, মোট কত</em></span><i class="chev" data-ic="chev"></i></a>
       </div>
 
       <div class="label">ঘোরাঘুরি</div>
@@ -680,8 +610,17 @@
   <!-- Fares -->
   <section class="page" id="page-fares">
     <button class="pg-back phone-only" type="button" aria-label="ফিরে যান" title="ফিরে যান"><i data-ic="back"></i></button>
-    <div class="wrap">
-      <div class="page-head"><h2>ভাড়ার হিসাব</h2><p>দূরত্ব বদলান, সাথে সাথে ভাড়া দেখুন।</p></div>
+    <div class="wrap tx cx">
+      <div class="tx-hero">
+        <span class="tx-eyebrow"><i data-ic="tag"></i><span>ভাড়া</span></span>
+        <h2>ভাড়া কত?</h2>
+        <p>সরকারি হারে হিসাব করুন — আর যে ভাড়া আপনি নিজে দিয়েছেন, তা জানিয়ে অন্যদের ঠকা থেকে বাঁচান।</p>
+      </div>
+      <div class="tmode two" id="fx-seg" role="tablist" aria-label="ভাড়া">
+        <button role="tab" data-m="calc" class="m-city" aria-selected="true"><span class="mi2"><i data-ic="tag"></i></span><span class="mt"><b>ভাড়ার হিসাব</b><small>দূরত্ব দিন, সাথে সাথে ভাড়া</small></span></button>
+        <button role="tab" data-m="give" class="m-fare" aria-selected="false"><span class="mi2"><i data-ic="coin"></i></span><span class="mt"><b>ভাড়া জানান</b><small>অনুমোদন হলে +১০ পয়েন্ট · লিডারবোর্ড</small></span></button>
+      </div>
+      <div class="tx-pane" id="fx-calc" role="tabpanel">
       <div class="card calc">
         <div class="calc-km"><b id="calc-km">১০</b><span>কিমি</span></div>
         <input type="range" id="calc-range" min="1" max="500" value="10" aria-label="দূরত্ব, কিলোমিটার">
@@ -689,6 +628,51 @@
       </div>
       <div class="rules" id="rules"></div>
       <div class="foot" id="rules-foot"></div>
+      </div>
+      <div class="tx-pane give-wrap" id="fx-give" role="tabpanel" hidden>
+      <div class="lead-head">
+        <span class="eyebrow">সবাই মিলে</span>
+        <h2>আপনি জানেন,<br>অন্যরা জানে না।</h2>
+        <p>যে পথের ভাড়া আপনি জানেন, তা জানিয়ে দিন। একজন যাত্রী ঠকবে না — আর যাচাইয়ের পর আপনি পাবেন পয়েন্ট।</p>
+      </div>
+      <div class="give-grid">
+        <div class="card give-card" id="give-card">
+          <h3>ভাড়া জানান <em>অনুমোদন হলে +১০ পয়েন্ট</em></h3>
+          <div class="od">
+            <div class="dots"><i class="a"></i><i class="l"></i><i class="b"></i></div>
+            <div class="inputs">
+              <div class="field"><input id="give-from" autocomplete="off" placeholder="কোথা থেকে" aria-label="কোথা থেকে"><div class="suggest" id="give-from-suggest" hidden></div></div>
+              <div class="field"><input id="give-to" autocomplete="off" placeholder="কোথায়" aria-label="কোথায়"><div class="suggest" id="give-to-suggest" hidden></div></div>
+            </div>
+          </div>
+          <div class="label">কীসে গিয়েছেন?</div>
+          <div class="chips" id="give-modes"></div>
+          <label class="money"><span>ভাড়া কত দিয়েছেন? (টাকা)</span><input id="give-fare" type="number" inputmode="numeric" min="5" max="20000" placeholder="৳"></label>
+          <div class="form-note" id="give-note">শুধু নিজে দেওয়া আসল ভাড়াটি জানান। আমরা যাচাই করে অনুমোদন দিলে ১০ পয়েন্ট পাবেন; ভুল তথ্য সরিয়ে দেওয়া হয়।</div>
+          <button class="btn" id="give-send"><i data-ic="check"></i>জমা দিন</button>
+        </div>
+
+        <div class="card lead-card">
+          <h3>লিডারবোর্ড</h3>
+          <div class="podium" id="podium"></div>
+          <div class="person mine" id="my-points" hidden></div>
+          <button class="btn quiet lead-more" id="lead-more" hidden>সেরা ৫০ জন দেখুন <i data-ic="arrow"></i></button>
+          <div class="foot" id="lead-stats"></div>
+        </div>
+      </div>
+
+      <div class="label">পয়েন্ট দিয়ে কী হবে?</div>
+      <div class="card points-info">
+        <i class="mi soft" data-ic="star"></i>
+        <span><b>এখন: সম্মান। সামনে: ছাড়।</b><em>Manzeela-তে রাইড বা টিকিট কাটার ব্যবস্থা চালু হলে জমানো পয়েন্ট দিয়ে ছাড় পাওয়া যাবে। সেটি এখনো চালু হয়নি — ততদিন পয়েন্ট জমতে থাকবে।</em></span>
+      </div>
+
+      <div class="label row-label"><span>সচেতন থাকুন</span><span class="arrows"><button class="icon-btn" id="tips-prev" aria-label="আগের"><i data-ic="back"></i></button><button class="icon-btn" id="tips-next" aria-label="পরের"><i data-ic="chev"></i></button></span></div>
+      <div class="tips" id="tips"></div>
+
+      <div class="label" id="recent-label" hidden>সম্প্রতি যাঁরা জানিয়েছেন</div>
+      <div class="recent-fares" id="recent-fares"></div>
+      </div>
     </div>
   </section>
 </main>
