@@ -4516,24 +4516,54 @@ button.dg-wiki { background: none; border: 0; padding: 0; cursor: pointer; font:
 .ro-bar { position: sticky; top: 0; z-index: 900; display: flex; align-items: center; gap: 10px; padding: 10px 16px; background: #b45309; color: #fff; font-size: 14px; font-weight: 600; }
 .ro-bar i svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; display: block; } .ro-bar span { flex: 1; }
 
-/* A bus's roads (map → a bus in the list): the roads it takes, its stops, where to get on and off */
+/* A bus on the map (a bus in the list): its route as a line, in the direction you ride */
 .bus-hint { margin: -2px 2px 8px; font-size: 13px; color: var(--muted); }
-.bus-detail { margin: 2px 0 10px; padding: 12px 14px; border-radius: 18px; background: var(--raised); display: grid; gap: 14px; opacity: 0; transform: translateY(-4px); transition: opacity .25s, transform .25s var(--ease); }
+.bus-detail { margin: 4px 0 12px; display: grid; gap: 10px; opacity: 0; transform: translateY(-6px); transition: opacity .3s, transform .35s var(--ease); }
 .bus-detail.in { opacity: 1; transform: none; }
-.bd-bus { display: grid; gap: 10px; }
-.bd-bus + .bd-bus { padding-top: 12px; border-top: 1px solid var(--line); }
-.bd-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
-.bd-head b { font-size: 16px; } .bd-head span { font-size: 13px; color: var(--muted); }
-.bd-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; align-self: center; }
-.bd-roads { display: grid; gap: 6px; }
-.bd-label { font-size: 12px; font-weight: 700; color: var(--muted); letter-spacing: .02em; }
-.bd-wait { font-size: 13.5px; color: var(--muted); }
-.bd-chain { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 2px; }
-.bd-road { padding: 4px 10px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); font-size: 13px; font-weight: 600; }
-.bd-arrow { font-style: normal; color: var(--muted); padding: 0 2px; }
-.bd-stops { max-height: 260px; overflow-y: auto; padding-top: 6px; }
-.bd-stops li { font-size: 14px; padding-bottom: 12px; color: var(--muted); }
-.bd-stops li.ride { color: var(--ink); font-weight: 600; }
-.bd-stops li:not(.ride)::before { border-color: var(--line); }
-.bd-tag { margin-left: 8px; padding: 1px 8px; border-radius: 999px; background: var(--accent); color: #fff; font-size: 11.5px; font-style: normal; font-weight: 700; vertical-align: 1px; }
-.bd-tag.off { background: #ea4335; }
+.bd-bus { --bc: #0a8f62; display: grid; gap: 14px; padding: 16px; border-radius: 22px; background: var(--surface); border: 1px solid var(--line);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .04), 0 10px 28px -14px color-mix(in srgb, var(--bc) 45%, transparent); }
+.bd-head { display: flex; align-items: center; gap: 12px; }
+.bd-badge { width: 42px; height: 42px; flex: none; display: grid; place-items: center; border-radius: 14px; color: #fff;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--bc) 82%, #fff), var(--bc)); box-shadow: 0 6px 14px -6px var(--bc); }
+.bd-badge svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.bd-title { display: grid; gap: 2px; min-width: 0; }
+.bd-title b { font-size: 17px; line-height: 1.2; }
+.bd-title span { font-size: 13px; color: var(--muted); }
+.bd-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.bd-fact { display: grid; gap: 1px; padding: 9px 10px; border-radius: 14px; background: color-mix(in srgb, var(--bc) 8%, var(--raised)); text-align: center; }
+.bd-fact b { font-size: 15px; color: var(--ink); white-space: nowrap; }
+.bd-fact span { font-size: 11.5px; color: var(--muted); }
+.bd-route { list-style: none; margin: 0; padding: 2px 0; }
+.bd-route li { position: relative; display: flex; align-items: center; gap: 8px; min-height: 38px; padding-left: 36px; font-size: 14.5px; color: var(--muted); }
+.bd-route li[hidden] { display: none; }
+/* the rail: dashed where you do not ride, the bus's colour where you do */
+.bd-route li::before { content: ''; position: absolute; left: 14px; top: 0; bottom: 0; width: 3px; border-radius: 2px;
+  background: repeating-linear-gradient(to bottom, var(--line) 0 5px, transparent 5px 9px); }
+.bd-route li.ride::before { background: var(--bc); }
+.bd-route li.on::before { background: linear-gradient(to bottom, transparent 0 50%, var(--bc) 50%), repeating-linear-gradient(to bottom, var(--line) 0 5px, transparent 5px 9px); }
+.bd-route li.off::before { background: linear-gradient(to bottom, var(--bc) 0 50%, transparent 50%), repeating-linear-gradient(to bottom, var(--line) 0 5px, transparent 5px 9px); }
+.bd-route li.on.off::before { background: none; }
+.bd-route li:first-child::before { top: 50%; } .bd-route li:last-child::before { bottom: 50%; }
+/* the dots */
+.bd-route li::after { content: ''; position: absolute; left: 10px; top: 50%; width: 11px; height: 11px; margin-top: -5.5px; border-radius: 50%; background: var(--surface); border: 2px solid var(--line); box-sizing: border-box; }
+.bd-route li.ride::after { border: 3px solid var(--bc); }
+.bd-route li.on::after, .bd-route li.off::after { left: 6px; width: 19px; height: 19px; margin-top: -9.5px; border: 0; background: var(--bc);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--bc) 18%, transparent), inset 0 0 0 5px var(--bc), inset 0 0 0 9px #fff; }
+.bd-route li.ride .bd-name { color: var(--ink); font-weight: 600; }
+.bd-route li.on .bd-name, .bd-route li.off .bd-name { font-size: 15.5px; font-weight: 700; }
+.bd-tag { padding: 2px 9px; border-radius: 999px; font-size: 11.5px; font-style: normal; font-weight: 700; white-space: nowrap;
+  color: var(--bc); background: color-mix(in srgb, var(--bc) 13%, transparent); }
+.bd-route li.off .bd-tag { color: #d93025; background: color-mix(in srgb, #ea4335 13%, transparent); }
+/* folded stops */
+.bd-route li.bd-more { min-height: 32px; }
+.bd-route li.bd-more::after { display: none; }
+.bd-more-btn { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px 4px 0; border: 0; background: none; font: inherit; font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer; }
+.bd-more-btn i svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.2; transform: rotate(90deg); transition: transform .2s; display: block; }
+.bd-more-btn.open i svg { transform: rotate(-90deg); }
+.bd-more-btn:hover { color: var(--ink); }
+.bd-whole { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; border: 0; border-radius: 14px; cursor: pointer; font: inherit; font-size: 14.5px; font-weight: 700;
+  color: var(--bc); background: color-mix(in srgb, var(--bc) 10%, var(--raised)); transition: background .2s, transform .15s; }
+.bd-whole:hover { background: color-mix(in srgb, var(--bc) 16%, var(--raised)); } .bd-whole:active { transform: scale(.98); }
+.bd-whole svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.bd-change { display: flex; align-items: center; gap: 8px; padding: 0 6px; font-size: 13px; font-weight: 600; color: #6b4de6; }
+.bd-change::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: currentColor; box-shadow: 0 0 0 4px color-mix(in srgb, currentColor 18%, transparent); }
