@@ -3,8 +3,11 @@
 // article lists as its sights, the most-read first (Wikipedia page views, 60 days); pictures from Wikimedia Commons.
 // Famous foods and products: the government's GI register (data/district-famous.js). Fares: BRTA and the counter list.
 
-const DIVISION_TINT = { 'ঢাকা': ['#0a84ff', '#0060df'], 'চট্টগ্রাম': ['#30d158', '#0a9f6e'], 'সিলেট': ['#64d2ff', '#0a84ff'], 'রাজশাহী': ['#ff9f0a', '#d4581a'],
-  'খুলনা': ['#34c759', '#1f7a4d'], 'বরিশাল': ['#5e5ce6', '#3634a3'], 'রংপুর': ['#ff6482', '#c4325a'], 'ময়মনসিংহ': ['#bf5af2', '#7d36a8'] };
+// A district without a picture: one quiet dark gradient for every division (the redesign keeps colour for photos)
+const NEUTRAL_TINT = ['#3a423f', '#0b0f0e'];
+// মেঠোপথ's mark: an SVG leaf before the words (no emoji as icons)
+function leafLabel(tag, cls, text) { const e = el(tag, cls); e.append(Object.assign(el('i', 'leaf-ic'), { innerHTML: svg('leaf') }), document.createTextNode(text)); return e; }
+const DIVISION_TINT = new Proxy({}, { get: () => NEUTRAL_TINT });
 let GUIDE = null, guideLoading = null, GI_STORY = {};
 const loadGuide = () => GUIDE ? Promise.resolve(GUIDE) : (guideLoading = guideLoading || Promise.all([
   fetch('data/district-guide.json').then(r => r.json()).then(j => j.guide || {}).catch(() => ({})),
@@ -368,7 +371,7 @@ const coverStyle = (img, division) => {
     const c = el('button', 'dg-place gm-card');
     const ph = el('span', 'ph');
     photo(ph, g.photos[0], d.division, 500, kindArt(GEM_ART[g.kind] || g.name) || 'pin');
-    ph.appendChild(el('span', 'gm-badge', tl2('🌿 মেঠোপথ', '🌿 Methopath')));
+    ph.appendChild(leafLabel('span', 'gm-badge', tl2('মেঠোপথ', 'Methopath')));
     const t = el('span', 't');
     t.append(el('b', 'no-tr', g.name), el('small', null, `${d.bn}${g.place ? ' · ' + g.place : ''}`));
     c.append(ph, t);
@@ -389,7 +392,7 @@ const coverStyle = (img, division) => {
       const art = el('div', 'mtp-polaroids');
       pick.forEach((u, i) => { const f = el('span', 'mtp-pol p' + i); photo(f, u, '', 330); art.appendChild(f); });
       const copy = el('div', 'mtp-bcopy');
-      copy.append(el('span', 'mtp-new', tl2('🌿 বাংলাদেশের সৌন্দর্য, আপনার চোখে', '🌿 The beauty of Bangladesh, through your eyes')),
+      copy.append(leafLabel('span', 'mtp-new', tl2('বাংলাদেশের সৌন্দর্য, আপনার চোখে', 'The beauty of Bangladesh, through your eyes')),
         el('h3', null, tl2('আপনার দেখা বাংলাদেশ, সবার সাথে ভাগ করে নিন', 'Share the Bangladesh you have seen')),
         el('p', null, tl2('ঘুরে দেখা প্রিয় জায়গার ছবি শেয়ার করুন। আপনার চোখে দেখা বাংলাদেশের সৌন্দর্য আবিষ্কার করুক আরও অনেকে।', 'Share photos of the places you loved. Let many more discover the beauty of Bangladesh through your eyes.')));
       // one clear way in: the sharing itself lives inside মেঠোপথ
@@ -453,7 +456,7 @@ const coverStyle = (img, division) => {
         const media = [];
         for (const [i, f] of files.entries()) { note.className = 'pl-givenote'; note.textContent = tl2(`ছবি ${num(i + 1)}/${num(files.length)} পাঠানো হচ্ছে…`, `Sending photo ${i + 1}/${files.length}…`); const b = await shrink(f); media.push(await uploadMedia(b, b.type || 'image/jpeg', () => {})); }
         await placesPost('gem', { district: district.value, name: name.value, kind: kind.value, where: where.value, about: about.value, how: how.value, lat: pos && pos.lat, lon: pos && pos.lon, media });
-        card.replaceChildren(x, Object.assign(el('div', 'gm-done'), { innerHTML: '<b>🌿</b>' }), el('h3', null, tl2('ধন্যবাদ!', 'Thank you!')),
+        card.replaceChildren(x, Object.assign(el('div', 'gm-done'), { innerHTML: '<b>' + svg('leaf') + '</b>' }), el('h3', null, tl2('ধন্যবাদ!', 'Thank you!')),
           el('p', null, tl2('আমাদের টিম জায়গাটি যাচাই করে প্রকাশ করবে — তখন আপনার নামসহ সবাই দেখবে।', 'Our team will check it and publish it with your name for everyone to see.')));
       } catch (e) {
         send.disabled = false; note.className = 'pl-givenote bad';
@@ -482,7 +485,7 @@ const coverStyle = (img, division) => {
     const x = el('button', 'lv-icon dg-x'); x.innerHTML = svg('close'); x.setAttribute('aria-label', tl2('বন্ধ করুন', 'Close')); x.addEventListener('click', close);
     const head = el('div', 'mtp-head');
     const stats = el('div', 'mtp-stats'); stats.hidden = true;
-    head.append(el('span', 'mtp-kicker', tl2('🌿 মেঠোপথ', '🌿 Methopath')), el('h2', null, tl2('চেনা পথের বাইরেও এক বাংলাদেশ', 'A Bangladesh beyond the familiar roads')),
+    head.append(leafLabel('span', 'mtp-kicker', tl2('মেঠোপথ', 'Methopath')), el('h2', null, tl2('চেনা পথের বাইরেও এক বাংলাদেশ', 'A Bangladesh beyond the familiar roads')),
       el('p', null, tl2('বাংলাদেশের আনাচে-কানাচে ছড়িয়ে থাকা সুন্দর সব জায়গা, স্থানীয়দের চেনা প্রিয় গন্তব্য আর ভ্রমণপিপাসু মানুষের ক্যামেরায় ধরা মুহূর্ত—সব এক জায়গায়। আপনার তোলা ছবিও শেয়ার করুন, পৌঁছে দিন আপনার দেখা বাংলাদেশের গল্প সবার কাছে।', 'Beautiful places in every corner of Bangladesh, the spots locals love, and moments caught on travellers’ cameras — all in one place. Share your photos too, and take the Bangladesh you have seen to everyone.')), stats);
     const ctas = el('div', 'mtp-ctas');
     const sharePlace = el('button', 'mtp-cta main'); sharePlace.append(Object.assign(el('i'), { innerHTML: svg('pin') }), el('b', null, tl2('জায়গা শেয়ার করুন', 'Share a place')), el('small', null, tl2('আপনার চেনা প্রিয় গন্তব্য', 'A spot you know and love')));
@@ -518,7 +521,7 @@ const coverStyle = (img, division) => {
       pane.replaceChildren();
       if (!TABS.length) {                                        // nothing shared yet: one warm invitation, not three empty tabs
         const e = el('div', 'mtp-start');
-        e.append(el('span', 'ic', '🌿'), el('b', null, tl2('প্রথম গল্পটি হোক আপনার', 'Let the first story be yours')), el('p', null, tl2('আপনার এলাকার সুন্দর কোনো জায়গা কিংবা ভ্রমণের প্রিয় ছবিটি শেয়ার করুন। যাচাইয়ের পর আপনার নামসহ প্রকাশিত হবে, আর আপনার হাত ধরেই অন্যরা খুঁজে পাবে নতুন কোনো গন্তব্য।', 'Share a lovely place near you or a favourite photo from a trip. Once checked it is published with your name, and through you others will find somewhere new.')));
+        e.append(Object.assign(el('span', 'ic'), { innerHTML: svg('leaf') }), el('b', null, tl2('প্রথম গল্পটি হোক আপনার', 'Let the first story be yours')), el('p', null, tl2('আপনার এলাকার সুন্দর কোনো জায়গা কিংবা ভ্রমণের প্রিয় ছবিটি শেয়ার করুন। যাচাইয়ের পর আপনার নামসহ প্রকাশিত হবে, আর আপনার হাত ধরেই অন্যরা খুঁজে পাবে নতুন কোনো গন্তব্য।', 'Share a lovely place near you or a favourite photo from a trip. Once checked it is published with your name, and through you others will find somewhere new.')));
         pane.appendChild(e);
         return;
       }
@@ -550,7 +553,7 @@ const coverStyle = (img, division) => {
         feed.top.forEach((u, i) => {
           const li = el('li');
           const av = el('span', 'pl-av'); if (u.pic) av.style.backgroundImage = `url(api/avatar/${u.id}?v=${u.pic})`; else av.textContent = [...(u.name || '?')][0];
-          li.append(el('span', 'rank', i < 3 ? ['🥇', '🥈', '🥉'][i] : num(i + 1)), av, el('b', null, u.name), el('small', null, tl2(`${num(u.photos)} ছবি · ${num(u.gems)} জায়গা`, `${u.photos} photos · ${u.gems} places`)));
+          li.append(el('span', 'rank' + (i < 3 ? ' top' : ''), num(i + 1)), av, el('b', null, u.name), el('small', null, tl2(`${num(u.photos)} ছবি · ${num(u.gems)} জায়গা`, `${u.photos} photos · ${u.gems} places`)));
           list.appendChild(li);
         });
         pane.appendChild(list);
@@ -650,7 +653,7 @@ const coverStyle = (img, division) => {
     head.appendChild(el('h2', 'no-tr', s.name));
     const badges = el('div', 'pl-badges');
     const rank = (g.sights || []).filter(t => (t.views || 0) > (s.views || 0)).length;
-    if (s.gemId) badges.append(el('span', 'pl-badge gem', tl2('🌿 মেঠোপথ', '🌿 Methopath')), el('span', 'pl-badge calm', kindName(s.gemKind)), el('span', 'pl-badge by', tl2(`${s.gemBy.name} জানিয়েছেন`, `shared by ${s.gemBy.name}`)));
+    if (s.gemId) badges.append(leafLabel('span', 'pl-badge gem', tl2('মেঠোপথ', 'Methopath')), el('span', 'pl-badge calm', kindName(s.gemKind)), el('span', 'pl-badge by', tl2(`${s.gemBy.name} জানিয়েছেন`, `shared by ${s.gemBy.name}`)));
     if (s.views) badges.appendChild(el('span', 'pl-badge ' + (rank < 3 ? 'hot' : 'calm'), rank < 3 ? tl2('সবার প্রিয়', 'Loved by many') : tl2('নিরিবিলি', 'Quiet find')));
     const rating = el('span', 'pl-badge rate'); rating.hidden = true;
     badges.appendChild(rating);
@@ -952,7 +955,7 @@ const coverStyle = (img, division) => {
     }
     // hidden gems people sent for this district
     const gemSec = el('section', 'dg-gemsec');
-    gemSec.append(el('h3', 'dg-h', tl2('🌿 মেঠোপথ', '🌿 Methopath')));
+    gemSec.append(leafLabel('h3', 'dg-h', tl2('মেঠোপথ', 'Methopath')));
     const gemRail = el('div', 'dg-rail');
     const gemAdd = el('button', 'dg-place gm-add');
     gemAdd.append(Object.assign(el('span', 'ph'), { innerHTML: '<span class="gm-plus">+</span>' }), el('span', 't'));
