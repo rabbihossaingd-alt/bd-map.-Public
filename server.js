@@ -2826,7 +2826,7 @@ const SECURITY_HEADERS = {
 //   GET /api/geo/search?q=        Photon search, Bangladesh only        (its JSON, unchanged)
 //   GET /api/geo/nominatim?q=     Nominatim search, Bangladesh only
 //   GET /api/geo/reverse?lat&lon  Nominatim's name for a point
-//   GET /api/geo/route?c=lon,lat;lon,lat[;…][&s=1]  OSRM driving route, up to 6 points inside Bangladesh (s: with the roads' names)
+//   GET /api/geo/route?c=lon,lat;lon,lat[;…]  OSRM driving route, up to 6 points inside Bangladesh
 const GEO_UA = 'Manzeela/1.0 (+https://manzeela.com; help@manzeela.com)';
 const GEO_TTL = { search: 864e5, nominatim: 864e5, reverse: 7 * 864e5, route: 864e5 };
 const geoCache = new Map(), geoWaiting = new Map(), geoAsks = new Map();
@@ -2843,7 +2843,7 @@ function geoUpstream(kind, sp) {
   if (kind === 'route') {
     const pts = String(sp.get('c') || '').split(';').map(p => p.split(',').map(Number));
     if (pts.length >= 2 && pts.length <= 6 && pts.every(([lon, lat]) => inBd(lat, lon)))
-      return 'https://router.project-osrm.org/route/v1/driving/' + pts.map(([lon, lat]) => lon.toFixed(5) + ',' + lat.toFixed(5)).join(';') + '?overview=full&geometries=geojson' + (sp.get('s') === '1' ? '&steps=true' : '');
+      return 'https://router.project-osrm.org/route/v1/driving/' + pts.map(([lon, lat]) => lon.toFixed(5) + ',' + lat.toFixed(5)).join(';') + '?overview=full&geometries=geojson';
   }
   return null;
 }

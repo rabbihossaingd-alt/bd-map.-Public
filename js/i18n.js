@@ -18,7 +18,7 @@ const EXACT = {
   'দূরত্ব দিন, সাথে সাথে ভাড়া': 'Set the distance, see the fare', 'অনুমোদন হলে +১০ পয়েন্ট · লিডারবোর্ড': '+10 points once approved · leaderboard',
   'কোন বাসে যাবেন': 'Which bus to take', 'ম্যাপে কোথা থেকে কোথায় দিন — বাস ও তার রাস্তা': 'Set from and to on the map — the buses and their roads',
   'ভাড়ার হিসাব · ভাড়া জানান ও পয়েন্ট': 'Fare calculator · tell a fare, earn points',
-  'বাসে চাপ দিলে দেখবেন কোথায় উঠবেন, কোথায় নামবেন।': 'Tap a bus to see where to get on and off.', 'পুরো রুট ম্যাপে দেখুন': 'See the whole route on the map',
+  'বাসে চাপ দিলে দেখবেন কোথায় উঠবেন, কোথায় নামবেন।': 'Tap a bus to see where to get on and off.',
   'এখানে উঠুন': 'Get on here', 'এখানে নামুন': 'Get off here', 'স্টপ পরে নামবেন': 'stops to ride', 'লুকান': 'Hide',
   // tour plan
   'ট্যুর': 'Tour', 'ট্যুর প্ল্যান': 'Tour plan', 'ট্যুর প্ল্যান করুন': 'Plan a tour',

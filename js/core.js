@@ -607,11 +607,10 @@ async function reverseName(lat, lon) {
   } catch { return null; }
 }
 
-// steps: also each road's name and line (OSRM steps)
-async function getRoute(pts, steps = false) {
+async function getRoute(pts) {
   const coords = pts.map(p => `${p.lon},${p.lat}`).join(';');
-  const url = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson${steps ? '&steps=true' : ''}`;
-  const data = await geoJson('api/geo/route?c=' + encodeURIComponent(coords) + (steps ? '&s=1' : ''), url).catch(() => ({}));
+  const url = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson`;
+  const data = await geoJson('api/geo/route?c=' + encodeURIComponent(coords), url).catch(() => ({}));
   if (data.code !== 'Ok' || !data.routes.length) throw new Error('no route');
   return data.routes[0];
 }
