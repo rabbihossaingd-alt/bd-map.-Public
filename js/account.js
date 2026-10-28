@@ -80,7 +80,7 @@ function renderAccount() {
   card.querySelector('.ic').replaceChildren(...(ME ? [avatar(ME)] : [Object.assign(el('i'), { innerHTML: svg('user') })]));
   card.querySelector('b').textContent = ME ? ME.name : 'লগইন করুন';
   card.querySelector('b').classList.toggle('no-tr', !!ME);
-  card.querySelector('.t span').textContent = ME ? (ME.bio || ME.email) : 'প্রোফাইল, মেসেজ ও সাপোর্ট পেতে';
+  card.querySelector('.t span').textContent = ME ? '@' + (ME.username || '') : '';
   card.querySelector('.t span').classList.toggle('no-tr', !!ME);
   const btn = $('acct-btn');
   btn.replaceChildren(ME ? avatar(ME, 'xs') : Object.assign(el('i'), { innerHTML: svg('user') }), Object.assign(el('span', ME ? 'no-tr' : ''), { textContent: ME ? ME.name : 'লগইন' }));

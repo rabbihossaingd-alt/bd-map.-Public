@@ -435,14 +435,17 @@ function renderRecent() {
     $('popular').appendChild(chip);
   }
 
-  for (const h of HELPLINES) {
-    const a = el('a', 'card help');
+  HELPLINES.forEach((h, i) => {
+    const a = el('a', 'help-row');
     a.href = 'tel:' + h.number;
-    const t = el('div');
-    t.append(el('b', null, h.bn), el('span', null, h.sub));
-    a.append(el('div', 'n', h.number), t);
+    a.title = h.sub;
+    const t = el('span', 't');
+    t.append(el('b', null, h.bn), el('small', null, h.sub));
+    const call = el('span', 'hl-call');
+    call.append(ic('phone'), document.createTextNode(h.number));
+    a.append(Object.assign(el('i', 'mi ' + (i ? 'c-teal' : 'c-red')), { innerHTML: svg('phone') }), t, call);
     $('helplines').appendChild(a);
-  }
+  });
 
   // রূপসী বাংলা's door: one well-known place a day, its Wikimedia photo; a tap opens the place itself.
   const FEATURED = [

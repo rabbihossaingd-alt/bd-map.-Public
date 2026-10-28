@@ -4669,3 +4669,78 @@ button.item:hover { border-color: var(--line); background: color-mix(in srgb, va
 #page-explore .faces .face { width: 80px; padding-top: var(--space-1); padding-bottom: var(--space-1); gap: var(--space-1); }
 #page-explore .faces .avatar.lg { width: 58px; height: 58px; }
 #page-explore .faces .face .badge { top: 37px; }
+
+/* ================= Premium icon tiles: a coloured squircle, a white glyph, light from above (as iOS) ================= */
+:root {
+  --tile-teal-a: #19c495; --tile-teal-b: #008a5c;
+  --tile-green-a: #3fd28a; --tile-green-b: #0f9a52;
+  --tile-blue-a: #5aa0ff; --tile-blue-b: #2462e8;
+  --tile-indigo-a: #8b93ff; --tile-indigo-b: #4b44d9;
+  --tile-violet-a: #b18cff; --tile-violet-b: #7a3ff0;
+  --tile-pink-a: #ff7a9a; --tile-pink-b: #e0245e;
+  --tile-amber-a: #ffc53d; --tile-amber-b: #f08c00;
+  --tile-red-a: #ff6b5e; --tile-red-b: #d92d20;
+  --tile-gray-a: #a3aaa8; --tile-gray-b: #69716f;
+  --tile-ink-a: #4a5552; --tile-ink-b: #161c1b;
+}
+.mi.c-teal { --ta: var(--tile-teal-a); --tb: var(--tile-teal-b); }
+.mi.c-green { --ta: var(--tile-green-a); --tb: var(--tile-green-b); }
+.mi.c-blue { --ta: var(--tile-blue-a); --tb: var(--tile-blue-b); }
+.mi.c-indigo { --ta: var(--tile-indigo-a); --tb: var(--tile-indigo-b); }
+.mi.c-violet { --ta: var(--tile-violet-a); --tb: var(--tile-violet-b); }
+.mi.c-pink { --ta: var(--tile-pink-a); --tb: var(--tile-pink-b); }
+.mi.c-amber { --ta: var(--tile-amber-a); --tb: var(--tile-amber-b); }
+.mi.c-red { --ta: var(--tile-red-a); --tb: var(--tile-red-b); }
+.mi.c-gray { --ta: var(--tile-gray-a); --tb: var(--tile-gray-b); }
+.mi.c-ink { --ta: var(--tile-ink-a); --tb: var(--tile-ink-b); }
+.apps .mi[class*="c-"], #page-more .menu .mi[class*="c-"], .help-list .mi[class*="c-"] {
+  color: var(--white); background: linear-gradient(165deg, var(--ta), var(--tb));
+  box-shadow: inset 0 1px 0 rgb(var(--white-rgb) / 0.35), inset 0 -1px 0 rgb(var(--black-rgb) / 0.12), 0 6px 14px -6px var(--tb);
+}
+.apps .mi[class*="c-"]::after, #page-more .menu .mi[class*="c-"]::after, .help-list .mi[class*="c-"]::after {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  background: radial-gradient(120% 70% at 30% 0%, rgb(var(--white-rgb) / 0.28), transparent 60%);
+}
+.apps .mi svg, #page-more .menu .mi svg, .help-list .mi svg { position: relative; z-index: 1; stroke-width: 2; }
+
+/* ---- Home: four tiles in a row, no box around them ---- */
+.apps { background: none; border: 0; box-shadow: none; padding: var(--space-2) 0 0; gap: var(--space-1); }
+.apps a { padding: var(--space-2) var(--space-1); gap: var(--space-2); }
+.apps a:hover { background: none; transform: none; }
+.apps .mi { width: 58px; height: 58px; border-radius: 18px; font-size: 27px; }
+.apps a:hover .mi { transform: translateY(-2px); }
+.apps a:active .mi { transform: scale(.92); }
+.apps span { font-size: var(--fs-sm); font-weight: 600; color: var(--ink); }
+
+/* ---- Home: the emergency numbers, one list ---- */
+.help-list { display: grid; margin-top: var(--space-2); border-radius: var(--r-xl); background: var(--surface); overflow: hidden; }
+.help-row { position: relative; display: flex; align-items: center; gap: var(--space-3); min-height: 60px; padding: var(--space-2) var(--space-4); color: var(--ink); transition: background .15s; }
+.help-row + .help-row::before { content: ''; position: absolute; top: 0; left: 64px; right: 0; height: 1px; background: color-mix(in srgb, var(--ink) 8%, transparent); }
+.help-row:active { background: color-mix(in srgb, var(--ink) 6%, transparent); }
+.help-row .mi { width: 34px; height: 34px; border-radius: 10px; font-size: 17px; }
+.help-row .t { flex: 1; min-width: 0; display: grid; }
+.help-row .t b { font-size: var(--fs-md); font-weight: 600; line-height: 1.3; }
+.help-row .t small { font-size: var(--fs-xs); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.help-row .hl-call { flex: none; display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 var(--space-3); border-radius: var(--r-full); font-size: var(--fs-md); font-weight: 800;
+  font-variant-numeric: tabular-nums; color: var(--brand-text); background: rgb(var(--brand-rgb) / 0.1); }
+.help-row .hl-call i { display: grid; font-size: 14px; }
+.help-row .hl-call svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.help-row:first-child .hl-call { color: var(--white); background: var(--danger); }
+@media (hover: hover) { .help-row:hover { background: color-mix(in srgb, var(--ink) 4%, transparent); } }
+
+/* ---- More: grouped lists as iOS settings — a small coloured tile, the name, a chevron ---- */
+#page-more .hub-head { margin-bottom: var(--space-4); }
+#page-more .hub .label { margin: var(--space-5) var(--space-4) var(--space-2); font-size: var(--fs-xs); font-weight: 600; letter-spacing: .03em; color: var(--muted); }
+#page-more .menu { background: var(--surface); border-radius: var(--r-xl); overflow: hidden; }
+#page-more .menu > a, #page-more .menu > .row, #page-more .menu > button { min-height: 52px; gap: var(--space-3); padding: var(--space-2) var(--space-4); }
+#page-more .menu > a + a::before, #page-more .menu > * + a::before, #page-more .menu > * + .row::before { left: 60px; }
+#page-more .menu .mi { width: 32px; height: 32px; border-radius: 9px; font-size: 17px; }
+#page-more .menu b { font-size: var(--fs-md); font-weight: 500; letter-spacing: 0; }
+#page-more .menu .chev { opacity: .45; }
+#page-more .acct-card { background: var(--surface); border: 0; box-shadow: none; padding: var(--space-4); }
+#page-more .acct-card .t span:empty { display: none; }
+#page-more .acct-card .t span { color: var(--muted); }
+.help-row .t small { display: none; }
+.help-row { min-height: 56px; }
+.apps span { white-space: nowrap; letter-spacing: -.01em; }
+@media (max-width: 400px) { .apps span { font-size: var(--fs-xs); } }
