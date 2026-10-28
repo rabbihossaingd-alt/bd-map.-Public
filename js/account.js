@@ -100,6 +100,7 @@ function syncAccount() {
 }
 function signedIn(reply) {
   ME = reply.user;
+  if (location.hash.startsWith('#/me') && typeof route === 'function') setTimeout(route, 0);   // the profile tab, opened before the login was known
   const seen = new Set(), merged = [];
   for (const r of [...loadRecent(), ...((reply.data && reply.data.recent) || [])]) {
     if (!r || !r.from || !r.to || typeof r.from.label !== 'string' || typeof r.to.label !== 'string') continue;

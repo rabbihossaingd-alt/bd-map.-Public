@@ -3,7 +3,7 @@
 for (const n of document.querySelectorAll('[data-ic]')) n.innerHTML = svg(n.dataset.ic);
 
 const BD_LNGLAT = [[87.8, 20.3], [92.9, 26.9]];   // Bangladesh, as [lon, lat] corners
-const PAGES = ['home', 'trip', 'train', 'districts', 'nearby', 'tour', 'fares', 'more', 'chat', 'support', 'community', 'profile', 'settings', 'explore', 'insights'];
+const PAGES = ['home', 'trip', 'reels', 'train', 'districts', 'nearby', 'tour', 'fares', 'more', 'chat', 'support', 'community', 'profile', 'settings', 'explore', 'insights'];
 const trip = { from: null, to: null };          // each: { lat, lon, label }
 const enter = {};                               // page name -> function run when the page opens
 const searches = [];
@@ -246,30 +246,55 @@ function revealOnScroll(root) {
 // route, #/district/<id> that district's card.
 const placeParam = v => { const [lat, lon, ...rest] = String(v || '').split(','); const p = { lat: Number(lat), lon: Number(lon), label: decodeURIComponent(rest.join(',')) || '' }; return isFinite(p.lat) && isFinite(p.lon) && p.lat && p.lon ? p : null; };
 const placeToParam = p => `${(+p.lat).toFixed(5)},${(+p.lon).toFixed(5)},${encodeURIComponent(p.label || '')}`;
-const tripLink = () => trip.from && trip.to ? `${location.origin}/#/trip?from=${placeToParam(trip.from)}&to=${placeToParam(trip.to)}` : location.origin + '/#/trip';
+const tripLink = () => trip.from && trip.to ? `${location.origin}/#/go?from=${placeToParam(trip.from)}&to=${placeToParam(trip.to)}` : location.origin + '/#/go';
 // A district page (/district/<id>, what search engines and link previews know) opens the app on that district.
 { const m = /^\/district\/([a-z-]{2,30})\/?$/.exec(location.pathname); if (m) history.replaceState(history.state, '', '/#/district/' + m[1]); }
 
+// The addresses people see and share (#/go, #/intercity, #/search, #/reels/<id>, #/post/<id>, #/me) and the page each
+// opens; the older addresses still work and turn into the new ones.
+const PAGE_OF = { go: 'trip', intercity: 'train', search: 'explore' };
+const ADDRESS_OF = { trip: 'go', train: 'intercity' };
+// which tab of the bar lights up on each page
+const TAB_OF = { profile: 'me', more: 'me', settings: 'me', support: 'me', insights: 'me' };
+const scrollMem = {};
+let reelWanted = 0;
 function route() {
   let name = location.hash.replace(/^#\/?/, '') || 'home';
   let deep = null;
-  { const [base, query] = name.split('?');
+  if (current) scrollMem[current] = scrollY;
+  { let [base, query] = name.split('?');
+    // an old address becomes the new one, in place (a shared link keeps working)
+    if (ADDRESS_OF[base]) { history.replaceState(history.state, '', '#/' + ADDRESS_OF[base] + (query ? '?' + query : '')); }
+    if (base === 'explore') { history.replaceState(history.state, '', '#/'); base = 'home'; }     // the feed is on Home now
+    base = PAGE_OF[base] || base;
+    if (base === 'new') {                                   // the + tab: the new-post sheet over the page you were on
+      history.replaceState(history.state, '', '#/' + (current && current !== 'home' ? (ADDRESS_OF[current] || current) : ''));
+      if (typeof openNewPost === 'function') openNewPost();
+      return;
+    }
+    const me = typeof ME !== 'undefined' ? ME : null;     // account.js loads after this file
+    if (base === 'me') { base = me ? 'profile' : 'more'; if (me && typeof PROFILE !== 'undefined') PROFILE.id = me.id; }   // the profile tab: your profile, or the menu with a login card
+    if (base.startsWith('reels')) { reelWanted = Number(base.split('/')[1]) || 0; base = 'reels'; }
+    if (base.startsWith('post/')) { const pid = Number(base.slice(5)); if (pid) setTimeout(() => typeof openPost === 'function' && openPost(pid), 300); base = 'home'; }
     if (base.startsWith('district/')) { deep = { district: base.slice(9) }; name = 'districts'; }
     else if (base === 'trip' && query) { const q = new URLSearchParams(query); deep = { from: placeParam(q.get('from')), to: placeParam(q.get('to')) }; name = 'trip'; }
     else name = base; }
-  if (name === 'intercity') name = 'districts';   // old link
   if (name === 'tour') { try { localStorage.setItem('bdmap.rb', 'tour'); } catch { /* storage off */ } history.replaceState(null, '', '#/districts'); name = 'districts'; }   // now a tab of রূপসী বাংলা
   let scrollToSel = '';
   if (name === 'leaderboard') { scrollToSel = '.lead-card'; name = 'community'; }   // the fare tab, at the leaderboard
   // the Dhaka bus page is gone (buses show on the map for a trip); its fare tab, and the old community page, are ভাড়া → ভাড়া জানান
   if (name === 'community' || name === 'buses') { try { localStorage.setItem('bdmap.fx', 'give'); } catch { /* storage off */ } history.replaceState(null, '', '#/fares'); name = 'fares'; }
+  const before = current;
   current = PAGES.includes(name) ? name : 'home';
+  if (before === 'reels' && current !== 'reels' && typeof closeReels === 'function') closeReels();
   for (const p of PAGES) $('page-' + p).classList.toggle('on', p === current);
-  for (const a of document.querySelectorAll('[data-nav]')) a.classList.toggle('on', a.dataset.nav === current);
+  const tab = TAB_OF[current] || current;
+  for (const a of document.querySelectorAll('[data-nav]')) a.classList.toggle('on', a.dataset.nav === tab);
   document.body.style.overflow = current === 'trip' ? 'hidden' : '';
   document.body.dataset.page = current;
   mzPage(current);
-  scrollTo(0, 0);
+  // a page you come back to opens where you left it (the feed, a list you were reading); a deep link opens at the top
+  scrollTo(0, deep ? 0 : (scrollMem[current] || 0));
   if (enter[current]) enter[current]();
   requestAnimationFrame(() => revealOnScroll($('page-' + current)));
   if (deep && deep.from && deep.to) { trip.from = deep.from; setTimeout(() => setPlace('to', deep.to), 0); }
@@ -278,7 +303,7 @@ function route() {
 }
 
 function go(name) {
-  const hash = '#/' + (name === 'home' ? '' : name);
+  const hash = '#/' + (name === 'home' ? '' : ADDRESS_OF[name] || (name === 'explore' ? 'search' : name));
   if (location.hash === hash || (name === 'home' && !location.hash)) route();
   else location.hash = hash;
 }
@@ -468,24 +493,7 @@ function renderRecent() {
     if (s && window.openPlace) window.openPlace(districtById(fId), s); else location.hash = '#/districts';
   });
 
-  // Count the headline numbers up once, the first time Home is shown.
-  let counted = false;
-  enter.home = () => {
-    renderRecent();
-    if (counted) return;
-    counted = true;
-    const targets = { routes: LOCAL_ROUTES.length, places: PLACES.length + Object.keys(STOPS).length };
-    for (const node of document.querySelectorAll('[data-count]')) {
-      const end = targets[node.dataset.count] || +node.dataset.count;
-      const start = performance.now();
-      const tick = now => {
-        const p = Math.min(1, (now - start) / 1100);
-        node.textContent = num(Math.round(end * (1 - Math.pow(1 - p, 3))));
-        if (p < 1) requestAnimationFrame(tick);
-      };
-      requestAnimationFrame(tick);
-    }
-  };
+  enter.home = () => { renderRecent(); };
 })();
 
 // ---- Trip / map ----
@@ -2033,27 +2041,9 @@ setTimeout(() => getMapStyle().catch(() => {}), 1200);   // warm the map style w
 // Shared ratings arrive after first paint; cards drawn earlier pick up the averages on their next draw.
 loadFareReports();
 loadRatings().then(() => { for (const box of document.querySelectorAll('#op-grid .rate')) box.dispatchEvent(new Event('refresh')); });
-loadIndex().then(n => {
-  const stat = document.querySelector('[data-count=places]');
-  if (!n || !stat) return;
-  stat.dataset.count = n + PLACES.length + Object.keys(STOPS).length;
-  // Written after Home's count-up has finished, which would otherwise overwrite it with the old total.
-  setTimeout(() => { stat.textContent = num(+stat.dataset.count); }, 1300);
-});
+loadIndex();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 
-// Phones: the tab bar steps away while you scroll down, and comes back as soon as you scroll up (as on Facebook).
-(() => {
-  let lastY = scrollY;
-  addEventListener('scroll', () => {
-    const y = scrollY, d = y - lastY;
-    if (Math.abs(d) < 8) return;
-    lastY = y;
-    if (innerWidth > 760) return;
-    document.body.classList.toggle('nav-away', d > 0 && y > 90);
-  }, { passive: true });
-  addEventListener('hashchange', () => { document.body.classList.remove('nav-away'); lastY = scrollY; });
-})();
 
 // Share the route on the map: a link that opens the same route, with the place names, on any phone.
 $('trip-share').addEventListener('click', async () => {

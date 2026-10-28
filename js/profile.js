@@ -110,7 +110,7 @@ async function drawProfile() {
   handle.textContent = u.username ? u.username : '';
   if (isVerified(u)) handle.appendChild(vbadge());
   bar.appendChild(handle);
-  if (mine) bar.append(iconBtn('plus', 'নতুন পোস্ট', openNewPost), iconBtn('cog', 'সেটিংস', () => go('settings')));
+  if (mine) bar.append(iconBtn('plus', 'নতুন পোস্ট', openNewPost), iconBtn('menu', 'মেনু', () => go('more')));
   else bar.prepend(iconBtn('back', 'ফিরে যান', () => history.back()));
 
   const card = el('div', 'card prof-card');
