@@ -46,6 +46,7 @@ export const NAV = [
     { key: 'features', title: 'ফিচার ব্যবহার', ic: 'activity', perm: 'analytics.view', status: 'v2' },
     { key: 'searches', title: 'সার্চ ইনসাইট', ic: 'search', perm: 'analytics.view', status: 'v2' }]],
   ['সিস্টেম', [
+    { key: 'foryou', title: 'ফর ইউ নিয়ন্ত্রণ', ic: 'radar', perm: 'foryou.manage', status: 'v2' },
     { key: 'flags', title: 'ফিচার ফ্ল্যাগ', ic: 'toggle', perm: 'flags.manage', status: 'v2' },
     { key: 'notices', title: 'ঘোষণা ও নোটিফিকেশন', ic: 'megaphone', perm: 'notice.manage', status: 'v2' },
     { key: 'audit', title: 'কাজের খতিয়ান', ic: 'list', perm: 'audit.view', status: 'v2' },
@@ -57,7 +58,7 @@ const PAGE_FILES = { command: './pages/command.js', audit: './pages/audit.js', t
   macros: './pages/macros.js', users: './pages/users.js', reports: './pages/reports.js',
   posts: './pages/content.js', stories: './pages/content.js', comments: './pages/content.js', sounds: './pages/content.js', groups: './pages/content.js',
   media: './pages/media.js', fares: './pages/fares.js', photos: './pages/review.js', gems: './pages/review.js', routes: './pages/routes.js', intercity: './pages/intercity.js', quality: './pages/quality.js',
-  growth: './pages/analytics.js', features: './pages/analytics.js', searches: './pages/analytics.js', flags: './pages/flags.js', notices: './pages/notices.js', health: './pages/health.js',
+  growth: './pages/analytics.js', features: './pages/analytics.js', searches: './pages/analytics.js', flags: './pages/flags.js', foryou: './pages/foryou.js', notices: './pages/notices.js', health: './pages/health.js',
   creators: './pages/creators.js', payouts: './pages/payouts.js', ledger: './pages/ledger.js', strikes: './pages/strikes.js', modqueue: './pages/modqueue.js', risk: './pages/risk.js' };
 export const pagesFor = () => ALL_PAGES.filter(p => !p.perm || can(p.perm));
 

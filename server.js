@@ -353,6 +353,7 @@ setInterval(() => { const now = Date.now(); for (const [k, v] of secondStep) if 
 // Switches the owner can flip from the admin panel.
 // Since admin v2 phase 5 the panel's feature_flags table decides (lib/admin-system.cjs), per person for a share rollout.
 let SYS = null;
+let FY = null;            // For You (lib/admin-foryou.cjs)
 const flagOn = (key, def = true, uid = 0) => { if (SYS) return SYS.flag(key, uid, def); const v = (db.prepare('SELECT value FROM settings WHERE key = ?').get('flag_' + key) || {}).value; return v == null ? def : v === '1'; };
 
 function cleanEmail(e) {
@@ -1779,6 +1780,7 @@ const viewed = new Map();
 db.exec(`CREATE TABLE IF NOT EXISTS post_events (post INTEGER NOT NULL, who TEXT NOT NULL, kind TEXT NOT NULL, ms INTEGER NOT NULL DEFAULT 0,
   dur INTEGER NOT NULL DEFAULT 0, done INTEGER NOT NULL DEFAULT 0, loops INTEGER NOT NULL DEFAULT 0, src TEXT NOT NULL DEFAULT '', at INTEGER NOT NULL)`);
 db.exec('CREATE INDEX IF NOT EXISTS post_events_post ON post_events (post, at)');
+const viewerKey = (req, me) => me ? 'u' + me.id : 'a' + sha('viewer ' + clientIp(req)).slice(0, 16);
 const POST_EVENT_KINDS = new Set(['watch', 'skip', 'share', 'place']);
 const eventBudget = new Map();     // who -> [hour, count]: at most 900 events an hour from one viewer
 setInterval(() => { try { db.prepare('DELETE FROM post_events WHERE at < ?').run(Date.now() - 90 * 86400000); } catch { /* next day */ } eventBudget.clear(); }, 6 * 3600000).unref();
@@ -1789,6 +1791,7 @@ async function exploreApi(req, res, action, query) {
     if (action === 'feed' && query.get('seed') && !query.get('user') && !query.get('q') && !query.get('saved')) {
       const seed = Math.max(1, Math.min(1e6, Number(query.get('seed')) | 0)), off = Math.max(0, Math.min(5000, Number(query.get('o')) | 0));
       const kind = query.get('kind') === 'video' ? 'video' : '', first = Number(query.get('first')) || 0;
+      if (FY) return json(res, 200, { posts: FY.feed(meId, viewerKey(req, me), seed, off, kind, first) });
       const rows = db.prepare(`${POST_SELECT} AND (?4 = '' OR (p.kind = ?4 AND p.more = ''))
         ORDER BY (CASE WHEN p.id = ?5 THEN -9 ELSE 0 END) + ((p.id * ?2 + 7919) % 1009) / 1009.0
           - MAX(0, 1 - (?6 - p.created) / 259200000.0) * 0.7
@@ -1880,7 +1883,7 @@ async function exploreApi(req, res, action, query) {
   if (action === 'events') {                         // how posts were watched: { events: [{ post, kind, ms, dur, done, loops, src }] }
     let body;
     try { body = JSON.parse(await readBody(req, 12000)) || {}; } catch { return json(res, 400, { error: 'bad request' }); }
-    const who = me ? 'u' + me.id : 'a' + sha('viewer ' + clientIp(req)).slice(0, 16);
+    const who = viewerKey(req, me);
     const hour = Math.floor(now / 3600000), b = eventBudget.get(who);
     const used = b && b[0] === hour ? b[1] : 0;
     const list = (Array.isArray(body.events) ? body.events : []).slice(0, Math.max(0, Math.min(60, 900 - used)));
@@ -2964,6 +2967,7 @@ require('./lib/admin-money.cjs')(ADMIN2, { db, json, push, sendMail, MAILS, mail
 SYS = require('./lib/admin-system.cjs')(ADMIN2, { db, json, readBody, push, pushTo, clientIp, userOf, hasTurn, backupOn, lastBackup: () => lastBackupAt,
   mailInfo: () => ({ ready: mailReady, provider: BREVO ? 'Brevo' : RESEND ? 'Resend' : MAIL.host ? 'SMTP' : '', sent: MAIL_STATS.day === new Date(Date.now() + 6 * 36e5).toISOString().slice(0, 10) ? MAIL_STATS.sent : 0, failed: MAIL_STATS.day === new Date(Date.now() + 6 * 36e5).toISOString().slice(0, 10) ? MAIL_STATS.failed : 0 }),
   dbBytes: () => { try { return fs.statSync(path.join(DATA_DIR, 'ratings.db')).size; } catch { return 0; } } });
+FY = require('./lib/admin-foryou.cjs')(ADMIN2, { db, json, POST_SELECT, shownPost, forViewer });
 
 const server = http.createServer((req, res) => {
   const { pathname, searchParams } = new URL(req.url, 'http://localhost');
