@@ -2557,6 +2557,26 @@ function assetVersion(rel) {
 }
 const versionPage = html => html.replace(/(<(?:script|link)\b[^>]*?\b(?:src|href)=")((?:js|css|data)\/[\w./-]+\.(?:js|css))(")/g,
   (all, a, rel, b) => { const v = assetVersion(rel); return v ? a + rel + '?v=' + v + b : all; });
+// Text files go out compressed at brotli's best (or gzip for an old browser), made once per file version and kept in
+// memory: about a third smaller than the fast compression on the way, so a first visit on a slow line is quicker.
+const zlib = require('node:zlib');
+const ZIPPABLE = new Set(['.js', '.css', '.json', '.svg', '.html', '.webmanifest']);
+const zipCache = new Map();
+function sendText(req, res, head, buf, key) {
+  const ae = String(req.headers['accept-encoding'] || '');
+  const enc = buf.length < 1024 ? '' : /\bbr\b/.test(ae) ? 'br' : /\bgzip\b/.test(ae) ? 'gzip' : '';
+  if (!enc) { res.writeHead(200, { ...head, 'Content-Length': buf.length, Vary: 'Accept-Encoding' }); res.end(req.method === 'HEAD' ? undefined : buf); return; }
+  const k = enc + '|' + key;
+  let z = zipCache.get(k);
+  if (!z) {
+    z = enc === 'br' ? zlib.brotliCompressSync(buf, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: key.startsWith('page:') ? 6 : 11, [zlib.constants.BROTLI_PARAM_SIZE_HINT]: buf.length } })
+      : zlib.gzipSync(buf, { level: 9 });
+    zipCache.set(k, z);
+    if (zipCache.size > 400) zipCache.delete(zipCache.keys().next().value);
+  }
+  res.writeHead(200, { ...head, 'Content-Encoding': enc, 'Content-Length': z.length, Vary: 'Accept-Encoding' });
+  res.end(req.method === 'HEAD' ? undefined : z);
+}
 function serveFile(req, res, pathname, versioned) {
   let rel;
   try { rel = decodeURIComponent(pathname); } catch { res.writeHead(400).end(); return; }
@@ -2574,17 +2594,23 @@ function serveFile(req, res, pathname, versioned) {
       fs.readFile(file, 'utf8', (e, html) => {
         if (e) { res.writeHead(500).end(); return; }
         const body = Buffer.from(versionPage(html));
-        res.writeHead(200, { 'Content-Type': type, 'Content-Length': body.length, 'Cache-Control': 'no-cache' });
-        res.end(req.method === 'HEAD' ? undefined : body);
+        sendText(req, res, { 'Content-Type': type, 'Cache-Control': 'no-cache' }, body, 'page:' + crypto.createHash('sha1').update(body).digest('hex'));
       });
       return;
     }
     const forever = versioned || parts[0] === 'vendor';
     if (rel.replace(/^\/+/, '') === 'data/dhaka-buses.js' && typeof ADMIN_DATA !== 'undefined') {
       const t = ADMIN_DATA.busesJs();
-      if (t) { const buf = Buffer.from(t); res.writeHead(200, { 'Content-Type': type, 'Content-Length': buf.length, 'Cache-Control': forever ? 'public, max-age=31536000, immutable' : 'no-cache' }); res.end(req.method === 'HEAD' ? undefined : buf); return; }
+      if (t) { const buf = Buffer.from(t); sendText(req, res, { 'Content-Type': type, 'Cache-Control': forever ? 'public, max-age=31536000, immutable' : 'no-cache' }, buf, 'buses:' + crypto.createHash('sha1').update(buf).digest('hex')); return; }
     }
     // no-cache: the browser keeps a copy but checks it is current, so app updates show up on refresh.
+    if (ZIPPABLE.has(path.extname(file)) && stat.size < 4e6) {
+      fs.readFile(file, (e, buf) => {
+        if (e) { res.writeHead(500).end(); return; }
+        sendText(req, res, { 'Content-Type': type, 'Cache-Control': forever ? 'public, max-age=31536000, immutable' : 'no-cache' }, buf, file + ':' + stat.mtimeMs + ':' + stat.size);
+      });
+      return;
+    }
     res.writeHead(200, { 'Content-Type': type, 'Content-Length': stat.size,
                          'Cache-Control': forever ? 'public, max-age=31536000, immutable' : 'no-cache' });
     if (req.method === 'HEAD') res.end(); else fs.createReadStream(file).pipe(res);
