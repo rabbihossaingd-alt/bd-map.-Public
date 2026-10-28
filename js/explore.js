@@ -1280,7 +1280,7 @@ addEventListener('hashchange', () => { if (current !== 'explore') feedSeen.flush
       const on = tabs.querySelector('button.on') || tabs.querySelector('button');
       if (!on || !on.offsetWidth) return;
       ind.style.width = on.offsetWidth + 'px';
-      ind.style.transform = 'translateX(' + on.offsetLeft + 'px)';
+      ind.style.transform = 'translateX(' + (on.offsetLeft - tabs.clientLeft) + 'px)';
     };
     new MutationObserver(place).observe(tabs, { subtree: true, attributes: true, attributeFilter: ['class'] });
     addEventListener('resize', place);

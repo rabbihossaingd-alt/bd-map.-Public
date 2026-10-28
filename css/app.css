@@ -4655,3 +4655,17 @@ button.item:hover { border-color: var(--line); background: color-mix(in srgb, va
 .face:hover .avatar { transform: scale(1.04); }
 .face .avatar { transition: transform .25s var(--ease); }
 .faces .face { width: 80px; }
+
+/* ---- Explore, tighter: the top bar, the tabs and the stories take less of the screen ---- */
+@media (max-width: 760px) {
+  #page-explore .ex-top { padding-top: calc(var(--space-1) + env(safe-area-inset-top)); padding-bottom: var(--space-1); }
+  #page-explore .explore { padding-top: calc(58px + env(safe-area-inset-top)); }
+  #page-explore .ex-brand b { font-size: var(--fs-xl); }
+}
+#page-explore .ex-tabs { margin: var(--space-1) auto var(--space-2); padding: 3px; }
+#page-explore .ex-tabs button { min-width: 72px; min-height: 32px; padding: var(--space-1) var(--space-4); }
+.ex-ind { top: 3px; bottom: 3px; }
+#page-explore .faces { padding-top: var(--space-1); padding-bottom: var(--space-2); margin-bottom: 0; gap: var(--space-1); }
+#page-explore .faces .face { width: 80px; padding-top: var(--space-1); padding-bottom: var(--space-1); gap: var(--space-1); }
+#page-explore .faces .avatar.lg { width: 58px; height: 58px; }
+#page-explore .faces .face .badge { top: 37px; }
