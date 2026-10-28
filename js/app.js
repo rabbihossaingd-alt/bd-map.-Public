@@ -464,6 +464,8 @@ function renderRecent() {
   const fUrl = w => `https://upload.wikimedia.org/wikipedia/commons/thumb/${fFile}/${w}px-${fFile.split('/').pop()}`;
   fImg.sizes = '(max-width: 760px) calc(100vw - 32px), 720px';
   fImg.srcset = [500, 960, 1280].map(w => `${fUrl(w)} ${w}w`).join(', ');
+  fImg.fetchPriority = 'low';
+  fImg.decoding = 'async';
   fImg.src = fUrl(960);
   fImg.alt = fName;
   $('hm-feature-name').textContent = fName;
@@ -2039,7 +2041,12 @@ setTimeout(() => getMapStyle().catch(() => {}), 1200);   // warm the map style w
 // Shared ratings arrive after first paint; cards drawn earlier pick up the averages on their next draw.
 loadFareReports();
 loadRatings().then(() => { for (const box of document.querySelectorAll('#op-grid .rate')) box.dispatchEvent(new Event('refresh')); });
-loadIndex().then(n => {
+new Promise(done => {
+  const go = () => done(loadIndex());
+  const idle = window.requestIdleCallback ? f => requestIdleCallback(f, { timeout: 3000 }) : f => setTimeout(f, 1500);
+  if (document.readyState === 'complete') idle(go); else addEventListener('load', () => idle(go), { once: true });
+  document.addEventListener('focusin', e => { if (e.target instanceof HTMLInputElement) go(); }, { once: true });
+}).then(n => {
   const stat = document.querySelector('[data-count=places]');
   if (!n || !stat) return;
   stat.dataset.count = n + PLACES.length + Object.keys(STOPS).length;

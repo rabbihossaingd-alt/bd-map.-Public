@@ -249,8 +249,9 @@ const KIND_LABELS = { o: 'হোটেল', h: 'হাসপাতাল', p: '�
                       a: 'দর্শনীয় স্থান', m: 'বাজার', l: 'শপিং মল', f: 'বিমানবন্দর', t: 'এলাকা' };
 const TAG_KIND = { 'tourism:hotel': 'o', 'amenity:hospital': 'h', 'leisure:park': 'p', 'railway:station': 'r', 'amenity:bus_station': 'b',
                    'amenity:university': 'u', 'amenity:college': 'c', 'tourism:attraction': 'a', 'amenity:marketplace': 'm' };
-let OSM_INDEX = [];
-async function loadIndex() {
+let OSM_INDEX = [], indexLoading = null;
+function loadIndex() { return indexLoading || (indexLoading = readIndex()); }
+async function readIndex() {
   try {
     const rows = await (await fetch('data/osm-places.json')).json();
     // row: [kind, Bangla name, English name, lat, lon, optional details]
@@ -538,6 +539,7 @@ function mergePlaces(lists) {
 }
 async function searchNearby(center, tag, onMore) {
   const kind = TAG_KIND[tag];
+  if (kind) await loadIndex();            // the nationwide list, if it has not come yet
   let quick = kind ? OSM_INDEX.filter(p => p.kind === kind)
     .map(p => ({ title: p.bn, sub: '', lat: p.lat, lon: p.lon, x: p.x, km: haversineKm(center, p) })).filter(p => p.km <= 30).sort((a, b) => a.km - b.km).slice(0, 60) : [];
   if (quick.length < 5) {

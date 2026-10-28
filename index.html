@@ -27,7 +27,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://tiles.manzeela.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anek+Bangla:wght@500;600;700;800&family=Noto+Sans+Bengali:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anek+Bangla:wght@500;600;700;800&family=Noto+Sans+Bengali:wght@400;500;600;700&display=swap" media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anek+Bangla:wght@500;600;700;800&family=Noto+Sans+Bengali:wght@400;500;600;700&display=swap"></noscript>
 <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
@@ -673,6 +674,7 @@
     </div>
   </section>
 </main>
+<script>try{if(localStorage.getItem('bdmap.lang')!=='en'){var n=(location.hash.replace(/^#\/?/,'').split(/[?/]/)[0])||'home',e=document.getElementById('page-'+n);if(e&&n!=='trip'&&n!=='chat')e.classList.add('on');}}catch(x){}</script>
 
 <div class="chat-toast" id="chat-toast"></div>
 <div class="call" id="call" hidden>
@@ -710,36 +712,36 @@
   <div class="lb-cap"><b id="lb-name"></b><span id="lb-meta"></span></div>
 </div>
 
-<script src="data/fares.js"></script>
-<script src="data/dhaka-buses.js"></script>
-<script src="data/bangladesh.js"></script>
-<script src="data/places.js"></script>
-<script src="js/i18n.js"></script>
-<script src="js/core.js"></script>
-<script src="js/app.js"></script>
-<script src="data/tourist-police.js"></script>
-<script src="data/bd-outline.js"></script>
-<script src="js/tour.js"></script>
-<script src="js/scene.js"></script>
-<script src="js/train.js"></script>
-<script src="data/district-famous.js"></script>
-<script src="js/guide.js"></script>
-<script src="js/trip.js"></script>
-<script src="js/account.js"></script>
-<script src="js/chat.js"></script>
-<script src="js/chat-extra.js"></script>
-<script src="js/support.js"></script>
-<script src="js/community.js"></script>
-<script src="js/music.js"></script>
-<script src="js/overlay.js"></script>
-<script src="js/explore.js"></script>
-<script src="js/effects.js"></script>
-<script src="js/transcode.js"></script>
-<script src="js/studio.js"></script>
-<script src="js/live.js"></script>
-<script src="js/profile.js"></script>
-<script src="js/ring.js"></script>
-<script src="js/push.js"></script>
-<script src="js/back.js"></script>
+<script defer src="data/fares.js"></script>
+<script defer src="data/dhaka-buses.js"></script>
+<script defer src="data/bangladesh.js"></script>
+<script defer src="data/places.js"></script>
+<script defer src="js/i18n.js"></script>
+<script defer src="js/core.js"></script>
+<script defer src="js/app.js"></script>
+<script defer src="data/tourist-police.js"></script>
+<script defer src="data/bd-outline.js"></script>
+<script defer src="js/tour.js"></script>
+<script defer src="js/scene.js"></script>
+<script defer src="js/train.js"></script>
+<script defer src="data/district-famous.js"></script>
+<script defer src="js/guide.js"></script>
+<script defer src="js/trip.js"></script>
+<script defer src="js/account.js"></script>
+<script defer src="js/chat.js"></script>
+<script defer src="js/chat-extra.js"></script>
+<script defer src="js/support.js"></script>
+<script defer src="js/community.js"></script>
+<script defer src="js/music.js"></script>
+<script defer src="js/overlay.js"></script>
+<script defer src="js/explore.js"></script>
+<script defer src="js/effects.js"></script>
+<script defer src="js/transcode.js"></script>
+<script defer src="js/studio.js"></script>
+<script defer src="js/live.js"></script>
+<script defer src="js/profile.js"></script>
+<script defer src="js/ring.js"></script>
+<script defer src="js/push.js"></script>
+<script defer src="js/back.js"></script>
 </body>
 </html>
