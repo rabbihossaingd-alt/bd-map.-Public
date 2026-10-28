@@ -4601,3 +4601,29 @@ button.dg-wiki { background: none; border: 0; padding: 0; cursor: pointer; font:
 .item { background: transparent; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; margin-bottom: 0; padding: var(--space-3) var(--space-1); }
 button.item:hover { border-color: var(--line); background: color-mix(in srgb, var(--ink) 4%, transparent); }
 .item.on { background: var(--brand-soft); border-radius: var(--r-md); border-bottom-color: transparent; }
+
+/* ---- Home: four ways to travel (map, explore and messages are in the tab bar) ---- */
+.apps { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+/* ---- Explore, as Instagram's: For you / Reels / Live in the middle, search in its own view ---- */
+#page-explore .ex-tabs { justify-content: center; gap: var(--space-6); margin: 0 0 var(--space-3); border-bottom: 1px solid var(--line); }
+#page-explore .ex-tabs button { position: relative; padding: var(--space-3) var(--space-1); border-radius: 0; background: none; box-shadow: none; color: var(--muted); font-size: var(--fs-md); font-weight: 700; }
+#page-explore .ex-tabs button:hover { color: var(--ink); }
+#page-explore .ex-tabs button.on { background: none; color: var(--ink); }
+#page-explore .ex-tabs button.on::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; border-radius: 2px; background: var(--ink); }
+.ex-searchbar { display: none; }
+#page-explore.searching .ex-searchbar { display: flex; align-items: center; gap: var(--space-3); margin: 0 0 var(--space-3); }
+.ex-searchbar .ex-search.open { flex: 1; min-width: 0; margin: 0; }
+.ex-cancel { flex: none; padding: var(--space-2) var(--space-1); font-size: var(--fs-md); font-weight: 600; color: var(--ink); }
+#page-explore.searching .ex-tabs, #page-explore.searching #explore-people, #page-explore.searching #explore-feed, #page-explore.searching #explore-end { display: none; }
+.ex-discover { display: none; }
+#page-explore.searching .ex-discover:not([hidden]) { display: block; }
+.ex-discover .post-grid { gap: 2px; margin: 0; }
+@media (max-width: 760px) {
+  #page-explore.searching .ex-searchbar { margin: var(--space-3) var(--space-3) var(--space-3); }
+  #explore-results { padding: 0 var(--space-1); }
+  #page-explore .ex-tabs { margin: 0 0 var(--space-2); }
+  #page-explore .faces { padding-left: var(--space-3); padding-right: var(--space-3); }
+  #explore-feed { max-width: none; margin: 0; }                       /* edge to edge, as on Instagram */
+  #explore-feed .fc-media { border-radius: 0; border-left: 0; border-right: 0; }
+}

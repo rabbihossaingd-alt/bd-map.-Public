@@ -66,14 +66,10 @@
     <div class="wrap home">
       <!-- Everything the app does, one tap away -->
       <div class="apps">
-        <a href="#/trip"><i class="mi c-green" data-ic="route"></i><span>ম্যাপ</span></a>
         <a href="#/train"><i class="mi c-blue" data-ic="trainFront"></i><span>বাস · ট্রেন · লঞ্চ</span></a>
         <a href="#/nearby"><i class="mi c-violet" data-ic="locate"></i><span>কাছাকাছি</span></a>
         <a href="#/districts"><i class="mi c-pink" data-ic="compass"></i><span>রূপসী বাংলা</span></a>
         <a href="#/fares"><i class="mi c-amber" data-ic="tag"></i><span>ভাড়া</span></a>
-        <a href="#/explore"><i class="mi c-teal" data-ic="feed"></i><span>এক্সপ্লোর</span></a>
-        <a href="#/chat"><i class="mi c-ink" data-ic="chat"></i><span>মেসেজ</span></a>
-        <a href="#/support"><i class="mi c-gray" data-ic="help"></i><span>সাহায্য</span></a>
       </div>
 
       <!-- রূপসী বাংলা: one place, a different one each day -->
@@ -179,10 +175,11 @@
           <button class="ex-icon" id="explore-heart" title="নোটিফিকেশন" aria-label="নোটিফিকেশন"><i data-ic="heart"></i><em class="ndot" data-notify-dot hidden></em></button>
         </div>
       </div>
-      <label class="ex-search"><i data-ic="search"></i><input id="explore-q" type="search" autocomplete="off" placeholder="খুঁজুন" aria-label="খুঁজুন — মানুষ, জায়গা, পোস্ট"></label>
-      <div class="ex-tabs" id="ex-tabs"><button class="on" data-t="feed"><i data-ic="home"></i><span>ফিড</span></button><button data-t="reels"><i data-ic="play"></i><span>রিলস</span></button><button data-t="live"><i data-ic="broadcast"></i><span>লাইভ</span></button></div>
+      <div class="ex-searchbar"><label class="ex-search"><i data-ic="search"></i><input id="explore-q" type="search" autocomplete="off" placeholder="মানুষ, জায়গা বা পোস্ট খুঁজুন" aria-label="খুঁজুন — মানুষ, জায়গা, পোস্ট"></label><button class="ex-cancel" id="explore-cancel" type="button">বাতিল</button></div>
+      <div class="ex-tabs" id="ex-tabs" role="tablist"><button class="on" data-t="feed" role="tab"><span>আপনার জন্য</span></button><button data-t="reels" role="tab"><span>রিলস</span></button><button data-t="live" role="tab"><span>লাইভ</span></button></div>
       <div class="faces" id="explore-people" hidden></div>
       <div id="explore-results" hidden></div>
+      <div class="ex-discover" id="explore-discover"></div>
       <div id="explore-feed"></div>
       <div id="explore-end"></div>
     </div>

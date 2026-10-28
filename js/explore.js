@@ -1113,7 +1113,7 @@ addEventListener('hashchange', () => { if (current !== 'explore') feedSeen.flush
 
 // ---- the page ----
 (function initExplore() {
-  const feed = $('explore-feed'), results = $('explore-results'), people = $('explore-people'), q = $('explore-q');
+  const feed = $('explore-feed'), results = $('explore-results'), people = $('explore-people'), q = $('explore-q'), disc = $('explore-discover'), page = $('page-explore');
   let last = 0, busy = false, done = false, seed = newSeed(), offset = 0;
   feedWatcher = new IntersectionObserver(entries => {
     for (const e of entries) {
@@ -1213,8 +1213,7 @@ addEventListener('hashchange', () => { if (current !== 'explore') feedSeen.flush
     const text = q.value.trim(), mine = ++seq;
     const searching = text.length >= 2;
     results.hidden = !searching;
-    feed.hidden = searching;
-    people.hidden = searching || !people.children.length;
+    disc.hidden = searching;
     if (!searching) return;
     timer = setTimeout(async () => {
       const who = el('div', 'found-people'), grid = el('div'), where = el('div', 'found-places'), whereLabel = el('div', 'label', 'জায়গা');
@@ -1234,7 +1233,8 @@ addEventListener('hashchange', () => { if (current !== 'explore') feedSeen.flush
   // The next page loads as the end of the feed comes near.
   new IntersectionObserver(entries => { if (entries[0].isIntersecting && current === 'explore' && !feed.hidden && last) more(); }, { rootMargin: '600px' }).observe($('explore-end'));
   enter.explore = () => {
-    q.value = ''; results.hidden = true; feed.hidden = false; start(); faces();
+    page.classList.remove('searching'); document.querySelector('.ex-search').classList.remove('open');
+    q.value = ''; results.hidden = true; disc.hidden = false; start(); faces();
     const wanted = Number(new URLSearchParams(location.search).get('post'));     // arrived by a shared link
     if (wanted && !enter.explore.opened) { enter.explore.opened = true; openPost(wanted); }
   };
@@ -1253,11 +1253,24 @@ addEventListener('hashchange', () => { if (current !== 'explore') feedSeen.flush
     setTimeout(() => addEventListener('click', () => menu.remove(), { once: true }), 0);
   });
   // Search opens under the top bar.
-  $('explore-find').addEventListener('click', () => {
-    const box = document.querySelector('.ex-search');
-    const open = box.classList.toggle('open');
-    if (open) q.focus(); else { q.value = ''; q.dispatchEvent(new Event('input')); }
-  });
+  // Search, as on Instagram: the box on top, the posts people like under it until something is typed; বাতিল goes back.
+  let discovered = false;
+  const openSearch = () => {
+    page.classList.add('searching');
+    document.querySelector('.ex-search').classList.add('open');
+    if (!discovered) { discovered = true; postGrid(disc, 0, 'এখনো কোনো পোস্ট নেই।'); }
+    scrollTo(0, 0);
+    setTimeout(() => q.focus({ preventScroll: true }), 30);
+  };
+  const closeSearch = () => {
+    page.classList.remove('searching');
+    document.querySelector('.ex-search').classList.remove('open');
+    q.value = ''; q.dispatchEvent(new Event('input')); q.blur();
+  };
+  $('explore-find').addEventListener('click', () => (page.classList.contains('searching') ? closeSearch() : openSearch()));
+  q.addEventListener('focus', () => { if (!page.classList.contains('searching')) openSearch(); });
+  $('explore-cancel').addEventListener('click', closeSearch);
+  q.addEventListener('keydown', e => { if (e.key === 'Escape') closeSearch(); });
   // Reels: every video, one screen at a time, scrolled up and down.
   for (const b of $('ex-tabs').children) b.addEventListener('click', () => {
     if (b.dataset.t === 'live') { if (typeof openLiveHub === 'function') openLiveHub(); return; }
