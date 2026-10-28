@@ -31,8 +31,8 @@ const svgEl = (name, cls) => Object.assign(el('i', cls || ''), { innerHTML: svg(
 function exploreNote(text) { chatToast(ME || { id: 0, name: 'Manzeela' }, text); }
 // Share a post: the phone's own share sheet where there is one, otherwise the link is copied.
 async function sharePost(p) {
-  postSignal(p.id, 'share', current === 'reels' || reelsBox ? 'reel' : 'feed');
-  const url = `${location.origin}${location.pathname}?post=${p.id}#/${p.kind === 'video' ? 'reels' : 'post'}/${p.id}`;
+  postSignal(p.id, 'share', reelsBox ? 'reel' : 'feed');
+  const url = `${location.origin}${location.pathname}?post=${p.id}#/explore`;
   try {
     if (navigator.share) await navigator.share({ title: 'Manzeela', text: p.caption || p.user.name, url });
     else { await navigator.clipboard.writeText(url); exploreNote('লিংক কপি হয়েছে।'); }
@@ -107,7 +107,7 @@ document.addEventListener('play', e => {
   if (!v.closest('.fc-media')) for (const f of feedSounds) f.sound.stop();
 }, true);
 function resumeFeed() {
-  if (current !== 'home' || feedCovered()) return;
+  if (current !== 'explore' || feedCovered()) return;
   const vh = innerHeight;
   for (const v of document.querySelectorAll('#explore-feed .fc-media video')) {
     const r = v.getBoundingClientRect(), seen = Math.max(0, Math.min(r.bottom, vh) - Math.max(r.top, 0)) / (r.height || 1);
@@ -532,7 +532,7 @@ function closeReels() {
   for (const r of reelsBox._sounds || []) r.rs.stop();
   reelsBox.remove();
   reelsBox = null;
-  document.body.classList.remove('reels-open', 'reels-tab');
+  document.body.classList.remove('reels-open');
 }
 // A post of several photos: swiped sideways, with dots and a "1/3" that fades, as on Instagram.
 // Each slide is a photo, or a video that plays while its slide is on screen (with its words and stickers over it).
@@ -607,33 +607,25 @@ function useAudioOf(p) {
 }
 const audioName = p => p.music ? soundLabel(p) : p.aname || `${p.user.name} · ${LANG === 'en' ? 'Original audio' : 'মূল অডিও'}`;
 const newSeed = () => 1 + Math.floor(Math.random() * 999983);
-async function openReels(startId, user, tab) {
+async function openReels(startId, user) {
   let posts = [];
-  if (tab) $('reels-empty').hidden = true;
   const seed = newSeed();
   const page = o => exploreApi(user ? `feed?kind=video&user=${user}${o ? '&before=' + o : ''}` : `feed?kind=video&seed=${seed}&o=${o}${startId ? '&first=' + startId : ''}`);
   // the screen answers the tap at once: black, with a spinner, until the list comes
   closeReels();
-  const wait = reelsBox = el('div', 'reels reels-wait' + (tab ? ' reels-tab' : ''));
+  const wait = reelsBox = el('div', 'reels reels-wait');
   wait.appendChild(el('i', 'reels-spin'));
   document.body.appendChild(wait);
   document.body.classList.add('reels-open');
-  if (tab) document.body.classList.add('reels-tab');
   try { posts = (await page(0)).posts; } catch { if (reelsBox === wait) closeReels(); return; }
   if (reelsBox !== wait) return;                                     // closed (or opened again) meanwhile
   let offset = posts.length, ended = posts.length < 30, loading = false;
   const at = startId ? posts.findIndex(p => p.id === startId) : 0;
-  if (at < 0 && tab && posts.length) return openReels(0, user, tab);     // that reel is gone: the reels from the start
-  if (at < 0 || !posts.length) {
-    closeReels();
-    if (tab) $('reels-empty').hidden = false;
-    else if (!startId) exploreNote('এখনো কোনো রিল নেই — প্রথম ভিডিওটি আপনিই দিন।');
-    return;
-  }
+  if (at < 0 || !posts.length) { closeReels(); if (!startId) exploreNote('এখনো কোনো রিল নেই — প্রথম ভিডিওটি আপনিই দিন।'); return; }
   wait.remove();
   let sound = true;
   const reelSounds = [];
-  const box = reelsBox = el('div', 'reels' + (tab ? ' reels-tab' : ''));
+  const box = reelsBox = el('div', 'reels');
   box._sounds = reelSounds;
   const close = el('button', 'reels-x');
   close.innerHTML = svg('close');
@@ -645,25 +637,15 @@ async function openReels(startId, user, tab) {
   const camera = el('button', 'reels-cam');
   camera.innerHTML = svg('camera');
   camera.setAttribute('aria-label', 'নতুন রিল');
-  camera.addEventListener('click', () => { if (!tab) closeReels(); openNewPost(); });
-  if (tab && typeof openLiveHub === 'function') {
-    const live = el('button', 'reels-live', 'লাইভ');
-    live.addEventListener('click', () => openLiveHub());
-    topbar.appendChild(live);
-  }
+  camera.addEventListener('click', () => { closeReels(); openNewPost(); });
   topbar.appendChild(camera);
-  // how each reel is watched (seconds, to the end, skipped), for For You
-  const seen = watchLog('reel');
+  const seen = watchLog('reel');     // how each reel is watched, for For You
   box._seen = () => seen.flush();
   const watcher = new IntersectionObserver(entries => {
     for (const e of entries) {
       const v = e.target.querySelector('video');
-      if (e.isIntersecting && e.intersectionRatio > 0.6) {
-        v.muted = !sound || v.dataset.orig === '0'; v.play().catch(() => { v.muted = true; v.play().catch(() => {}); });
-        seen.start(Number(e.target.dataset.id), v);
-        // the reels tab keeps the reel on screen in its address, so a reload or a shared link comes back to it
-        if (tab && reelsBox === box && current === 'reels') history.replaceState(history.state, '', '#/reels/' + e.target.dataset.id);
-      } else { v.pause(); seen.stop(Number(e.target.dataset.id)); }
+      if (e.isIntersecting && e.intersectionRatio > 0.6) { v.muted = !sound || v.dataset.orig === '0'; v.play().catch(() => { v.muted = true; v.play().catch(() => {}); }); seen.start(Number(e.target.dataset.id), v); }
+      else { v.pause(); seen.stop(Number(e.target.dataset.id)); }
     }
   }, { root: column, threshold: [0, 0.6, 1] });
 
@@ -772,11 +754,11 @@ async function openReels(startId, user, tab) {
   column.children[at].scrollIntoView();
   column.focus();
   column.addEventListener('keydown', e => {
-    if (e.key === 'Escape' && $('modal').hidden && !tab) closeReels();
+    if (e.key === 'Escape' && $('modal').hidden) closeReels();
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); column.scrollBy({ top: (e.key === 'ArrowDown' ? 1 : -1) * column.clientHeight, behavior: 'smooth' }); }
   });
 }
-addEventListener('hashchange', () => { if (current !== 'reels' || (reelsBox && !reelsBox.classList.contains('reels-tab'))) closeReels(); });
+addEventListener('hashchange', closeReels);
 
 // ---- stories: a photo or video that stays for 24 hours ----
 const seenStories = () => { try { return JSON.parse(localStorage.getItem('bdmap.stories')) || {}; } catch { return {}; } };
@@ -1055,7 +1037,7 @@ function openQuickPost() {
     if (!file) {                                       // words only
       if (caption.value.trim().length < 2) { fail('একটি ছবি বা ভিডিও বেছে নিন, অথবা কিছু লিখুন।'); return; }
       share.disabled = true;
-      try { await exploreApi('post', { caption: caption.value }); closeModal(); if (current === 'profile') drawProfile(); else { if (current !== 'home') go('home'); refreshFeed(); } }
+      try { await exploreApi('post', { caption: caption.value }); closeModal(); if (current === 'explore') enter.explore(); else if (current === 'profile') drawProfile(); else go('explore'); }
       catch { share.disabled = false; fail('পোস্ট করা যায়নি। সংযোগ দেখে আবার চেষ্টা করুন।'); }
       return;
     }
@@ -1081,7 +1063,7 @@ function openQuickPost() {
 
 // ---- For You: how posts are watched ----
 // Each video counts the seconds it actually played, whether it was seen to the end (and how many times it went round),
-// or skipped (gone in under 2 seconds). The notes go to the server in small batches; nothing is sent for your own posts.
+// or skipped (gone in under 2 seconds). The notes go to the server in small batches; your own posts are not counted there.
 const signalQueue = [];
 let signalTimer = 0;
 function sendSignals() {
@@ -1092,7 +1074,7 @@ function sendSignals() {
   if (signalQueue.length) sendSignals();
 }
 function postSignal(post, kind, src, extra) {
-  if (!post || (ME && extra && extra.mine)) return;
+  if (!post) return;
   signalQueue.push({ post, kind, src, ...(extra || {}) });
   if (signalQueue.length >= 30) sendSignals(); else if (!signalTimer) signalTimer = setTimeout(sendSignals, 20_000);
 }
@@ -1127,14 +1109,11 @@ function watchLog(src) {
 const feedSeen = watchLog('feed');
 addEventListener('pagehide', () => { feedSeen.flush(); if (reelsBox && reelsBox._seen) reelsBox._seen(); sendSignals(); });
 document.addEventListener('visibilitychange', () => { if (document.hidden) sendSignals(); });
-addEventListener('hashchange', () => { if (current !== 'home') feedSeen.flush(); });
-// Home's feed and the reels tab, filled in by the page below
-let refreshFeed = () => {}, feedOnHome = () => {};
+addEventListener('hashchange', () => { if (current !== 'explore') feedSeen.flush(); });
 
 // ---- the page ----
 (function initExplore() {
-  const feed = $('explore-feed'), results = $('explore-results'), people = $('explore-people'), q = $('explore-q'), disc = $('explore-discover');
-  const feature = $('hm-feature'), give = document.querySelector('#feed-inserts .hm-give');
+  const feed = $('explore-feed'), results = $('explore-results'), people = $('explore-people'), q = $('explore-q');
   let last = 0, busy = false, done = false, seed = newSeed(), offset = 0;
   feedWatcher = new IntersectionObserver(entries => {
     for (const e of entries) {
@@ -1163,7 +1142,6 @@ let refreshFeed = () => {}, feedOnHome = () => {};
     for (const g of feed.querySelectorAll('.fc-ghost')) g.remove();
     for (const p of posts) feed.appendChild(feedCard(p, start));
     offset += posts.length;
-    inserts();
     if (posts.length) last = posts[posts.length - 1].id;
     done = posts.length < 30;
     // the end of the feed says so, as Instagram's 'You're all caught up'
@@ -1179,15 +1157,7 @@ let refreshFeed = () => {}, feedOnHome = () => {};
     }
     busy = false;
   }
-  // the app's own cards between the posts: a place to visit after the 2nd post, 'tell us a fare' after the 6th
-  function inserts() {
-    const cards = feed.querySelectorAll(':scope > .fc:not(.fc-ghost):not(.fc-live)');
-    if (feature && cards[1] && !feed.contains(feature)) cards[1].after(feature);
-    if (give && cards[5] && !feed.contains(give)) cards[5].after(give);
-  }
-  let startedAt = 0;
   function start() {
-    startedAt = Date.now();
     last = 0; offset = 0; done = false; busy = false; seed = newSeed();
     // two grey cards in the shape of posts while the first ones come
     const ghost = () => { const g = el('div', 'fc fc-ghost'); g.append(el('div', 'gh-head'), el('div', 'gh-media'), el('div', 'gh-line')); return g; };
@@ -1243,7 +1213,8 @@ let refreshFeed = () => {}, feedOnHome = () => {};
     const text = q.value.trim(), mine = ++seq;
     const searching = text.length >= 2;
     results.hidden = !searching;
-    disc.hidden = searching;
+    feed.hidden = searching;
+    people.hidden = searching || !people.children.length;
     if (!searching) return;
     timer = setTimeout(async () => {
       const who = el('div', 'found-people'), grid = el('div'), where = el('div', 'found-places'), whereLabel = el('div', 'label', 'জায়গা');
@@ -1261,45 +1232,80 @@ let refreshFeed = () => {}, feedOnHome = () => {};
   });
 
   // The next page loads as the end of the feed comes near.
-  new IntersectionObserver(entries => { if (entries[0].isIntersecting && current === 'home' && last) more(); }, { rootMargin: '600px' }).observe($('explore-end'));
-  // Home: the feed starts once and keeps its place; after a while away it starts fresh, as Instagram's does
-  refreshFeed = () => { start(); faces(); };
-  feedOnHome = () => {
-    if (!startedAt || Date.now() - startedAt > 15 * 60_000) refreshFeed();
-    const wanted = Number(new URLSearchParams(location.search).get('post'));     // arrived by an older shared link
-    if (wanted && !feedOnHome.opened && !/^#\/(post|reels)\//.test(location.hash)) { feedOnHome.opened = true; openPost(wanted); }
-  };
-  // Search: with nothing typed, the posts people like now
-  let discovered = false;
+  new IntersectionObserver(entries => { if (entries[0].isIntersecting && current === 'explore' && !feed.hidden && last) more(); }, { rootMargin: '600px' }).observe($('explore-end'));
   enter.explore = () => {
-    if (!discovered) { discovered = true; postGrid(disc, 0, 'এখনো কোনো পোস্ট নেই।'); }
-    if (innerWidth > 760 || !q.value) setTimeout(() => q.focus({ preventScroll: true }), 60);
+    q.value = ''; results.hidden = true; feed.hidden = false; start(); faces();
+    const wanted = Number(new URLSearchParams(location.search).get('post'));     // arrived by a shared link
+    if (wanted && !enter.explore.opened) { enter.explore.opened = true; openPost(wanted); }
   };
-  enter.reels = () => {
-    const id = reelWanted; reelWanted = 0;
-    if (reelsBox && reelsBox.classList.contains('reels-tab') && !id) return;      // still open where you left it
-    openReels(id, 0, true);
-  };
+  $('explore-new').addEventListener('click', () => openNewPost());
+  // The name at the top opens a small menu: the feed, reels, what you saved.
+  $('explore-brand').addEventListener('click', e => {
+    e.stopPropagation();
+    const old = document.querySelector('.ex-menu');
+    if (old) { old.remove(); return; }
+    const menu = el('div', 'ex-menu');
+    const item = (icon, bn, en, fn) => { const b = el('button'); b.append(ic(icon), el('span', null, LANG === 'en' ? en : bn)); b.addEventListener('click', () => { menu.remove(); fn(); }); menu.appendChild(b); };
+    item('home', 'ফিড', 'Feed', () => { scrollTo({ top: 0, behavior: 'smooth' }); });
+    item('play', 'রিলস', 'Reels', () => $('ex-tabs').children[1].click());
+    item('bookmark', 'সেভ করা', 'Saved', () => { if (ME) { go('profile'); setTimeout(() => { const t = document.querySelector('#page-profile [data-tab=saved]'); if (t) t.click(); }, 400); } else openLogin(); });
+    $('explore-brand').after(menu);
+    setTimeout(() => addEventListener('click', () => menu.remove(), { once: true }), 0);
+  });
+  // Search opens under the top bar.
+  $('explore-find').addEventListener('click', () => {
+    const box = document.querySelector('.ex-search');
+    const open = box.classList.toggle('open');
+    if (open) q.focus(); else { q.value = ''; q.dispatchEvent(new Event('input')); }
+  });
+  // Reels: every video, one screen at a time, scrolled up and down.
+  for (const b of $('ex-tabs').children) b.addEventListener('click', () => {
+    if (b.dataset.t === 'live') { if (typeof openLiveHub === 'function') openLiveHub(); return; }
+    if (b.dataset.t !== 'reels') return;
+    b.classList.add('on');
+    const feedTab = $('ex-tabs').children[0];
+    feedTab.classList.remove('on');
+    openReels(0).finally(() => {
+      const back = () => { b.classList.remove('on'); feedTab.classList.add('on'); };
+      if (!reelsBox) back(); else new MutationObserver((_, o) => { if (!document.body.contains(reelsBox)) { back(); o.disconnect(); } }).observe(document.body, { childList: true });
+    });
+  });
   if (current === 'explore') enter.explore();
-  if (current === 'reels') enter.reels();
 })();
 
-// ---- Home: a greeting over the search, the feed under it ----
+// ---- Home: the newest posts as a row of cards, and the faces of the people who share the most ----
+async function loadHomePosts() {
+  const row = $('home-posts');
+  let posts = [];
+  try { posts = (await exploreApi('feed')).posts.slice(0, 12); } catch { /* the row stays hidden */ }
+  row.replaceChildren();
+  for (const p of posts) {
+    const card = el('button', 'hp');
+    if (p.kind === 'text') { card.classList.add('texty', 'g' + (p.id % 5)); card.appendChild(Object.assign(el('p', 'no-tr'), { textContent: p.caption })); }
+    else if (p.kind === 'video' && !p.poster) card.appendChild(firstFrame(p));
+    else card.appendChild(Object.assign(el('img'), { src: p.kind === 'video' ? p.poster : p.src, alt: p.caption || '', loading: 'lazy' }));
+    if (p.kind === 'video') card.appendChild(svgEl('play', 'play'));
+    const who = el('span', 'hp-who');
+    who.append(avatar(p.user, 'xs'), Object.assign(el('b', 'no-tr'), { textContent: p.user.name }));
+    card.appendChild(who);
+    card.addEventListener('click', () => (p.kind === 'video' ? openReels(p.id) : openPost(p.id, loadHomePosts)));
+    row.appendChild(card);
+  }
+  row.hidden = $('home-posts-head').hidden = !posts.length;
+  let top = [];
+  try { top = (await communityApi('top?n=50')).top; } catch { /* no faces */ }
+  const faces = $('home-leaders');
+  faces.replaceChildren(...top.slice(0, 5).map(p => avatar(p)));
+  if (top.length) faces.appendChild(el('span', 'more', `${num(top.length)} জন অবদান রেখেছেন`));
+}
 (function hookHome() {
+  dragScroll($('home-posts'));
   const before = enter.home;
   enter.home = () => {
     if (before) before();
     const h = new Date().getHours();
     if (ME) $('home-hello').textContent = `${h < 12 ? 'শুভ সকাল' : h < 17 ? 'শুভ দুপুর' : h < 20 ? 'শুভ সন্ধ্যা' : 'শুভ রাত্রি'}, ${ME.name}`;
-    feedOnHome();
-    if (!enter.home.faces) {                 // the faces on the 'tell us a fare' card in the feed: people who give the most
-      enter.home.faces = true;
-      communityApi('top?n=50').then(({ top }) => {
-        const faces = $('home-leaders');
-        faces.replaceChildren(...top.slice(0, 5).map(p => avatar(p)));
-        if (top.length) faces.appendChild(el('span', 'more', `${num(top.length)} জন অবদান রেখেছেন`));
-      }).catch(() => { enter.home.faces = false; });
-    }
+    loadHomePosts();
   };
   if (current === 'home') enter.home();
 })();
@@ -1442,6 +1448,6 @@ async function openNotifications() {
   }
   list.replaceChildren(...rows);
 }
-$('hm-heart').addEventListener('click', openNotifications);
+$('explore-heart').addEventListener('click', openNotifications);
 refreshNotify();
 setInterval(() => { if (!document.hidden) refreshNotify(); }, 120_000);

@@ -1016,7 +1016,7 @@ async function sendPost(job) {
     uploads.delete(job);
     pill.done(job.later ? (LANG === 'en' ? 'Scheduled' : 'সময় ঠিক হয়েছে') : job.mode === 'story' ? 'স্টোরি দেওয়া হয়েছে' : job.mode === 'reel' ? 'রিল পোস্ট হয়েছে' : 'পোস্ট হয়েছে');
     if (typeof refreshStoryRings === 'function') refreshStoryRings(true);
-    if (current === 'home') refreshFeed(); else if (current === 'profile') drawProfile();
+    if (current === 'explore') enter.explore(); else if (current === 'profile') drawProfile();
     if (document.hidden && 'Notification' in window && Notification.permission === 'granted') new Notification('Manzeela', { body: 'আপনার পোস্টটি দেওয়া হয়েছে।', icon: 'icon.svg' });
   } catch (e) {
     uploads.delete(job);

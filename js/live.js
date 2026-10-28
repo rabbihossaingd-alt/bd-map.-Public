@@ -26,7 +26,7 @@ function liveEvents(on, es) {
   on('live-end', d => { if (LIVE && LIVE.id === d.live && !LIVE.host) LIVE.ended(); });
   on('live-start', card => {
     chatToast(card.user, tl('স্ট্রিমে এসেছেন — দেখতে চাপুন', 'is live — tap to watch'), () => watchLive(card));
-    if (current === 'home') liveIntoFeed($('explore-feed'));
+    if (current === 'explore' && typeof enter.explore === 'function') liveIntoFeed($('explore-feed'));
   });
 }
 // live.js loads last; the stream may already be open
@@ -182,7 +182,7 @@ async function startStream() {
     if (stream) stream.getTracks().forEach(t => t.stop());
     room.box.remove();
     document.body.classList.remove('reels-open');
-    if (current === 'home') refreshFeed();
+    if (current === 'explore') enter.explore();
   };
   const onHide = () => { if (LIVE) fetch('api/live/end', { method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: LIVE.id }) }); };
   x.addEventListener('click', () => { if (!LIVE || confirm(tl('স্ট্রিম শেষ করবেন?', 'End your live?'))) finish(); });
@@ -314,7 +314,7 @@ async function openLiveHub() {
   const restoreTab = () => { if (tabs) [...tabs.children].forEach((b2, i) => b2.classList.toggle('on', i === 0)); };
   if (tabs) [...tabs.children].forEach(b2 => b2.classList.toggle('on', b2.dataset.t === 'live'));
   const leave = () => { if (LIVE && !LIVE.host && LIVE.close) LIVE.close(); onPage = null; };
-  const close = () => { clearInterval(timer); leave(); watcher.disconnect(); box.remove(); if (!document.querySelector('.live-room, .reels')) document.body.classList.remove('reels-open'); restoreTab(); };
+  const close = () => { clearInterval(timer); leave(); watcher.disconnect(); box.remove(); if (!document.querySelector('.live-room')) document.body.classList.remove('reels-open'); restoreTab(); };
   x.addEventListener('click', close);
   go2.addEventListener('click', () => { close(); startStream(); });
   // the page on screen joins its live; the one that leaves, leaves
@@ -403,5 +403,5 @@ async function liveIntoFeed(feed) {
   feed.prepend(card);
 }
 // The feed may have filled before this file loaded; and lives come and go, so the row is looked at again.
-if (typeof current !== 'undefined' && current === 'home') liveIntoFeed($('explore-feed'));
-setInterval(() => { if (current === 'home' && !document.hidden && !document.querySelector('.live-room, .live-hub')) liveIntoFeed($('explore-feed')); }, 30_000);
+if (typeof current !== 'undefined' && current === 'explore') liveIntoFeed($('explore-feed'));
+setInterval(() => { if (current === 'explore' && !document.hidden && !document.querySelector('.live-room, .live-hub')) liveIntoFeed($('explore-feed')); }, 30_000);
