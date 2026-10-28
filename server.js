@@ -2561,22 +2561,42 @@ const versionPage = html => html.replace(/(<(?:script|link)\b[^>]*?\b(?:src|href
 // memory: about a third smaller than the fast compression on the way, so a first visit on a slow line is quicker.
 const zlib = require('node:zlib');
 const ZIPPABLE = new Set(['.js', '.css', '.json', '.svg', '.html', '.webmanifest']);
-const zipCache = new Map();
+// The compressing runs off the main thread (zlib's own threads), so no one waits behind it; the app's files are
+// compressed once at start, before the first visitor asks.
+const zipCache = new Map(), zipping = new Map();
+function zipped(enc, buf, key) {
+  const k = enc + '|' + key;
+  if (zipCache.has(k)) return Promise.resolve(zipCache.get(k));
+  if (zipping.has(k)) return zipping.get(k);
+  const p = new Promise((done, fail) => {
+    const cb = (e, z) => { zipping.delete(k); if (e) return fail(e); zipCache.set(k, z); if (zipCache.size > 400) zipCache.delete(zipCache.keys().next().value); done(z); };
+    if (enc === 'br') zlib.brotliCompress(buf, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: key.startsWith('page:') ? 6 : 11, [zlib.constants.BROTLI_PARAM_SIZE_HINT]: buf.length } }, cb);
+    else zlib.gzip(buf, { level: 9 }, cb);
+  });
+  zipping.set(k, p);
+  return p;
+}
 function sendText(req, res, head, buf, key) {
   const ae = String(req.headers['accept-encoding'] || '');
   const enc = buf.length < 1024 ? '' : /\bbr\b/.test(ae) ? 'br' : /\bgzip\b/.test(ae) ? 'gzip' : '';
-  if (!enc) { res.writeHead(200, { ...head, 'Content-Length': buf.length, Vary: 'Accept-Encoding' }); res.end(req.method === 'HEAD' ? undefined : buf); return; }
-  const k = enc + '|' + key;
-  let z = zipCache.get(k);
-  if (!z) {
-    z = enc === 'br' ? zlib.brotliCompressSync(buf, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: key.startsWith('page:') ? 6 : 11, [zlib.constants.BROTLI_PARAM_SIZE_HINT]: buf.length } })
-      : zlib.gzipSync(buf, { level: 9 });
-    zipCache.set(k, z);
-    if (zipCache.size > 400) zipCache.delete(zipCache.keys().next().value);
-  }
-  res.writeHead(200, { ...head, 'Content-Encoding': enc, 'Content-Length': z.length, Vary: 'Accept-Encoding' });
-  res.end(req.method === 'HEAD' ? undefined : z);
+  const plain = () => { res.writeHead(200, { ...head, 'Content-Length': buf.length, Vary: 'Accept-Encoding' }); res.end(req.method === 'HEAD' ? undefined : buf); };
+  if (!enc) return plain();
+  zipped(enc, buf, key).then(z => {
+    res.writeHead(200, { ...head, 'Content-Encoding': enc, 'Content-Length': z.length, Vary: 'Accept-Encoding' });
+    res.end(req.method === 'HEAD' ? undefined : z);
+  }, plain);
 }
+// at start: every script, style and data file of the app, one after another
+setTimeout(async () => {
+  for (const dir of ['css', 'js', 'data']) {
+    let names = []; try { names = fs.readdirSync(path.join(ROOT, dir)); } catch { continue; }
+    for (const n of names) {
+      const file = path.join(ROOT, dir, n);
+      if (!ZIPPABLE.has(path.extname(file))) continue;
+      try { const st = fs.statSync(file); if (st.size > 4e6) continue; await zipped('br', fs.readFileSync(file), file + ':' + st.mtimeMs + ':' + st.size); } catch { /* asked for later, made then */ }
+    }
+  }
+}, 500).unref();
 function serveFile(req, res, pathname, versioned) {
   let rel;
   try { rel = decodeURIComponent(pathname); } catch { res.writeHead(400).end(); return; }
