@@ -4793,3 +4793,23 @@ body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 .apps a { min-width: 0; }
 .apps span { white-space: normal; max-width: 100%; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-align: center; }
 #page-more .hub-head h2 { font-weight: 700; letter-spacing: -.02em; }
+
+/* ---- "এখানে যান": a post's place, and one tap to the way there ---- */
+.go-row { display: flex; align-items: center; gap: var(--space-2); margin: var(--space-2) 0; min-width: 0; }
+.go-name { flex: 1; min-width: 0; display: inline-flex; align-items: center; gap: 6px; padding: 0; font-size: var(--fs-sm); font-weight: 600; color: var(--ink); text-align: left; }
+.go-name > i { flex: none; display: grid; font-size: 16px; color: var(--brand-text); }
+.go-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.go-here { flex: none; display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 var(--space-3) 0 10px; border-radius: var(--r-full);
+  font-size: var(--fs-sm); font-weight: 700; color: var(--white); background: var(--brand); box-shadow: 0 4px 12px -4px rgb(var(--brand-rgb) / 0.6);
+  transition: transform var(--dur-1) var(--ease-out), box-shadow var(--dur-2); }
+.go-here > i { display: grid; font-size: 15px; }
+.go-here:active { transform: scale(.94); }
+@media (hover: hover) { .go-here:hover { box-shadow: 0 6px 16px -4px rgb(var(--brand-rgb) / 0.75); } }
+.go-name svg, .go-here svg { width: 1em; height: 1em; fill: none; stroke: currentColor; stroke-width: 2.1; stroke-linecap: round; stroke-linejoin: round; }
+/* on a reel: white on the video, a glass pill */
+.go-row.on-dark { margin: var(--space-1) 0 var(--space-2); max-width: 100%; }
+.go-row.on-dark .go-name { flex: 0 1 auto; color: var(--white); text-shadow: 0 1px 6px rgb(var(--black-rgb) / 0.5); }
+.go-row.on-dark .go-name > i { color: var(--white); }
+.go-row.on-dark .go-here { background: rgb(var(--white-rgb) / 0.95); color: var(--black); box-shadow: 0 4px 14px rgb(var(--black-rgb) / 0.3); }
+/* in an open post's bar */
+.go-row.in-post { flex: 1; margin: 0; }

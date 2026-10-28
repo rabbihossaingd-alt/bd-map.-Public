@@ -240,7 +240,7 @@ const EXACT = {
   'আবার লগইন করুন।': 'Please log in again.', 'কাজটি করা যায়নি। ইন্টারনেট সংযোগ দেখে আবার চেষ্টা করুন।': 'That did not work. Check your internet connection and try again.',
 
   // navigation and home
-  'হোম': 'Home', 'স্ট্রিম': 'Stream', 'আপনার জন্য': 'For you', 'যাত্রা': 'Go', 'মানুষ, জায়গা বা পোস্ট খুঁজুন': 'Search people, places or posts', 'যাতায়াত ও ঘোরাঘুরি': 'Travel', 'এখনো কোনো রিল নেই': 'No reels yet', 'প্রথম ভিডিওটি আপনিই দিন।': 'Be the first to post a video.', 'মেনু': 'Menu', 'প্রধান মেনু': 'Main menu', 'ম্যাপ': 'Map', 'ঢাকার বাস': 'Dhaka buses', 'জেলা': 'Districts', 'কাছাকাছি': 'Nearby', 'ভাড়া': 'Fares',
+  'হোম': 'Home', 'এখানে যান': 'Go here', 'এখানে যান — ম্যাপে রাস্তা দেখুন': 'Go here — see the way on the map', 'কোথা থেকে যাবেন লিখুন — লোকেশনের অনুমতি পাওয়া যায়নি।': 'Type where you are starting from — location was not allowed.', 'স্ট্রিম': 'Stream', 'আপনার জন্য': 'For you', 'যাত্রা': 'Go', 'মানুষ, জায়গা বা পোস্ট খুঁজুন': 'Search people, places or posts', 'যাতায়াত ও ঘোরাঘুরি': 'Travel', 'এখনো কোনো রিল নেই': 'No reels yet', 'প্রথম ভিডিওটি আপনিই দিন।': 'Be the first to post a video.', 'মেনু': 'Menu', 'প্রধান মেনু': 'Main menu', 'ম্যাপ': 'Map', 'ঢাকার বাস': 'Dhaka buses', 'জেলা': 'Districts', 'কাছাকাছি': 'Nearby', 'ভাড়া': 'Fares',
   '৬৪ জেলার যাতায়াত, এক জায়গায়': 'Travel across all 64 districts, in one place',
   'কোথায়': 'Where', 'যাবেন?': 'to?',
   'কোন বাসে যাবেন, ভাড়া কত, কতক্ষণ লাগবে — এক নজরে।': 'Which bus to take, what it costs, how long it takes — at a glance.',

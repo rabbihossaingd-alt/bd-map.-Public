@@ -38,6 +38,35 @@ async function sharePost(p) {
     else { await navigator.clipboard.writeText(url); exploreNote('লিংক কপি হয়েছে।'); }
   } catch { /* the share sheet was closed */ }
 }
+// "এখানে যান": the map, with the post's place as where to go and where you are now as where from; the buses,
+// fare and time then show as for any trip. Counted for For You (people who want to go there).
+const canGoHere = p => !!(p.place && typeof p.place.lat === 'number' && typeof p.place.lon === 'number' && isFinite(p.place.lat) && isFinite(p.place.lon));
+function goHere(p, src) {
+  if (!canGoHere(p)) return;
+  postSignal(p.id, 'place', src);
+  if (typeof closeModal === 'function') closeModal();
+  closeReels();
+  const to = { lat: Number(p.place.lat), lon: Number(p.place.lon), label: p.place.label };
+  trip.from = null;                                   // from where you are now, not from an older trip
+  setPlace('to', to);
+  go('trip');
+  if (!navigator.geolocation) return;
+  navigator.geolocation.getCurrentPosition(pos => {
+    if (trip.to === to && !trip.from) setPlace('from', { lat: pos.coords.latitude, lon: pos.coords.longitude, label: 'আমার লোকেশন' });
+  }, () => { if (trip.to === to && !trip.from) exploreNote('কোথা থেকে যাবেন লিখুন — লোকেশনের অনুমতি পাওয়া যায়নি।'); },
+  { timeout: 10000, maximumAge: 300000 });
+}
+// the row on a post: the place's name, and the button
+function goHereRow(p, src, cls) {
+  const row = el('div', 'go-row ' + (cls || ''));
+  const name = el('button', 'go-name');
+  name.append(ic('pin'), Object.assign(el('span', 'no-tr'), { textContent: p.place.label }));
+  const btn = el('button', 'go-here');
+  btn.append(ic('route'), el('span', null, 'এখানে যান'));
+  for (const b of [name, btn]) b.addEventListener('click', e => { e.stopPropagation(); goHere(p, src); });
+  row.append(name, btn);
+  return row;
+}
 async function toggleSave(p, repaint) {
   if (!ME) { needLogin('পোস্ট সেভ করতে লগইন করুন'); return; }
   p.saved = !p.saved;
@@ -58,7 +87,8 @@ function postMenu(p, onGone) {
   const rows = [];
   const row = (text, cls, fn) => { const b = el('button', 'menu-row ' + cls, text); b.addEventListener('click', fn); rows.push(b); };
   row('প্রোফাইল দেখুন', '', () => { closeReels(); openProfilePage(p.user.id); });
-  if (p.place) row('জায়গাটি ম্যাপে দেখুন', '', () => { closeModal(); closeReels(); goTo(p.place); });
+  if (canGoHere(p)) row('এখানে যান — ম্যাপে রাস্তা দেখুন', '', () => goHere(p, reelsBox ? 'reel' : 'feed'));
+  else if (p.place) row('জায়গাটি ম্যাপে দেখুন', '', () => { closeModal(); closeReels(); goTo(p.place); });
   if (mine || staff) row('পোস্টটি মুছে ফেলুন', 'bad', async () => { await exploreApi('delete', { id: p.id }).catch(() => {}); closeModal(); closeReels(); if (onGone) onGone(); });
   if (!mine) row('রিপোর্ট করুন', 'bad', async () => { if (!ME) { openLogin(); return; } await exploreApi('report', { id: p.id, reason: 'reported from the post' }).catch(() => {}); closeModal(); });
   openModal(p.user.name, agoText(p.created), rows);
@@ -277,7 +307,7 @@ function feedCard(p, onGone) {
   paintKeep();
   keep.addEventListener('click', () => toggleSave(p, paintKeep));
   bar.append(like, talk, send);
-  if (p.place) {
+  if (p.place && !canGoHere(p)) {
     const pin = el('button', 'fc-btn');
     pin.innerHTML = svg('pin');
     pin.setAttribute('aria-label', 'ম্যাপে দেখুন');
@@ -287,6 +317,7 @@ function feedCard(p, onGone) {
   bar.appendChild(keep);
   const body = el('div', 'fc-body');
   body.appendChild(count);
+  if (canGoHere(p)) body.appendChild(goHereRow(p, 'feed'));
   if (p.caption && p.kind !== 'text') {
     const cap = el('p', 'fc-cap no-tr');
     cap.append(el('b', null, p.user.name), document.createTextNode(' ' + p.caption));
@@ -480,7 +511,8 @@ async function openPost(id, onGone) {
   like.addEventListener('click', () => toggleLike(p, paint));
   const bar = el('div', 'post-bar');
   bar.appendChild(like);
-  if (p.place) {
+  if (canGoHere(p)) bar.appendChild(goHereRow(p, 'feed', 'in-post'));
+  else if (p.place) {
     const place = el('button', 'chip');
     place.innerHTML = svg('pin');
     place.appendChild(Object.assign(el('span', 'no-tr'), { textContent: p.place.label }));
@@ -686,7 +718,8 @@ async function openReels(startId, user) {
     }
     info.appendChild(whoRow);
     if (p.caption) info.appendChild(Object.assign(el('p', 'no-tr'), { textContent: p.caption }));
-    if (p.place) {
+    if (canGoHere(p)) info.appendChild(goHereRow(p, 'reel', 'on-dark'));
+    else if (p.place) {
       const place = el('button', 'reel-place');
       place.innerHTML = svg('pin');
       place.appendChild(Object.assign(el('span', 'no-tr'), { textContent: p.place.label }));
