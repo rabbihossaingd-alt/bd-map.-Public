@@ -4744,3 +4744,36 @@ button.item:hover { border-color: var(--line); background: color-mix(in srgb, va
 .help-row { min-height: 56px; }
 .apps span { white-space: nowrap; letter-spacing: -.01em; }
 @media (max-width: 400px) { .apps span { font-size: var(--fs-xs); } }
+
+/* ================= Step B: type, solid tab icons, motion ================= */
+/* Type: Noto Sans Bengali for reading (clear at small sizes), Anek Bangla for headings and numbers */
+:root { --font-body: "Noto Sans Bengali", system-ui, "Segoe UI", Roboto, sans-serif; --font-head: "Anek Bangla", "Noto Sans Bengali", system-ui, sans-serif; }
+body { font-family: var(--font-body); }
+input, textarea, select, button { font-family: inherit; }
+h1, h2, h3, h4, .brand, .ex-brand b, .hm-brand, .hub-head h2, .page-head h2, .stats-band b, .stat b, .hero h1, .hero h2, .hm-feature b, .hm-give b, .help-row .hl-call, .home-head h3 {
+  font-family: var(--font-head); }
+
+/* Motion: one set of timings for the whole app */
+:root { --dur-1: .15s; --dur-2: .25s; --dur-3: .4s; --ease-out: cubic-bezier(.2, .8, .2, 1); --spring-pop: cubic-bezier(.34, 1.56, .64, 1); }
+@keyframes page-fade { from { opacity: 0; } to { opacity: 1; } }
+.page.on:not(#page-trip):not(#page-chat) { animation: page-fade var(--dur-2) var(--ease-out) both; }
+
+/* the tab bar: outline icons, the open tab's turns solid with a small pop */
+.links a .ic-on { display: none; }
+.links a.on .ic-on { display: grid; }
+.links a.on .ic-off { display: none; }
+.links a .ic-on svg { stroke-width: 2.2; }
+@keyframes tab-pop { 0% { transform: scale(.82); } 60% { transform: scale(1.08); } 100% { transform: scale(1); } }
+.links a.on .ic-on svg { animation: tab-pop var(--dur-3) var(--spring-pop); }
+
+/* a press answers at once */
+.btn:active, .chip:active, .ex-icon:active, .icon-btn:active, .menu > a:active, .face:active { transform: scale(.96); }
+.btn, .chip, .ex-icon, .icon-btn { transition: transform var(--dur-1) var(--ease-out), background var(--dur-2), color var(--dur-2), box-shadow var(--dur-2); }
+
+/* cards in the feed come in softly as they load */
+@keyframes card-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+#explore-feed > .fc:not(.fc-ghost) { animation: card-in var(--dur-3) var(--ease-out) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .page.on, .links a.on .ic-on svg, #explore-feed > .fc { animation: none !important; }
+}

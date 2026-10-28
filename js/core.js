@@ -78,6 +78,12 @@ const ICONS = {
   user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/>',
   more: '<circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/>',
   menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
+  // solid ones, for the open tab
+  homeFill: '<path fill="currentColor" stroke="none" d="M11.3 2.7a1 1 0 011.4 0l8.4 7.5a1 1 0 01.4.8V20a1 1 0 01-1 1h-5.1v-5.6a1.4 1.4 0 00-1.4-1.4h-2a1.4 1.4 0 00-1.4 1.4V21H4.5a1 1 0 01-1-1v-9a1 1 0 01.4-.8z"/>',
+  feedFill: '<path fill="currentColor" stroke="none" fill-rule="evenodd" d="M11 3h6a4 4 0 014 4v6a4 4 0 01-4 4h-6a4 4 0 01-4-4V7a4 4 0 014-4zM10.2 14.4l2.9-2.9 2 2 1.4-1.4 2.3 2.3zM12.3 6.1a1.5 1.5 0 110 3 1.5 1.5 0 010-3z"/><path d="M3.5 8v9.5A3.5 3.5 0 007 21h9.5" stroke-width="2.2"/>',
+  routeFill: '<circle cx="6" cy="18" r="3" fill="currentColor" stroke="none"/><circle cx="18" cy="4.5" r="3" fill="currentColor" stroke="none"/><path d="M8.5 18H15a3.5 3.5 0 000-7H9a3.5 3.5 0 01-.5-6.5h7" stroke-width="2.4"/>',
+  chatFill: '<path fill="currentColor" stroke="none" d="M21 12a8 8 0 01-11.8 7L4 20l1.2-4.6A8 8 0 1121 12z"/>',
+  userFill: '<circle cx="12" cy="8" r="4.3" fill="currentColor" stroke="none"/><path fill="currentColor" stroke="none" d="M3.6 20.6c0-4.9 3.9-7.6 8.4-7.6s8.4 2.7 8.4 7.6a.8.8 0 01-.8.8H4.4a.8.8 0 01-.8-.8z"/>',
   ship: '<path d="M3 17l2 4h14l2-4-9-3-9 3z"/><path d="M6 15.5V9h12v6.5M12 3v6M9 9V6h6v3"/>',
   edit: '<path d="M4 20h4l10-10-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/>',
   cng: '<path d="M4 16v-6a4 4 0 014-4h5l5 5v5"/><path d="M4 12h9V6"/><circle cx="7" cy="17" r="2"/><circle cx="16" cy="17" r="2"/>',
