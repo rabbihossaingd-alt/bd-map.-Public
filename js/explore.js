@@ -31,6 +31,7 @@ const svgEl = (name, cls) => Object.assign(el('i', cls || ''), { innerHTML: svg(
 function exploreNote(text) { chatToast(ME || { id: 0, name: 'Manzeela' }, text); }
 // Share a post: the phone's own share sheet where there is one, otherwise the link is copied.
 async function sharePost(p) {
+  postSignal(p.id, 'share', reelsBox ? 'reel' : 'feed');
   const url = `${location.origin}${location.pathname}?post=${p.id}#/explore`;
   try {
     if (navigator.share) await navigator.share({ title: 'Manzeela', text: p.caption || p.user.name, url });
@@ -129,6 +130,7 @@ for (const type of ['pointerup', 'touchend', 'click', 'keydown']) addEventListen
 }, { capture: true });
 function feedCard(p, onGone) {
   const card = el('article', 'fc');
+  card.dataset.id = p.id;
   const head = el('header', 'fc-head');
   const who = el('button', 'fc-who');
   const t = el('span', 't');
@@ -525,6 +527,7 @@ async function openPost(id, onGone) {
 let reelsBox = null;
 function closeReels() {
   if (!reelsBox) return;
+  if (reelsBox._seen) reelsBox._seen();
   for (const v of reelsBox.querySelectorAll('video')) v.pause();
   for (const r of reelsBox._sounds || []) r.rs.stop();
   reelsBox.remove();
@@ -636,11 +639,13 @@ async function openReels(startId, user) {
   camera.setAttribute('aria-label', 'নতুন রিল');
   camera.addEventListener('click', () => { closeReels(); openNewPost(); });
   topbar.appendChild(camera);
+  const seen = watchLog('reel');     // how each reel is watched, for For You
+  box._seen = () => seen.flush();
   const watcher = new IntersectionObserver(entries => {
     for (const e of entries) {
       const v = e.target.querySelector('video');
-      if (e.isIntersecting && e.intersectionRatio > 0.6) { v.muted = !sound || v.dataset.orig === '0'; v.play().catch(() => { v.muted = true; v.play().catch(() => {}); }); }
-      else v.pause();
+      if (e.isIntersecting && e.intersectionRatio > 0.6) { v.muted = !sound || v.dataset.orig === '0'; v.play().catch(() => { v.muted = true; v.play().catch(() => {}); }); seen.start(Number(e.target.dataset.id), v); }
+      else { v.pause(); seen.stop(Number(e.target.dataset.id)); }
     }
   }, { root: column, threshold: [0, 0.6, 1] });
 
@@ -649,6 +654,7 @@ async function openReels(startId, user) {
     if (shown.has(p.id)) return;
     shown.add(p.id);
     const reel = el('section', 'reel');
+    reel.dataset.id = p.id;
     const v = el('video');
     Object.assign(v, { src: p.src, poster: p.poster, loop: true, playsInline: true, preload: 'metadata' });
     // a spinner while it waits for more of the video
@@ -684,7 +690,7 @@ async function openReels(startId, user) {
       const place = el('button', 'reel-place');
       place.innerHTML = svg('pin');
       place.appendChild(Object.assign(el('span', 'no-tr'), { textContent: p.place.label }));
-      place.addEventListener('click', () => { closeReels(); goTo(p.place); });
+      place.addEventListener('click', () => { postSignal(p.id, 'place', 'reel'); closeReels(); goTo(p.place); });
       info.appendChild(place);
     }
     const side = el('div', 'reel-side');
@@ -811,7 +817,8 @@ async function loadStories(row) {
   const seen = seenStories();
   row.replaceChildren();
   const add = el('button', 'face add');
-  add.append(avatar(ME || { id: 0, name: '+' }, 'lg'), svgEl('plus', 'badge'), el('span', null, 'আপনার স্টোরি'));
+  if (!ME) add.classList.add('empty');
+  add.append(ME ? avatar(ME, 'lg') : Object.assign(el('span', 'avatar lg'), { innerHTML: svg('user') }), svgEl('plus', 'badge'), el('span', null, 'আপনার স্টোরি'));
   add.addEventListener('click', addStory);
   row.appendChild(add);
   groups.forEach((g, i) => {
@@ -1055,9 +1062,59 @@ function openQuickPost() {
   openModal('নতুন পোস্ট', '', [pick, chooser, capBox, placeBox, bar, note], [share]);
 }
 
+// ---- For You: how posts are watched ----
+// Each video counts the seconds it actually played, whether it was seen to the end (and how many times it went round),
+// or skipped (gone in under 2 seconds). The notes go to the server in small batches; your own posts are not counted there.
+const signalQueue = [];
+let signalTimer = 0;
+function sendSignals() {
+  clearTimeout(signalTimer); signalTimer = 0;
+  if (!signalQueue.length) return;
+  const events = signalQueue.splice(0, 60);
+  fetch('api/explore/events', { method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ events }) }).catch(() => {});
+  if (signalQueue.length) sendSignals();
+}
+function postSignal(post, kind, src, extra) {
+  if (!post) return;
+  signalQueue.push({ post, kind, src, ...(extra || {}) });
+  if (signalQueue.length >= 30) sendSignals(); else if (!signalTimer) signalTimer = setTimeout(sendSignals, 20_000);
+}
+function watchLog(src) {
+  const runs = new Map();     // post id -> { v, played, last, loops, tick }
+  return {
+    start(id, v) {
+      if (!id || runs.has(id)) return;
+      const r = { v, played: 0, last: v.currentTime || 0, loops: 0 };
+      r.tick = () => {
+        const t = v.currentTime, d = t - r.last;
+        if (d > 0 && d < 1.5) r.played += d;
+        else if (d < -1 && r.last > (v.duration || 0) - 1.5) r.loops++;      // it went round to the start
+        r.last = t;
+      };
+      v.addEventListener('timeupdate', r.tick);
+      runs.set(id, r);
+    },
+    stop(id) {
+      const r = runs.get(id);
+      if (!r) return;
+      runs.delete(id);
+      r.v.removeEventListener('timeupdate', r.tick);
+      if (!r.played && r.v.readyState < 2) return;      // it never loaded: not a skip, the video did not come
+      const dur = r.v.duration && isFinite(r.v.duration) ? r.v.duration : 0, ms = Math.round(r.played * 1000);
+      const done = r.loops > 0 || (dur > 0 && r.played >= dur * 0.9);
+      postSignal(id, ms < 2000 && !done ? 'skip' : 'watch', src, { ms, dur: Math.round(dur * 1000), done, loops: r.loops });
+    },
+    flush() { for (const id of [...runs.keys()]) this.stop(id); },
+  };
+}
+const feedSeen = watchLog('feed');
+addEventListener('pagehide', () => { feedSeen.flush(); if (reelsBox && reelsBox._seen) reelsBox._seen(); sendSignals(); });
+document.addEventListener('visibilitychange', () => { if (document.hidden) sendSignals(); });
+addEventListener('hashchange', () => { if (current !== 'explore') feedSeen.flush(); });
+
 // ---- the page ----
 (function initExplore() {
-  const feed = $('explore-feed'), results = $('explore-results'), people = $('explore-people'), q = $('explore-q');
+  const feed = $('explore-feed'), results = $('explore-results'), people = $('explore-people'), q = $('explore-q'), disc = $('explore-discover'), page = $('page-explore');
   let last = 0, busy = false, done = false, seed = newSeed(), offset = 0;
   feedWatcher = new IntersectionObserver(entries => {
     for (const e of entries) {
@@ -1070,10 +1127,11 @@ function openQuickPost() {
         v.muted = !(wantSound && soundAllowed());
         if (wantSound && v.muted) feedNeedsTap = true;
         v.play().catch(() => { v.muted = true; if (wantSound) feedNeedsTap = true; v.play().catch(() => {}); });
+        feedSeen.start(Number(v.closest('.fc') && v.closest('.fc').dataset.id), v);
         // the next video starts loading now, so it is ready when it scrolls in
         const cards = [...document.querySelectorAll('.fc-media video')], next = cards[cards.indexOf(v) + 1];
         if (next && next.preload !== 'auto') next.preload = 'auto';
-      } else if (!v.paused) { v.dataset.auto = '1'; v.pause(); }
+      } else { feedSeen.stop(Number(v.closest('.fc') && v.closest('.fc').dataset.id)); if (!v.paused) { v.dataset.auto = '1'; v.pause(); } }
     }
   }, { threshold: [0, 0.6] });
 
@@ -1156,8 +1214,7 @@ function openQuickPost() {
     const text = q.value.trim(), mine = ++seq;
     const searching = text.length >= 2;
     results.hidden = !searching;
-    feed.hidden = searching;
-    people.hidden = searching || !people.children.length;
+    disc.hidden = searching;
     if (!searching) return;
     timer = setTimeout(async () => {
       const who = el('div', 'found-people'), grid = el('div'), where = el('div', 'found-places'), whereLabel = el('div', 'label', 'জায়গা');
@@ -1177,7 +1234,8 @@ function openQuickPost() {
   // The next page loads as the end of the feed comes near.
   new IntersectionObserver(entries => { if (entries[0].isIntersecting && current === 'explore' && !feed.hidden && last) more(); }, { rootMargin: '600px' }).observe($('explore-end'));
   enter.explore = () => {
-    q.value = ''; results.hidden = true; feed.hidden = false; start(); faces();
+    page.classList.remove('searching'); document.querySelector('.ex-search').classList.remove('open');
+    q.value = ''; results.hidden = true; disc.hidden = false; start(); faces();
     const wanted = Number(new URLSearchParams(location.search).get('post'));     // arrived by a shared link
     if (wanted && !enter.explore.opened) { enter.explore.opened = true; openPost(wanted); }
   };
@@ -1196,11 +1254,43 @@ function openQuickPost() {
     setTimeout(() => addEventListener('click', () => menu.remove(), { once: true }), 0);
   });
   // Search opens under the top bar.
-  $('explore-find').addEventListener('click', () => {
-    const box = document.querySelector('.ex-search');
-    const open = box.classList.toggle('open');
-    if (open) q.focus(); else { q.value = ''; q.dispatchEvent(new Event('input')); }
-  });
+  // Search, as on Instagram: the box on top, the posts people like under it until something is typed; বাতিল goes back.
+  let discovered = false;
+  const openSearch = () => {
+    page.classList.add('searching');
+    document.querySelector('.ex-search').classList.add('open');
+    if (!discovered) { discovered = true; postGrid(disc, 0, 'এখনো কোনো পোস্ট নেই।'); }
+    scrollTo(0, 0);
+    setTimeout(() => q.focus({ preventScroll: true }), 30);
+  };
+  const closeSearch = () => {
+    page.classList.remove('searching');
+    document.querySelector('.ex-search').classList.remove('open');
+    q.value = ''; q.dispatchEvent(new Event('input')); q.blur();
+  };
+  $('explore-find').addEventListener('click', () => (page.classList.contains('searching') ? closeSearch() : openSearch()));
+  q.addEventListener('focus', () => { if (!page.classList.contains('searching')) openSearch(); });
+  $('explore-cancel').addEventListener('click', closeSearch);
+  q.addEventListener('keydown', e => { if (e.key === 'Escape') closeSearch(); });
+  // The pill under the open tab slides to it (the tab buttons light up as reels or a stream open and close)
+  {
+    const tabs = $('ex-tabs'), ind = el('i', 'ex-ind');
+    tabs.appendChild(ind);
+    const place = () => {
+      const on = tabs.querySelector('button.on') || tabs.querySelector('button');
+      if (!on || !on.offsetWidth) return;
+      ind.style.width = on.offsetWidth + 'px';
+      ind.style.transform = 'translateX(' + (on.offsetLeft - tabs.clientLeft) + 'px)';
+    };
+    new MutationObserver(place).observe(tabs, { subtree: true, attributes: true, attributeFilter: ['class'] });
+    addEventListener('resize', place);
+    if (document.fonts) document.fonts.ready.then(place);
+    const before = enter.explore;
+    enter.explore = () => { before(); requestAnimationFrame(place); };
+    requestAnimationFrame(place);
+  }
+  // the top bar's hairline only once the feed has scrolled under it
+  addEventListener('scroll', () => { if (current === 'explore') page.classList.toggle('scrolled', scrollY > 4); }, { passive: true });
   // Reels: every video, one screen at a time, scrolled up and down.
   for (const b of $('ex-tabs').children) b.addEventListener('click', () => {
     if (b.dataset.t === 'live') { if (typeof openLiveHub === 'function') openLiveHub(); return; }

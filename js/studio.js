@@ -674,10 +674,10 @@ function drawDetails() {
   caption.value = st.caption || '';
   caption.addEventListener('input', () => { st.caption = caption.value; });
   const chips = el('div', 'sd-chips');
-  const chip = (icon, label, add) => { const b = el('button'); b.append(el('span', 'k', icon), el('span', null, label)); b.addEventListener('click', () => { caption.value = (caption.value.replace(/\s*$/, '') + (caption.value.trim() ? ' ' : '') + add); st.caption = caption.value; caption.focus(); }); chips.appendChild(b); };
+  const chip = (icon, label, add) => { const b = el('button'); b.append(icon === 'pin' ? Object.assign(el('span', 'k'), { innerHTML: svg('pin') }) : el('span', 'k', icon), el('span', null, label)); b.addEventListener('click', () => { caption.value = (caption.value.replace(/\s*$/, '') + (caption.value.trim() ? ' ' : '') + add); st.caption = caption.value; caption.focus(); }); chips.appendChild(b); };
   chip('#', LANG === 'en' ? 'Hashtags' : 'হ্যাশট্যাগ', '#');
   chip('@', LANG === 'en' ? 'Mention' : 'মেনশন', '@');
-  if (st.place) chip('📍', st.place.label.split(',')[0], '#' + st.place.label.split(',')[0].replace(/\s+/g, ''));
+  if (st.place) chip('pin', st.place.label.split(',')[0], '#' + st.place.label.split(',')[0].replace(/\s+/g, ''));
 
   const rows = el('div', 'sd-rows');
   const row = (icon, label, value, fn) => {

@@ -1773,6 +1773,15 @@ async function mp4Faststart(file) {
   } catch (e) { out.destroy(); fs.promises.unlink(tmp).catch(() => {}); throw e; }
 }
 const viewed = new Map();
+// For You signals: how each post is watched. who is 'u<id>' for an account, or a hash of the address (never the
+// address itself). kind: watch (ms seconds of it played, done = seen to the end), skip (gone in under 2 s), share,
+// place (the place on it tapped). where: 'reel' or 'feed'. Kept 90 days; nothing here is shown to anyone.
+db.exec(`CREATE TABLE IF NOT EXISTS post_events (post INTEGER NOT NULL, who TEXT NOT NULL, kind TEXT NOT NULL, ms INTEGER NOT NULL DEFAULT 0,
+  dur INTEGER NOT NULL DEFAULT 0, done INTEGER NOT NULL DEFAULT 0, loops INTEGER NOT NULL DEFAULT 0, src TEXT NOT NULL DEFAULT '', at INTEGER NOT NULL)`);
+db.exec('CREATE INDEX IF NOT EXISTS post_events_post ON post_events (post, at)');
+const POST_EVENT_KINDS = new Set(['watch', 'skip', 'share', 'place']);
+const eventBudget = new Map();     // who -> [hour, count]: at most 900 events an hour from one viewer
+setInterval(() => { try { db.prepare('DELETE FROM post_events WHERE at < ?').run(Date.now() - 90 * 86400000); } catch { /* next day */ } eventBudget.clear(); }, 6 * 3600000).unref();
 setInterval(() => { const old = Date.now() - 6 * 36e5; for (const [k, t] of viewed) if (t < old) viewed.delete(k); }, 30 * 60_000).unref();
 async function exploreApi(req, res, action, query) {
   const me = userOf(req), meId = me ? me.id : 0, now = Date.now();
@@ -1865,6 +1874,23 @@ async function exploreApi(req, res, action, query) {
       if (!Number.isInteger(id) || viewed.has(key)) continue;
       viewed.set(key, now);
       db.prepare('UPDATE posts SET views = views + 1 WHERE id = ? AND user <> ?').run(id, meId);
+    }
+    return json(res, 200, { ok: true });
+  }
+  if (action === 'events') {                         // how posts were watched: { events: [{ post, kind, ms, dur, done, loops, src }] }
+    let body;
+    try { body = JSON.parse(await readBody(req, 12000)) || {}; } catch { return json(res, 400, { error: 'bad request' }); }
+    const who = me ? 'u' + me.id : 'a' + sha('viewer ' + clientIp(req)).slice(0, 16);
+    const hour = Math.floor(now / 3600000), b = eventBudget.get(who);
+    const used = b && b[0] === hour ? b[1] : 0;
+    const list = (Array.isArray(body.events) ? body.events : []).slice(0, Math.max(0, Math.min(60, 900 - used)));
+    eventBudget.set(who, [hour, used + list.length]);
+    const int = (x, hi) => Math.max(0, Math.min(hi, Math.round(Number(x)) || 0));
+    const add = db.prepare('INSERT INTO post_events (post, who, kind, ms, dur, done, loops, src, at) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM posts WHERE id = ? AND user <> ?)');
+    for (const e of list) {
+      const post = Number(e && e.post);
+      if (!Number.isInteger(post) || post <= 0 || !POST_EVENT_KINDS.has(e.kind)) continue;
+      add.run(post, who, e.kind, int(e.ms, 3600000), int(e.dur, 3600000), e.done ? 1 : 0, int(e.loops, 50), e.src === 'reel' ? 'reel' : 'feed', now, post, meId);
     }
     return json(res, 200, { ok: true });
   }

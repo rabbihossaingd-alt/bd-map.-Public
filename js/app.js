@@ -258,6 +258,8 @@ function route() {
     else if (base === 'trip' && query) { const q = new URLSearchParams(query); deep = { from: placeParam(q.get('from')), to: placeParam(q.get('to')) }; name = 'trip'; }
     else name = base; }
   if (name === 'intercity') name = 'districts';   // old link
+  // the profile tab: your own profile, or the menu with the login card when nobody is signed in
+  if (name === 'me') { const me = typeof ME !== 'undefined' ? ME : null; if (me) { PROFILE.id = me.id; name = 'profile'; } else name = 'more'; }
   if (name === 'tour') { try { localStorage.setItem('bdmap.rb', 'tour'); } catch { /* storage off */ } history.replaceState(null, '', '#/districts'); name = 'districts'; }   // now a tab of রূপসী বাংলা
   let scrollToSel = '';
   if (name === 'leaderboard') { scrollToSel = '.lead-card'; name = 'community'; }   // the fare tab, at the leaderboard
@@ -265,7 +267,8 @@ function route() {
   if (name === 'community' || name === 'buses') { try { localStorage.setItem('bdmap.fx', 'give'); } catch { /* storage off */ } history.replaceState(null, '', '#/fares'); name = 'fares'; }
   current = PAGES.includes(name) ? name : 'home';
   for (const p of PAGES) $('page-' + p).classList.toggle('on', p === current);
-  for (const a of document.querySelectorAll('[data-nav]')) a.classList.toggle('on', a.dataset.nav === current);
+  const tab = ['profile', 'more', 'settings', 'support', 'insights'].includes(current) && document.querySelector('[data-nav=me]') ? 'me' : current;
+  for (const a of document.querySelectorAll('[data-nav]')) a.classList.toggle('on', a.dataset.nav === tab);
   document.body.style.overflow = current === 'trip' ? 'hidden' : '';
   document.body.dataset.page = current;
   mzPage(current);
@@ -1267,7 +1270,7 @@ function clearBus() {
 // Draws one or two stop-to-stop paths (bus legs, or a train's stations) with a dot at every stop.
 // Each path is a list of { lat, lon, name }.
 function showPathOnMap(paths) {
-  const colors = ['#0a8f62', '#6b4de6'];
+  const colors = ['#00875a', '#0e7c86'];        // the brand green and its teal (a second leg or line)
   const lines = paths.map((pts, n) => ({ color: colors[n % 2], coords: pts.map(p => [p.lon, p.lat]) }));
   fit(lines.flatMap(l => l.coords));
   drawLines('bus', lines);
@@ -1312,7 +1315,7 @@ $('tool-out').addEventListener('click', () => { if (map) map.zoomOut(); });
 
 // ---- A bus, in the list under the map ----
 // The map keeps only the places (where from, where to); a bus's details open beside it, in the list.
-const BUS_COLORS = ['#0a8f62', '#6b4de6'];
+const BUS_COLORS = ['var(--brand)', 'var(--ink)'];   // a second bus in ink: one brand colour only
 // Under the chosen bus: its route as a line, top to bottom in the direction you ride — where to get on, the stops on
 // the way, where to get off — with the stops before and after your ride folded away (a tap opens them). A trip with
 // a change shows both buses and where to change.

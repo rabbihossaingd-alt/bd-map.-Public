@@ -27,7 +27,6 @@ const ACCT_ERRORS = {
 const acctError = e => ACCT_ERRORS[e.message] || 'কাজটি করা যায়নি। ইন্টারনেট সংযোগ দেখে আবার চেষ্টা করুন।';
 
 // A person's picture, or their initial on a colour of their own. Used everywhere a person is shown.
-const AVATAR_HUES = [158, 200, 262, 330, 24, 48, 96, 222];
 function avatar(person, cls = '') {
   const a = el('span', 'avatar no-tr ' + cls);
   if (person && person.id) {
@@ -42,9 +41,9 @@ function avatar(person, cls = '') {
     img.src = `api/avatar/${person.id}?v=${person.pic}`;
     a.appendChild(img);
   } else {
+    // no photo: the first letter on a quiet circle (one colour for everyone, as the redesign keeps colour for photos)
     a.textContent = [...(person.name || '?').trim()][0] || '?';
-    const hue = AVATAR_HUES[(person.id || 0) % AVATAR_HUES.length];
-    a.style.background = `linear-gradient(135deg, hsl(${hue} 70% 46%), hsl(${(hue + 34) % 360} 76% 56%))`;
+    a.classList.add('initial');
   }
   return a;
 }
@@ -101,6 +100,7 @@ function syncAccount() {
 }
 function signedIn(reply) {
   ME = reply.user;
+  if (location.hash.startsWith('#/me') && typeof route === 'function') setTimeout(route, 0);   // the profile tab, opened before the login was known
   const seen = new Set(), merged = [];
   for (const r of [...loadRecent(), ...((reply.data && reply.data.recent) || [])]) {
     if (!r || !r.from || !r.to || typeof r.from.label !== 'string' || typeof r.to.label !== 'string') continue;

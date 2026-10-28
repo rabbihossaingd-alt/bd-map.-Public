@@ -110,7 +110,7 @@ async function drawProfile() {
   handle.textContent = u.username ? u.username : '';
   if (isVerified(u)) handle.appendChild(vbadge());
   bar.appendChild(handle);
-  if (mine) bar.append(iconBtn('plus', 'নতুন পোস্ট', openNewPost), iconBtn('cog', 'সেটিংস', () => go('settings')));
+  if (mine) bar.append(iconBtn('plus', 'নতুন পোস্ট', openNewPost), iconBtn('menu', 'মেনু', () => go('more')));
   else bar.prepend(iconBtn('back', 'ফিরে যান', () => history.back()));
 
   const card = el('div', 'card prof-card');
@@ -502,12 +502,12 @@ async function openSessions() {
   $('set-edit').addEventListener('click', () => (ME ? openProfile() : openLogin()));
   // Theme: dark unless the person chose otherwise. The choice is read before the page draws, so changing it reloads.
   let theme = 'dark';
-  try { theme = localStorage.getItem('bdmap.theme') || 'light'; } catch { /* storage unavailable */ }
+  try { theme = localStorage.getItem('bdmap.theme') || 'auto'; } catch { /* storage unavailable */ }
   for (const b of $('theme-pick').children) {
     b.classList.toggle('on', b.dataset.themeSet === theme);
     b.addEventListener('click', () => { try { localStorage.setItem('bdmap.theme', b.dataset.themeSet); } catch { /* storage unavailable */ } location.reload(); });
   }
-  document.querySelector('meta[name=theme-color]').content = document.documentElement.dataset.theme === 'dark' ? '#000000' : '#f5f5f7';
+  document.querySelector('meta[name=theme-color]').content = document.documentElement.dataset.theme === 'dark' ? '#000000' : '#ffffff';
   // Who may write first, and whether others see when you are online.
   const paintPrivacy = () => {
     const p = (ME && ME.prefs) || { active: true, dm: 'all' };
