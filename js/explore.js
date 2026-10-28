@@ -817,7 +817,8 @@ async function loadStories(row) {
   const seen = seenStories();
   row.replaceChildren();
   const add = el('button', 'face add');
-  add.append(avatar(ME || { id: 0, name: '+' }, 'lg'), svgEl('plus', 'badge'), el('span', null, 'আপনার স্টোরি'));
+  if (!ME) add.classList.add('empty');
+  add.append(ME ? avatar(ME, 'lg') : Object.assign(el('span', 'avatar lg'), { innerHTML: svg('user') }), svgEl('plus', 'badge'), el('span', null, 'আপনার স্টোরি'));
   add.addEventListener('click', addStory);
   row.appendChild(add);
   groups.forEach((g, i) => {
@@ -1271,6 +1272,25 @@ addEventListener('hashchange', () => { if (current !== 'explore') feedSeen.flush
   q.addEventListener('focus', () => { if (!page.classList.contains('searching')) openSearch(); });
   $('explore-cancel').addEventListener('click', closeSearch);
   q.addEventListener('keydown', e => { if (e.key === 'Escape') closeSearch(); });
+  // The pill under the open tab slides to it (the tab buttons light up as reels or a stream open and close)
+  {
+    const tabs = $('ex-tabs'), ind = el('i', 'ex-ind');
+    tabs.appendChild(ind);
+    const place = () => {
+      const on = tabs.querySelector('button.on') || tabs.querySelector('button');
+      if (!on || !on.offsetWidth) return;
+      ind.style.width = on.offsetWidth + 'px';
+      ind.style.transform = 'translateX(' + on.offsetLeft + 'px)';
+    };
+    new MutationObserver(place).observe(tabs, { subtree: true, attributes: true, attributeFilter: ['class'] });
+    addEventListener('resize', place);
+    if (document.fonts) document.fonts.ready.then(place);
+    const before = enter.explore;
+    enter.explore = () => { before(); requestAnimationFrame(place); };
+    requestAnimationFrame(place);
+  }
+  // the top bar's hairline only once the feed has scrolled under it
+  addEventListener('scroll', () => { if (current === 'explore') page.classList.toggle('scrolled', scrollY > 4); }, { passive: true });
   // Reels: every video, one screen at a time, scrolled up and down.
   for (const b of $('ex-tabs').children) b.addEventListener('click', () => {
     if (b.dataset.t === 'live') { if (typeof openLiveHub === 'function') openLiveHub(); return; }

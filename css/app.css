@@ -4627,3 +4627,31 @@ button.item:hover { border-color: var(--line); background: color-mix(in srgb, va
   #explore-feed { max-width: none; margin: 0; }                       /* edge to edge, as on Instagram */
   #explore-feed .fc-media { border-radius: 0; border-left: 0; border-right: 0; }
 }
+
+/* ---- Explore tabs: one capsule, a white pill slides to the open tab ---- */
+#page-explore .ex-tabs { position: relative; width: max-content; max-width: calc(100% - 24px); gap: 0; margin: var(--space-2) auto var(--space-4); padding: 4px; border: 0; border-radius: var(--r-full); background: var(--surface-2); }
+#page-explore .ex-tabs button { position: relative; z-index: 1; min-width: 84px; min-height: 36px; padding: var(--space-2) var(--space-5); justify-content: center; border-radius: var(--r-full);
+  font-size: var(--fs-sm); font-weight: 700; color: var(--muted); background: none; transition: color .25s var(--ease), transform .16s var(--ease); }
+#page-explore .ex-tabs button.on { color: var(--ink); background: none; }
+#page-explore .ex-tabs button.on::after { content: none; }
+#page-explore .ex-tabs button:active { transform: scale(.95); }
+.ex-ind { position: absolute; z-index: 0; top: 4px; bottom: 4px; left: 0; width: 0; border-radius: var(--r-full); background: var(--surface); box-shadow: 0 1px 2px rgb(var(--black-rgb) / 0.08), 0 4px 14px rgb(var(--black-rgb) / 0.08);
+  transition: transform .42s cubic-bezier(.3, 1.3, .5, 1), width .42s cubic-bezier(.3, 1.3, .5, 1); pointer-events: none; }
+:root[data-theme=dark] .ex-ind { background: color-mix(in srgb, var(--ink) 24%, var(--bg)); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .ex-ind { background: color-mix(in srgb, var(--ink) 24%, var(--bg)); } }
+/* the top bar's line shows only once the page has scrolled under it */
+@media (max-width: 760px) {
+  #page-explore .ex-top { box-shadow: none; transition: box-shadow .25s; }
+  #page-explore.scrolled .ex-top { box-shadow: 0 .5px 0 var(--line); }
+}
+
+/* ---- Your story: your photo with a + (or, signed out, a dashed ring) ---- */
+.face.add .avatar { opacity: 1; }
+.face.add.empty .avatar { background: none; color: var(--ink-2); box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--ink) 22%, transparent); }
+.face.add.empty .avatar svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.face .badge { width: 24px; height: 24px; top: 41px; right: 4px; box-shadow: 0 0 0 3px var(--bg); }
+.face .badge svg { width: 15px; height: 15px; stroke-width: 2.6; }
+.face span:not(.avatar) { margin-top: 2px; font-weight: 500; }
+.face:hover .avatar { transform: scale(1.04); }
+.face .avatar { transition: transform .25s var(--ease); }
+.faces .face { width: 80px; }
