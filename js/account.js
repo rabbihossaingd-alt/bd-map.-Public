@@ -163,12 +163,11 @@ function authShell(content, footer, step) {
     show.innerHTML = `
       <div class="as-copy"><b>${LANG === 'en' ? 'Bangladesh, in one app' : 'বাংলাদেশ, এক অ্যাপে'}</b>
         <span>${LANG === 'en' ? 'Routes and fares, reels and stories, messages and calls — with the people who travel it.' : 'রুট ও ভাড়া, রিল ও স্টোরি, মেসেজ ও কল — যাঁরা ঘোরেন তাঁদের সাথে।'}</span></div>
-      <div class="as-stage">
-        <div class="as-card as-map"><i class="pin"></i><i class="route"></i><em>${LANG === 'en' ? 'Dhaka → Sajek · ৳850' : 'ঢাকা → সাজেক · ৳৮৫০'}</em></div>
-        <div class="as-card as-reel"><span class="play"></span><em>♪ ${LANG === 'en' ? 'Dhaka Nights' : 'ঢাকার রাত'}</em></div>
-        <div class="as-card as-chat"><p>${LANG === 'en' ? 'Bus at 10 tonight?' : 'আজ রাত ১০টার বাস?'}</p><p class="me">${LANG === 'en' ? 'Booked 🎟️' : 'টিকিট কাটা শেষ 🎟️'}</p></div>
-        <div class="as-card as-badge"><i></i><em>${LANG === 'en' ? 'Verified' : 'ভেরিফায়েড'}</em></div>
-      </div>`;
+      <ul class="as-list">
+        <li><i class="mi c-teal">${svg('route')}</i><span><b>${LANG === 'en' ? 'Routes and fares' : 'রুট ও ভাড়া'}</b><em>${LANG === 'en' ? 'Which bus, what fare, how long' : 'কোন বাসে, কত ভাড়া, কতক্ষণ'}</em></span></li>
+        <li><i class="mi c-pink">${svg('play')}</i><span><b>${LANG === 'en' ? 'Reels and stories' : 'রিলস ও স্টোরি'}</b><em>${LANG === 'en' ? 'Videos from places people went' : 'ঘুরে আসা জায়গার ভিডিও'}</em></span></li>
+        <li><i class="mi c-blue">${svg('chat')}</i><span><b>${LANG === 'en' ? 'Messages and calls' : 'মেসেজ ও কল'}</b><em>${LANG === 'en' ? 'With friends, in one place' : 'বন্ধুদের সাথে, এক জায়গায়'}</em></span></li>
+      </ul>`;
     const main = el('div', 'auth-main');
     authBox.append(art, x, show, main);
     document.body.appendChild(authBox);
@@ -410,17 +409,99 @@ function finishSignIn(reply) {
 }
 
 // A chosen photo is cut to a centred square and scaled to 320 px before it is sent (about 20-40 KB).
-function squarePhoto(file) {
+
+// The photo in its frame, as on Instagram and Facebook: a round frame over the picture; drag to move it, pinch, the
+// mouse wheel or the slider to make it bigger; the picture always fills the frame. Gives the square under the frame
+// (480 px, JPEG), or null when cancelled.
+function cropPhoto(file) {
   return new Promise((resolve, reject) => {
-    const img = new Image(), url = URL.createObjectURL(file);
-    img.onload = () => {
-      const side = Math.min(img.naturalWidth, img.naturalHeight), c = el('canvas');
-      c.width = c.height = 320;
-      c.getContext('2d').drawImage(img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, 0, 0, 320, 320);
-      URL.revokeObjectURL(url);
-      resolve(c.toDataURL('image/jpeg', 0.86));
-    };
+    const url = URL.createObjectURL(file), img = new Image();
     img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('image')); };
+    img.onload = () => {
+      const W = img.naturalWidth, H = img.naturalHeight;
+      const box = el('div', 'crop');
+      box.setAttribute('role', 'dialog');
+      box.setAttribute('aria-label', 'ছবি ফ্রেমে বসান');
+      const head = el('div', 'crop-head');
+      const cancel = el('button', 'crop-cancel', 'বাতিল');
+      const save = el('button', 'crop-save', 'সেভ');
+      head.append(cancel, el('b', null, 'ছবি ফ্রেমে বসান'), save);
+      const stage = el('div', 'crop-stage');
+      stage.tabIndex = 0;
+      const pic = Object.assign(el('img'), { src: url, alt: '', draggable: false });
+      const ring = el('div', 'crop-ring');
+      ring.append(el('i', 'g1'), el('i', 'g2'), el('i', 'g3'), el('i', 'g4'));
+      stage.append(pic, ring);
+      const zoom = Object.assign(el('input', 'crop-zoom'), { type: 'range', min: '1', max: '4', step: '0.01', value: '1' });
+      zoom.setAttribute('aria-label', 'ছোট-বড় করুন');
+      const bar = el('div', 'crop-bar');
+      bar.append(Object.assign(el('i'), { innerHTML: svg('minus') }), zoom, Object.assign(el('i'), { innerHTML: svg('plus') }));
+      const hint = el('p', 'crop-hint', 'টেনে সরান · দুই আঙুলে বা স্লাইডারে ছোট-বড় করুন');
+      box.append(head, stage, bar, hint);
+      document.body.appendChild(box);
+      document.body.classList.add('crop-open');
+
+      let D = 0, base = 1, z = 1, x = 0, y = 0;
+      const clamp = () => {
+        const sc = base * z, mx = Math.max(0, (W * sc - D) / 2), my = Math.max(0, (H * sc - D) / 2);
+        x = Math.max(-mx, Math.min(mx, x)); y = Math.max(-my, Math.min(my, y));
+      };
+      const draw = () => { clamp(); pic.style.transform = `translate(-50%, -50%) translate(${x}px, ${y}px) scale(${base * z})`; };
+      const measure = () => {
+        D = ring.getBoundingClientRect().width;
+        base = Math.max(D / W, D / H);
+        Object.assign(pic.style, { width: W + 'px', height: H + 'px' });
+        draw();
+      };
+      const setZoom = (nz, cx = 0, cy = 0) => {
+        nz = Math.max(1, Math.min(4, nz));
+        // zoom about the point under the fingers, so it stays where it is
+        x = cx - (cx - x) * nz / z; y = cy - (cy - y) * nz / z;
+        z = nz; zoom.value = String(z); draw();
+      };
+      const pts = new Map();
+      let last = null, pinch = null;
+      const rel = e => { const r = stage.getBoundingClientRect(); return [e.clientX - r.left - r.width / 2, e.clientY - r.top - r.height / 2]; };
+      stage.addEventListener('pointerdown', e => { stage.setPointerCapture(e.pointerId); pts.set(e.pointerId, rel(e)); box.classList.add('moving'); last = rel(e);
+        if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), z }; } });
+      stage.addEventListener('pointermove', e => {
+        if (!pts.has(e.pointerId)) return;
+        const p = rel(e); pts.set(e.pointerId, p);
+        if (pts.size === 2 && pinch) {
+          const [a, b] = [...pts.values()];
+          setZoom(pinch.z * Math.hypot(a[0] - b[0], a[1] - b[1]) / (pinch.d || 1), (a[0] + b[0]) / 2, (a[1] + b[1]) / 2);
+        } else if (pts.size === 1 && last) { x += p[0] - last[0]; y += p[1] - last[1]; draw(); }
+        last = p;
+      });
+      const up = e => { pts.delete(e.pointerId); if (pts.size < 2) pinch = null; last = pts.size ? [...pts.values()][0] : null; if (!pts.size) box.classList.remove('moving'); };
+      stage.addEventListener('pointerup', up); stage.addEventListener('pointercancel', up);
+      stage.addEventListener('wheel', e => { e.preventDefault(); const [cx, cy] = rel(e); setZoom(z * Math.exp(-e.deltaY * 0.0015), cx, cy); }, { passive: false });
+      zoom.addEventListener('input', () => setZoom(Number(zoom.value)));
+      const done = out => {
+        removeEventListener('resize', measure); document.removeEventListener('keydown', keys, true);
+        box.remove(); document.body.classList.remove('crop-open'); URL.revokeObjectURL(url); resolve(out);
+      };
+      const keys = e => {
+        if (e.key === 'Escape') { e.preventDefault(); done(null); }
+        else if (e.key === 'Enter') { e.preventDefault(); save.click(); }
+        else if (e.key.startsWith('Arrow')) { e.preventDefault(); const d = e.shiftKey ? 30 : 8; if (e.key === 'ArrowLeft') x += d; if (e.key === 'ArrowRight') x -= d; if (e.key === 'ArrowUp') y += d; if (e.key === 'ArrowDown') y -= d; draw(); }
+        else if (e.key === '+' || e.key === '=') setZoom(z * 1.1); else if (e.key === '-') setZoom(z / 1.1);
+      };
+      document.addEventListener('keydown', keys, true);
+      cancel.addEventListener('click', () => done(null));
+      save.addEventListener('click', () => {
+        const sc = base * z, side = D / sc, cx = W / 2 - x / sc, cy = H / 2 - y / sc, OUT = 480;
+        const c = el('canvas'); c.width = c.height = OUT;
+        const g = c.getContext('2d');
+        g.imageSmoothingQuality = 'high';
+        g.drawImage(img, cx - side / 2, cy - side / 2, side, side, 0, 0, OUT, OUT);
+        let q = 0.88, data = c.toDataURL('image/jpeg', q);
+        while (data.length > 280_000 && q > 0.5) { q -= 0.1; data = c.toDataURL('image/jpeg', q); }   // the server takes up to 220 KB
+        done(data);
+      });
+      addEventListener('resize', measure);
+      requestAnimationFrame(() => { measure(); stage.focus({ preventScroll: true }); });
+    };
     img.src = url;
   });
 }
@@ -438,7 +519,9 @@ function openProfile(welcome) {
   file.addEventListener('change', async () => {
     if (!file.files[0]) return;
     pic.classList.add('busy');
-    try { ME = (await acctApi('avatar', { image: await squarePhoto(file.files[0]) })).user; drawPic(); renderAccount(); if (current === 'profile') drawProfile(); note.className = 'form-note'; note.textContent = 'ছবি বদলানো হয়েছে।'; }
+    const framed = await cropPhoto(file.files[0]).catch(() => null);
+    if (!framed) { pic.classList.remove('busy'); file.value = ''; return; }
+    try { ME = (await acctApi('avatar', { image: framed })).user; drawPic(); renderAccount(); if (current === 'profile') drawProfile(); note.className = 'form-note'; note.textContent = 'ছবি বদলানো হয়েছে।'; }
     catch (e) { fail(e); }
     pic.classList.remove('busy');
     file.value = '';

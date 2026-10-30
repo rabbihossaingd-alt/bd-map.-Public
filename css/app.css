@@ -4813,3 +4813,77 @@ body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 .go-row.on-dark .go-here { background: rgb(var(--white-rgb) / 0.95); color: var(--black); box-shadow: 0 4px 14px rgb(var(--black-rgb) / 0.3); }
 /* in an open post's bar */
 .go-row.in-post { flex: 1; margin: 0; }
+
+/* ================= Login, as Instagram's: the app's own white or black, one clean card, nothing glowing ================= */
+.auth { background: var(--bg); color: var(--ink); }
+:root[data-theme=light] .auth { background: var(--bg); color: var(--ink); }
+.auth-art { display: none; }
+.auth-x { color: var(--ink); }
+.auth-main { width: min(380px, 100%); gap: var(--space-3); }
+.auth-card, :root[data-theme=light] .auth-card { padding: var(--space-7) var(--space-6) var(--space-6); border-radius: 20px; background: var(--bg); border: 1px solid var(--line);
+  box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; color: var(--ink); }
+.auth-foot, :root[data-theme=light] .auth-foot { background: none; border: 0; padding: var(--space-2) var(--space-4); color: var(--muted); font-size: var(--fs-xs); line-height: 1.6; text-align: center; }
+.auth-foot a { color: var(--ink-2); }
+.auth-brand { margin-bottom: var(--space-5); gap: 10px; }
+.auth-brand b { font-family: var(--font-head); font-size: 28px; font-weight: 700; letter-spacing: -.03em; color: var(--ink); }
+.auth-logo { width: 40px; height: 40px; border-radius: 12px; background: var(--brand); box-shadow: none; }
+.auth-logo i { width: 13px; height: 13px; box-shadow: none; }
+.auth-steps i, :root[data-theme=light] .auth-steps i { background: var(--line); }
+.auth-steps i.done { background: var(--brand); } .auth-steps i.on { background: var(--ink); }
+.auth-form h2 { font-size: var(--fs-xl); font-weight: 700; color: var(--ink); }
+.auth-sub, :root[data-theme=light] .auth-sub { color: var(--muted); }
+.auth-field input, :root[data-theme=light] .auth-field input { height: 52px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); color: var(--ink); }
+.auth-field input:focus { border-color: var(--ink-2); box-shadow: none; background: var(--surface); }
+.auth-field > .lbl, :root[data-theme=light] .auth-field > .lbl { color: var(--muted); }
+.auth-field input:focus + .lbl, .auth-field input:not(:placeholder-shown) + .lbl { color: var(--muted); }
+.auth-field .fic { color: var(--muted); }
+.auth-field input:focus ~ .fic { color: var(--ink); }
+.auth-btn { height: 50px; border-radius: 12px; background: var(--brand); color: var(--white); box-shadow: none; font-weight: 700; }
+.auth-btn::after { display: none; }
+.auth-btn:hover { filter: brightness(1.06); }
+.auth-btn.ghost { background: none; color: var(--ink); border: 1px solid var(--line); }
+.auth-btn.ghost:hover { background: var(--surface); filter: none; }
+.auth-or, :root[data-theme=light] .auth-or { color: var(--muted); font-weight: 600; }
+.auth-or::before, .auth-or::after, :root[data-theme=light] .auth-or::before, :root[data-theme=light] .auth-or::after { background: var(--line); }
+.auth-link { color: var(--brand-text); }
+.auth-mail { border: 1.5px solid var(--line); background: var(--surface); color: var(--ink); animation: none; }
+.auth-sugg { background: var(--surface); color: var(--ink); border: 1px solid var(--line); }
+@media (max-width: 480px) {
+  .auth { place-items: start stretch; align-content: start; padding-top: calc(72px + env(safe-area-inset-top)); }
+  .auth-card, :root[data-theme=light] .auth-card { border: 0; padding: var(--space-4) var(--space-2) var(--space-4); }
+}
+/* a computer: what Manzeela is, on the left — a headline and three things it does */
+.as-copy b { font-family: var(--font-head); color: var(--ink); }
+.as-copy span { color: var(--muted); }
+.as-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-5); }
+.as-list li { display: flex; align-items: center; gap: var(--space-4); }
+.as-list .mi { position: relative; overflow: hidden; width: 48px; height: 48px; border-radius: 14px; font-size: 22px; color: var(--white); background: linear-gradient(165deg, var(--ta), var(--tb));
+  box-shadow: inset 0 1px 0 rgb(var(--white-rgb) / 0.35), 0 6px 14px -6px var(--tb); }
+.as-list .mi svg { width: 1em; height: 1em; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.as-list b { display: block; font-size: var(--fs-lg); font-weight: 700; color: var(--ink); }
+.as-list em { display: block; font-style: normal; font-size: var(--fs-sm); color: var(--muted); }
+.as-copy b, :root[data-theme=light] .as-copy b { background: none; -webkit-text-fill-color: currentColor; color: var(--ink); font-weight: 700; } .as-copy span { opacity: 1; }
+.auth-btn:not(.ghost) { color: var(--on-brand); }
+
+/* ---- the photo in its frame (profile picture): black, a round frame, drag and zoom ---- */
+body.crop-open { overflow: hidden; }
+.crop { position: fixed; inset: 0; z-index: 3600; display: grid; grid-template-rows: auto 1fr auto auto; background: var(--black); color: var(--white); animation: fade .2s var(--ease); }
+.crop-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); height: calc(56px + env(safe-area-inset-top)); padding: env(safe-area-inset-top) var(--space-2) 0; }
+.crop-head b { font-size: var(--fs-md); font-weight: 700; }
+.crop-cancel, .crop-save { min-width: 64px; height: 44px; padding: 0 var(--space-3); font-size: var(--fs-md); font-weight: 600; color: var(--white); }
+.crop-save { color: var(--brand-soft, #4ade80); font-weight: 700; }
+.crop-stage { position: relative; align-self: center; justify-self: center; width: min(100vw, 520px, calc(100dvh - 220px)); aspect-ratio: 1; overflow: hidden; touch-action: none; cursor: grab; outline: none; }
+.crop.moving .crop-stage { cursor: grabbing; }
+.crop-stage img { position: absolute; left: 50%; top: 50%; max-width: none; transform-origin: center; user-select: none; -webkit-user-select: none; pointer-events: none; }
+.crop-ring { position: absolute; inset: 16px; border-radius: 50%; box-shadow: 0 0 0 2000px rgb(var(--black-rgb) / 0.62); border: 1.5px solid rgb(var(--white-rgb) / 0.9); pointer-events: none; overflow: hidden; }
+.crop-ring i { position: absolute; background: rgb(var(--white-rgb) / 0.45); opacity: 0; transition: opacity .2s; }
+.crop.moving .crop-ring i { opacity: 1; }
+.crop-ring .g1, .crop-ring .g2 { top: 0; bottom: 0; width: 1px; } .crop-ring .g1 { left: 33.33%; } .crop-ring .g2 { left: 66.66%; }
+.crop-ring .g3, .crop-ring .g4 { left: 0; right: 0; height: 1px; } .crop-ring .g3 { top: 33.33%; } .crop-ring .g4 { top: 66.66%; }
+.crop-bar { display: flex; align-items: center; gap: var(--space-3); width: min(360px, calc(100% - 48px)); justify-self: center; padding: var(--space-4) 0 var(--space-2); }
+.crop-bar > i { display: grid; font-size: 20px; color: rgb(var(--white-rgb) / 0.8); }
+.crop-bar svg { width: 1em; height: 1em; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.crop-zoom { flex: 1; accent-color: var(--white); }
+.crop-hint { margin: 0; padding: 0 var(--space-4) calc(var(--space-5) + env(safe-area-inset-bottom)); text-align: center; font-size: var(--fs-sm); color: rgb(var(--white-rgb) / 0.6); }
+@media (prefers-reduced-motion: reduce) { .crop { animation: none; } }
+.crop-save { height: 36px; min-width: 72px; border-radius: var(--r-full); background: var(--brand); color: var(--white); font-weight: 700; margin-right: var(--space-2); }
