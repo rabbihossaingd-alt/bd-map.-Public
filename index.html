@@ -33,18 +33,27 @@
 </head>
 <body>
 
-<nav class="nav">
-  <a class="brand" href="#/"><span class="logo"></span>Manzeela</a>
+<nav class="nav" aria-label="প্রধান মেনু">
+  <a class="brand" href="#/"><span class="logo"></span><span class="brand-word">Manzeela</span></a>
   <div class="links">
     <a href="#/" data-nav="home"><i data-ic="home" class="ic-off"></i><i data-ic="homeFill" class="ic-on"></i><span>হোম</span></a>
     <a href="#/explore" data-nav="explore"><i data-ic="feed" class="ic-off"></i><i data-ic="feedFill" class="ic-on"></i><span>এক্সপ্লোর</span><em class="ndot" data-notify-dot hidden></em></a>
     <a href="#/trip" data-nav="trip"><i data-ic="route" class="ic-off"></i><i data-ic="routeFill" class="ic-on"></i><span>ম্যাপ</span></a>
-    <a href="#/train" data-nav="train" class="desk-only"><i data-ic="trainFront"></i><span>বাস · ট্রেন · লঞ্চ</span></a>
-    <a href="#/chat" data-nav="chat" class="phone-only"><i data-ic="chat" class="ic-off"></i><i data-ic="chatFill" class="ic-on"></i><span>মেসেজ</span><em class="nbadge" data-chat-badge hidden></em></a>
-    <a href="#/districts" data-nav="districts" class="desk-only"><i data-ic="compass"></i><span>রূপসী বাংলা</span></a>
-    <a href="#/nearby" data-nav="nearby" class="desk-only"><i data-ic="compass"></i><span>কাছাকাছি</span></a>
-    <a href="#/fares" data-nav="fares" class="desk-only"><i data-ic="tag"></i><span>ভাড়া</span></a>
-    <a href="#/me" data-nav="me" class="phone-only"><i data-ic="user" class="ic-off"></i><i data-ic="userFill" class="ic-on"></i><span>প্রোফাইল</span></a>
+    <a href="#/chat" data-nav="chat"><i data-ic="chat" class="ic-off"></i><i data-ic="chatFill" class="ic-on"></i><span>মেসেজ</span><em class="nbadge" data-chat-badge hidden></em></a>
+    <button type="button" class="nav-btn desk-only" id="nav-search"><i data-ic="search"></i><span>খুঁজুন</span></button>
+    <button type="button" class="nav-btn desk-only" id="nav-notify"><i data-ic="heart"></i><span>নোটিফিকেশন</span><em class="ndot" data-notify-dot hidden></em></button>
+    <button type="button" class="nav-btn desk-only" id="nav-create"><i data-ic="plusSquare"></i><span>নতুন পোস্ট</span></button>
+    <a href="#/me" data-nav="me"><i data-ic="user" class="ic-off"></i><i data-ic="userFill" class="ic-on"></i><span>প্রোফাইল</span></a>
+  </div>
+  <div class="nav-sub desk-only">
+    <span class="nav-sub-h">যাতায়াত</span>
+    <a href="#/train" data-nav="train"><i data-ic="trainFront"></i><span>বাস · ট্রেন · লঞ্চ</span></a>
+    <a href="#/fares" data-nav="fares"><i data-ic="tag"></i><span>ভাড়া</span></a>
+    <a href="#/nearby" data-nav="nearby"><i data-ic="locate"></i><span>কাছাকাছি</span></a>
+    <a href="#/districts" data-nav="districts"><i data-ic="compass"></i><span>রূপসী বাংলা</span></a>
+  </div>
+  <div class="nav-foot desk-only">
+    <a href="#/more" data-nav="more"><i data-ic="menu"></i><span>আরও</span></a>
   </div>
 </nav>
 <button class="lang-btn" title="Language / ভাষা"></button>
@@ -183,6 +192,7 @@
       <div class="ex-discover" id="explore-discover"></div>
       <div id="explore-feed"></div>
       <div id="explore-end"></div>
+      <aside class="ex-rail" id="ex-rail" aria-label="আপনার জন্য"></aside>
     </div>
   </section>
 

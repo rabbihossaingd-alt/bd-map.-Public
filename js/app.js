@@ -267,7 +267,7 @@ function route() {
   if (name === 'community' || name === 'buses') { try { localStorage.setItem('bdmap.fx', 'give'); } catch { /* storage off */ } history.replaceState(null, '', '#/fares'); name = 'fares'; }
   current = PAGES.includes(name) ? name : 'home';
   for (const p of PAGES) $('page-' + p).classList.toggle('on', p === current);
-  const tab = ['profile', 'more', 'settings', 'support', 'insights'].includes(current) && document.querySelector('[data-nav=me]') ? 'me' : current;
+  const tab = ['profile', 'settings', 'support', 'insights'].includes(current) || (current === 'more' && innerWidth <= 760) ? 'me' : current;
   for (const a of document.querySelectorAll('[data-nav]')) a.classList.toggle('on', a.dataset.nav === tab);
   document.body.style.overflow = current === 'trip' ? 'hidden' : '';
   document.body.dataset.page = current;

@@ -1515,5 +1515,52 @@ async function openNotifications() {
   list.replaceChildren(...rows);
 }
 $('explore-heart').addEventListener('click', openNotifications);
+$('nav-notify').addEventListener('click', openNotifications);
+$('nav-search').addEventListener('click', () => { if (current !== 'explore') go('explore'); setTimeout(() => { if (!$('page-explore').classList.contains('searching')) $('explore-find').click(); }, current === 'explore' ? 0 : 350); });
+$('nav-create').addEventListener('click', () => (ME ? openNewPost() : needLogin('পোস্ট দিতে লগইন করুন')));
+// Explore on a computer: beside the feed, your account, the people who share the most, and the small links
+async function paintExploreRail() {
+  const rail = $('ex-rail');
+  if (!rail || innerWidth < 1100) return;
+  const me = el('div', 'rail-me');
+  if (ME) {
+    const who = el('button', 'rail-who');
+    who.append(avatar(ME, 'lg'), Object.assign(el('span', 't'), { innerHTML: '' }));
+    who.lastChild.append(Object.assign(el('b', 'no-tr'), { textContent: ME.username ? ME.username : ME.name }), Object.assign(el('span', 'no-tr'), { textContent: ME.name }));
+    who.addEventListener('click', () => openProfilePage(ME.id));
+    const sw = el('button', 'rail-link', 'প্রোফাইল');
+    sw.addEventListener('click', () => openProfilePage(ME.id));
+    me.append(who, sw);
+  } else {
+    const t = el('div', 'rail-join');
+    const go = el('button', 'rail-cta', 'লগইন করুন');
+    go.addEventListener('click', () => openLogin());
+    t.append(el('b', null, 'বন্ধুদের ছবি আর ভিডিও দেখুন'), el('span', null, 'ফলো করুন, লাইক দিন, নিজের ঘোরাঘুরি শেয়ার করুন।'), go);
+    me.append(t);
+  }
+  const head = el('div', 'rail-head');
+  head.append(el('b', null, 'সবচেয়ে বেশি অবদান যাঁদের'));
+  const list = el('div', 'rail-people');
+  let top = [];
+  try { top = (await communityApi('top?n=12')).top.filter(p => !ME || p.id !== ME.id).slice(0, 5); } catch { /* the list stays empty */ }
+  for (const p of top) {
+    const row = el('button', 'rail-person');
+    const t = el('span', 't');
+    t.append(Object.assign(el('b', 'no-tr'), { textContent: p.name }), el('span', null, (LANG === 'en' ? p.points + ' points' : num(p.points || 0) + ' পয়েন্ট')));
+    row.append(avatar(p, 'sm'), t, el('em', null, 'দেখুন'));
+    row.addEventListener('click', () => openProfilePage(p.id));
+    list.appendChild(row);
+  }
+  const foot = el('div', 'rail-foot');
+  foot.innerHTML = '<a href="#/support">সাহায্য</a> · <a href="privacy.html">প্রাইভেসি</a> · <a href="terms.html">নিয়ম</a> · <a href="#/more">আরও</a><br>© ' + new Date().getFullYear() + ' Manzeela';
+  rail.replaceChildren(me, ...(top.length ? [head, list] : []), foot);
+}
+{
+  const before = enter.explore;
+  enter.explore = (...a) => { if (before) before(...a); paintExploreRail(); };
+  let w = innerWidth;
+  addEventListener('resize', () => { if ((w < 1100) !== (innerWidth < 1100) && current === 'explore') paintExploreRail(); w = innerWidth; });
+  if (current === 'explore') paintExploreRail();
+}
 refreshNotify();
 setInterval(() => { if (!document.hidden) refreshNotify(); }, 120_000);
