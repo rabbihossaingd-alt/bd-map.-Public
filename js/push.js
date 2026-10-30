@@ -58,6 +58,7 @@ async function paintPush() {
   const sw = $('set-push'), sub = $('set-push-sub');
   if (sw) {
     sw.setAttribute('aria-checked', String(st === 'on')); sw.classList.toggle('on', st === 'on'); sw.disabled = st === 'none' || st === 'install';
+    sub.hidden = st === 'on' || st === 'off';
     sub.textContent = {
       on: 'চালু — নতুন মেসেজ, মিসড কল, লাইক, মন্তব্য ও ফলো এলে জানাবে',
       off: 'বন্ধ — চালু করলে অ্যাপ বন্ধ থাকলেও নতুন মেসেজ এলে জানাবে',

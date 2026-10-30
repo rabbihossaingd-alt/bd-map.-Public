@@ -210,50 +210,57 @@
   <!-- Settings -->
   <section class="page" id="page-settings">
     <button class="pg-back phone-only" type="button" aria-label="ফিরে যান" title="ফিরে যান"><i data-ic="back"></i></button>
-    <div class="wrap hub">
+    <div class="wrap hub set">
       <div class="page-head"><h2>সেটিংস</h2></div>
-      <div class="label">আপনার অ্যাকাউন্ট</div>
-      <div class="card menu">
-        <button id="set-edit"><i class="mi soft" data-ic="user"></i><span><b>প্রোফাইল এডিট</b><em id="set-email"></em></span><i class="chev" data-ic="chev"></i></button>
-        <a href="#/insights" data-needs-login><i class="mi soft" data-ic="chart"></i><span><b>প্রফেশনাল ড্যাশবোর্ড</b><em>ভিউ, লাইক, ফলোয়ার — আপনার পোস্ট কেমন যাচ্ছে</em></span><i class="chev" data-ic="chev"></i></a>
-      </div>
-      <div class="label" data-needs-login>পাসওয়ার্ড ও নিরাপত্তা</div>
+      <button class="card set-me" id="set-edit" type="button"><span class="set-me-pic" id="set-me-pic"></span><span class="t"><b id="set-me-name">লগইন করুন</b><em id="set-email"></em></span><i class="chev" data-ic="chev"></i></button>
+
+      <div class="label" data-needs-login>আপনার অ্যাকাউন্ট</div>
       <div class="card menu" data-needs-login>
-        <button id="set-2fa"><i class="mi soft" data-ic="shield"></i><span><b>টু-স্টেপ ভেরিফিকেশন</b><em id="set-2fa-sub">বন্ধ</em></span><i class="chev" data-ic="chev"></i></button>
-        <button id="set-sessions"><i class="mi soft" data-ic="phone"></i><span><b>লগইন অ্যাক্টিভিটি</b><em>কোন কোন ডিভাইসে লগইন আছে, দূর থেকে লগআউট</em></span><i class="chev" data-ic="chev"></i></button>
+        <a href="#/insights"><i class="mi soft" data-ic="chart"></i><span><b>প্রফেশনাল ড্যাশবোর্ড</b></span><i class="chev" data-ic="chev"></i></a>
+        <button id="set-verify" type="button"><i class="mi soft" data-ic="verified"></i><span><b>ভেরিফায়েড ব্যাজ</b></span><em class="val" id="set-verify-sub"></em><i class="chev" data-ic="chev"></i></button>
       </div>
-      <div class="label" data-needs-login>কে কীভাবে আপনার সাথে যোগাযোগ করবে</div>
+
+      <div class="label" data-needs-login>নিরাপত্তা</div>
       <div class="card menu" data-needs-login>
-        <div class="row"><i class="mi soft" data-ic="chat"></i><span><b>মেসেজ রিকোয়েস্ট</b><em>অপরিচিত কেউ প্রথম মেসেজ পাঠাতে পারবে কি না</em></span>
-          <span class="theme-pick" id="dm-pick"><button data-dm="all">সবাই</button><button data-dm="following">যাঁদের ফলো করি</button></span></div>
-        <div class="row"><i class="mi soft" data-ic="eye"></i><span><b>অ্যাক্টিভিটি স্ট্যাটাস</b><em>বন্ধ করলে আপনি কখন অনলাইন তা কেউ দেখবে না, আপনিও অন্যদেরটা দেখবেন না</em></span>
+        <button id="set-2fa" type="button"><i class="mi soft" data-ic="shield"></i><span><b>টু-স্টেপ ভেরিফিকেশন</b></span><em class="val" id="set-2fa-sub">বন্ধ</em><i class="chev" data-ic="chev"></i></button>
+        <button id="set-sessions" type="button"><i class="mi soft" data-ic="phone"></i><span><b>লগইন অ্যাক্টিভিটি</b></span><i class="chev" data-ic="chev"></i></button>
+      </div>
+
+      <div class="label" data-needs-login>প্রাইভেসি</div>
+      <div class="card menu" data-needs-login>
+        <div class="row wrap-row"><i class="mi soft" data-ic="chat"></i><span><b>কে মেসেজ রিকোয়েস্ট পাঠাতে পারবেন</b></span>
+          <span class="theme-pick" id="dm-pick"><button data-dm="all" type="button">সবাই</button><button data-dm="following" type="button">যাঁদের ফলো করি</button></span></div>
+        <div class="row"><i class="mi soft" data-ic="eye"></i><span><b>অ্যাক্টিভিটি স্ট্যাটাস দেখান</b></span>
           <button class="switch" id="set-active" role="switch" aria-checked="true" aria-label="অ্যাক্টিভিটি স্ট্যাটাস"><i></i></button></div>
-        <button id="set-blocked"><i class="mi soft" data-ic="shield"></i><span><b>ব্লক করা মানুষ</b><em>যাঁদের মেসেজ ও কল বন্ধ করেছেন</em></span><i class="chev" data-ic="chev"></i></button>
+        <button id="set-blocked" type="button"><i class="mi soft" data-ic="block"></i><span><b>ব্লক করা মানুষ</b></span><i class="chev" data-ic="chev"></i></button>
       </div>
+
       <div class="label" data-needs-login>নোটিফিকেশন</div>
       <div class="card menu" data-needs-login>
-        <div class="row"><i class="mi soft" data-ic="bell"></i><span><b>পুশ নোটিফিকেশন</b><em id="set-push-sub">বন্ধ</em></span>
+        <div class="row"><i class="mi soft" data-ic="bell"></i><span><b>পুশ নোটিফিকেশন</b><em class="set-hint" id="set-push-sub" hidden></em></span>
           <button class="switch" id="set-push" role="switch" aria-checked="false" aria-label="পুশ নোটিফিকেশন"><i></i></button></div>
       </div>
-      <div class="label">যা দেখেন</div>
+
+      <div class="label">অ্যাপ</div>
       <div class="card menu">
-        <div class="row"><i class="mi soft" data-ic="globe"></i><span><b>ভাষা</b><em>বাংলা · English</em></span><button class="lang-btn in-page"></button></div>
-        <div class="row"><i class="mi soft" data-ic="moon2"></i><span><b>থিম</b><em>অ্যাপের রং</em></span>
-          <span class="theme-pick" id="theme-pick"><button data-theme-set="dark">ডার্ক</button><button data-theme-set="light">লাইট</button><button data-theme-set="auto">ফোনের মতো</button></span></div>
+        <div class="row"><i class="mi soft" data-ic="globe"></i><span><b>ভাষা</b></span><button class="lang-btn in-page"></button></div>
+        <div class="row wrap-row"><i class="mi soft" data-ic="moon2"></i><span><b>থিম</b></span>
+          <span class="theme-pick" id="theme-pick"><button data-theme-set="light" type="button">লাইট</button><button data-theme-set="dark" type="button">ডার্ক</button><button data-theme-set="auto" type="button">ফোনের মতো</button></span></div>
       </div>
-      <div class="label">সহায়তা ও তথ্য</div>
+
+      <div class="label">সহায়তা</div>
       <div class="card menu">
-        <a href="#/support"><i class="mi soft" data-ic="help"></i><span><b>সাহায্য ও সাপোর্ট</b><em>প্রশ্নের উত্তর, সমস্যা জানান</em></span><em class="nbadge inline" data-support-badge hidden></em><i class="chev" data-ic="chev"></i></a>
-        <button id="set-verify" data-needs-login><i class="mi soft" data-ic="verified"></i><span><b>ভেরিফায়েড ব্যাজ</b><em id="set-verify-sub">নামের পাশে নীল ব্যাজ — কীভাবে পাবেন</em></span><i class="chev" data-ic="chev"></i></button>
-        <a href="privacy.html" target="_blank" rel="noopener"><i class="mi soft" data-ic="shield"></i><span><b>প্রাইভেসি পলিসি</b><em>কোন তথ্য রাখা হয়, কার কাছে যায়, কীভাবে মুছবেন</em></span><i class="chev" data-ic="chev"></i></a>
-        <a href="terms.html" target="_blank" rel="noopener"><i class="mi soft" data-ic="file"></i><span><b>ব্যবহারের শর্তাবলি</b><em>অ্যাপের নিয়ম, ভিডিওর সীমা</em></span><i class="chev" data-ic="chev"></i></a>
-        <a href="admin.html" data-admin-link hidden><i class="mi soft" data-ic="shield"></i><span><b>অ্যাডমিন প্যানেল</b><em>ব্যবহারকারী, সাপোর্ট, রিপোর্ট</em></span><i class="chev" data-ic="chev"></i></a>
+        <a href="#/support"><i class="mi soft" data-ic="help"></i><span><b>সাহায্য ও সাপোর্ট</b></span><em class="nbadge inline" data-support-badge hidden></em><i class="chev" data-ic="chev"></i></a>
+        <a href="privacy.html" target="_blank" rel="noopener"><i class="mi soft" data-ic="lock"></i><span><b>প্রাইভেসি পলিসি</b></span><i class="chev" data-ic="chev"></i></a>
+        <a href="terms.html" target="_blank" rel="noopener"><i class="mi soft" data-ic="file"></i><span><b>ব্যবহারের শর্তাবলি</b></span><i class="chev" data-ic="chev"></i></a>
+        <a href="admin.html" data-admin-link hidden><i class="mi soft" data-ic="shield"></i><span><b>অ্যাডমিন প্যানেল</b></span><i class="chev" data-ic="chev"></i></a>
       </div>
-      <div class="label" data-needs-login>অ্যাকাউন্ট থেকে বের হওয়া</div>
-      <div class="card menu" data-needs-login>
-        <button id="set-logout"><i class="mi soft" data-ic="logout"></i><span><b>লগআউট</b></span></button>
-        <button id="set-delete" class="bad"><i class="mi soft bad" data-ic="trash"></i><span><b>অ্যাকাউন্ট মুছে ফেলুন</b><em>সব তথ্য চিরতরে মুছে যাবে</em></span></button>
+
+      <div class="card menu set-out" data-needs-login>
+        <button id="set-logout" type="button"><span><b>লগআউট</b></span></button>
+        <button id="set-delete" class="bad" type="button"><span><b>অ্যাকাউন্ট মুছে ফেলুন</b></span></button>
       </div>
+      <p class="set-foot">Manzeela · বাংলাদেশের যাতায়াত, এক জায়গায়</p>
     </div>
   </section>
 

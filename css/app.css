@@ -4972,3 +4972,49 @@ body.crop-open { overflow: hidden; }
   #page-explore .ex-top { display: none; }
   #page-explore.searching .ex-searchbar { margin-top: var(--space-2); }
 }
+
+/* ================= Settings, as Instagram's: one line per setting, plain icons, the value on the right ================= */
+#page-settings .hub.set { max-width: 600px; padding-bottom: var(--space-7); }
+#page-settings .page-head h2 { font-family: var(--font-head); font-size: clamp(30px, 6vw, 40px); font-weight: 700; letter-spacing: -.02em; margin-bottom: var(--space-4); }
+#page-settings .set-me { display: flex; align-items: center; gap: var(--space-3); width: 100%; padding: var(--space-4); border-radius: 18px; background: var(--surface); border: 0; box-shadow: none; text-align: left; }
+#page-settings .set-me:active { transform: scale(.985); }
+#page-settings .set-me-pic .avatar { width: 56px; height: 56px; }
+#page-settings .set-me-guest { width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center; background: var(--brand); color: var(--white); font-size: 24px; }
+#page-settings .set-me-guest svg { width: 1em; height: 1em; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+#page-settings .set-me .t { flex: 1; min-width: 0; display: grid; gap: 2px; }
+#page-settings .set-me b { font-size: var(--fs-lg); font-weight: 700; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#page-settings .set-me em { font-style: normal; font-size: var(--fs-sm); color: var(--muted); }
+#page-settings .set-me .chev { opacity: .45; }
+#page-settings .hub .label { margin: var(--space-6) var(--space-4) var(--space-2); font-size: var(--fs-xs); font-weight: 600; letter-spacing: .03em; color: var(--muted); }
+#page-settings .menu { padding: 0; border-radius: 18px; background: var(--surface); border: 0; box-shadow: none; overflow: hidden; }
+#page-settings .menu > a, #page-settings .menu > button, #page-settings .menu > .row { position: relative; display: flex; align-items: center; gap: var(--space-3); width: 100%; min-height: 54px;
+  padding: var(--space-2) var(--space-4); border-radius: 0; background: none; color: var(--ink); text-align: left; }
+#page-settings .menu > * + *::before { content: ''; position: absolute; top: 0; left: 52px; right: 0; height: 1px; background: color-mix(in srgb, var(--ink) 8%, transparent); }
+#page-settings .menu > a:active, #page-settings .menu > button:active { background: color-mix(in srgb, var(--ink) 6%, transparent); transform: none; }
+@media (hover: hover) { #page-settings .menu > a:hover, #page-settings .menu > button:hover { background: color-mix(in srgb, var(--ink) 4%, transparent); } }
+#page-settings .menu .mi.soft { width: 24px; height: 24px; border-radius: 0; background: none; box-shadow: none; color: var(--ink); font-size: 22px; flex: none; }
+#page-settings .menu .mi.soft svg { stroke-width: 1.8; }
+#page-settings .menu > * > span:not(.theme-pick) { flex: 1; min-width: 0; display: grid; }
+#page-settings .menu b { font-size: var(--fs-md); font-weight: 500; letter-spacing: 0; }
+#page-settings .menu .val { flex: none; font-style: normal; font-size: var(--fs-sm); color: var(--muted); }
+#page-settings .menu .val:empty { display: none; }
+#page-settings .menu .chev { flex: none; opacity: .4; font-size: var(--fs-md); }
+#page-settings .menu .set-hint { font-style: normal; font-size: var(--fs-xs); line-height: 1.45; color: var(--warning-text); margin-top: 2px; }
+#page-settings .menu .set-hint[hidden] { display: none; }
+/* a choice (who may message, the theme): the options on the right, or under the name on a narrow phone */
+#page-settings .menu > .wrap-row { flex-wrap: wrap; row-gap: var(--space-2); padding-top: var(--space-3); padding-bottom: var(--space-3); }
+#page-settings .theme-pick { display: inline-flex; gap: 0; padding: 3px; border-radius: var(--r-full); background: var(--bg); border: 1px solid var(--line); }
+#page-settings .theme-pick button { height: 30px; padding: 0 var(--space-3); border-radius: var(--r-full); font-size: var(--fs-sm); font-weight: 600; color: var(--muted); background: none; box-shadow: none; }
+#page-settings .theme-pick button.on { background: var(--ink); color: var(--bg); }
+@media (max-width: 480px) { #page-settings .menu > .wrap-row .theme-pick { margin-left: 36px; } }
+#page-settings .menu .lang-btn.in-page { height: 32px; padding: 0 var(--space-3); border-radius: var(--r-full); background: var(--bg); border: 1px solid var(--line); box-shadow: none; font-size: var(--fs-sm); font-weight: 600; }
+/* leaving: two red lines, as Instagram's "Log out" */
+#page-settings .set-out { margin-top: var(--space-6); }
+#page-settings .set-out > button { justify-content: center; text-align: center; }
+#page-settings .set-out > button span { flex: none !important; }
+#page-settings .set-out > * + *::before { left: 0; }
+#page-settings .set-out b { color: var(--danger-text); font-weight: 600; }
+#page-settings .set-foot { margin: var(--space-6) 0 0; text-align: center; font-size: var(--fs-xs); color: var(--muted); }
+#page-settings .menu .theme-pick { flex: none; width: auto; margin-left: auto; justify-content: flex-start; }
+@media (max-width: 480px) { #page-settings .menu > .wrap-row .theme-pick { margin-left: 36px; margin-right: auto; } }
+@media (max-width: 480px) { #page-settings .menu > .wrap-row > span:not(.theme-pick) { flex: 1 1 calc(100% - 48px); } }

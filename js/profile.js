@@ -514,8 +514,8 @@ async function openSessions() {
     for (const b of $('dm-pick').children) b.classList.toggle('on', b.dataset.dm === p.dm);
     $('set-active').setAttribute('aria-checked', String(p.active));
     $('set-active').classList.toggle('on', p.active);
-    $('set-verify-sub').textContent = ME && ME.verified ? 'আপনার অ্যাকাউন্ট ভেরিফায়েড' : 'নামের পাশে নীল ব্যাজ — কীভাবে পাবেন';
-    $('set-2fa-sub').textContent = ME && ME.twofa ? 'চালু আছে' : 'বন্ধ — চালু করলে অ্যাকাউন্ট আরও নিরাপদ';
+    $('set-verify-sub').textContent = ME && ME.verified ? 'ভেরিফায়েড' : '';
+    $('set-2fa-sub').textContent = ME && ME.twofa ? 'চালু' : 'বন্ধ';
     $('set-2fa-sub').classList.toggle('on', !!(ME && ME.twofa));
   };
   const savePrivacy = async change => {
@@ -537,7 +537,10 @@ async function openSessions() {
   enter.insights = drawInsights;
   enter.settings = () => {
     for (const e of document.querySelectorAll('[data-needs-login]')) e.hidden = !ME;
-    $('set-email').textContent = ME ? ME.email : 'লগইন করা নেই';
+    $('set-me-pic').replaceChildren(ME ? avatar(ME, 'lg') : Object.assign(el('i', 'set-me-guest'), { innerHTML: svg('user') }));
+    $('set-me-name').textContent = ME ? ME.name : 'লগইন করুন';
+    $('set-me-name').classList.toggle('no-tr', !!ME);
+    $('set-email').textContent = ME ? '@' + (ME.username || '') : 'প্রোফাইল, মেসেজ ও পোস্ট';
     $('set-email').classList.toggle('no-tr', !!ME);
     paintPrivacy();
   };
