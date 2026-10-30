@@ -695,8 +695,9 @@
 
 <div class="chat-toast" id="chat-toast"></div>
 <div class="call" id="call" hidden>
-  <video id="call-remote" autoplay playsinline></video>
-  <video id="call-local" autoplay playsinline muted></video>
+  <video id="call-remote" class="big" autoplay playsinline></video>
+  <video id="call-local" class="tile" autoplay playsinline muted></video>
+  <div class="call-scrim" aria-hidden="true"></div>
   <div class="call-info">
     <div class="call-avatar"><i></i><i></i><i></i><span id="call-avatar"></span></div>
     <b class="no-tr" id="call-name"></b>
@@ -706,6 +707,7 @@
     <button class="call-btn" id="call-mic" title="মাইক্রোফোন" aria-label="মাইক্রোফোন"><i data-ic="mic"></i></button>
     <button class="call-btn" id="call-cam" title="ক্যামেরা" aria-label="ক্যামেরা"><i data-ic="video"></i></button>
     <button class="call-btn" id="call-spk" title="লাউডস্পিকার" aria-label="লাউডস্পিকার"><i data-ic="sound"></i></button>
+    <button class="call-btn" id="call-share" title="স্ক্রিন শেয়ার" aria-label="স্ক্রিন শেয়ার" hidden><i data-ic="screenShare"></i></button>
     <button class="call-btn accept" id="call-accept" title="কল ধরুন" aria-label="কল ধরুন"><i data-ic="phone"></i></button>
     <button class="call-btn hang" id="call-hang" title="কল কাটুন" aria-label="কল কাটুন"><i data-ic="phone"></i></button>
   </div>

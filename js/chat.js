@@ -1160,6 +1160,52 @@ function showCall(status) {
   $('call-mic').hidden = $('call-cam').hidden = $('call-spk').hidden = call.state === 'ringing';
   $('call-spk').classList.toggle('on', !!call.loud);
   if (!call.video) $('call-cam').hidden = true;
+  // screen share: a video call, live, where the browser can (computers and Android; not iPhone)
+  $('call-share').hidden = !(call.video && call.state === 'live' && navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia);
+  $('call-share').classList.toggle('on', !!call.screen);
+  if (call.state === 'live' && call.video) wakeCallControls();
+}
+// ---- the two pictures: tap the small one to swap them (as Messenger), drag it to any corner ----
+function callTiles(swap) {
+  const box = $('call'), remote = $('call-remote'), local = $('call-local');
+  if (typeof swap === 'boolean') box.classList.toggle('swap', swap);
+  const big = box.classList.contains('swap') ? local : remote, tile = big === remote ? local : remote;
+  big.classList.add('big'); big.classList.remove('tile');
+  tile.classList.add('tile'); tile.classList.remove('big');
+}
+// in a live video call the controls step away after a few seconds; a tap on the picture brings them back
+let callCalm = 0;
+function wakeCallControls() {
+  const box = $('call');
+  box.classList.remove('calm');
+  clearTimeout(callCalm);
+  callCalm = setTimeout(() => { if (call.state === 'live' && call.video && !box.hidden) box.classList.add('calm'); }, 4500);
+}
+// ---- screen share: the camera's picture is replaced by the screen's for the other person, and back ----
+async function toggleScreenShare() {
+  if (!call.pc || !call.video || call.state !== 'live') return;
+  if (call.screen) { stopScreenShare(); return; }
+  let s;
+  try { s = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: { ideal: 15, max: 30 } }, audio: false }); } catch { return; }
+  const track = s.getVideoTracks()[0], sender = call.pc.getSenders().find(x => x.track && x.track.kind === 'video');
+  if (!track || !sender) { for (const t of s.getTracks()) t.stop(); return; }
+  try { await sender.replaceTrack(track); } catch { for (const t of s.getTracks()) t.stop(); chatToast(ME, tx('স্ক্রিন শেয়ার করা গেল না।', 'Could not share the screen.')); return; }
+  Object.assign(call, { screen: s, screenSender: sender, camTrack: call.media && call.media.getVideoTracks()[0] });
+  track.onended = stopScreenShare;              // the browser's own "Stop sharing" ends it too
+  $('call-local').srcObject = s;
+  $('call').classList.add('sharing');
+  $('call-share').classList.add('on');
+  signal({ type: 'screen', on: true }).catch(() => {});
+}
+function stopScreenShare() {
+  if (!call.screen) return;
+  for (const t of call.screen.getTracks()) { t.onended = null; t.stop(); }
+  if (call.screenSender && call.camTrack && call.pc) call.screenSender.replaceTrack(call.camTrack).catch(() => {});
+  Object.assign(call, { screen: null, screenSender: null });
+  if (call.media) $('call-local').srcObject = call.media;
+  $('call').classList.remove('sharing');
+  $('call-share').classList.remove('on');
+  if (call.peer && call.state === 'live') signal({ type: 'screen', on: false }).catch(() => {});
 }
 
 // What each side's network offered (host = same Wi-Fi, srflx = through the router, relay = through TURN) —
@@ -1298,6 +1344,8 @@ async function acceptCall() {
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
     await signal({ type: 'answer', sdp: answer.sdp });
+    // on a fast line the call may already be live by now: then it stays live
+    if (call.state === 'live') return;
     call.state = 'connecting';
     if (typeof ringForCall === 'function') ringForCall('connecting');
     showCall('সংযোগ হচ্ছে…');
@@ -1340,6 +1388,9 @@ async function onSignal(from, data, tries = 0) {
     if (call.diag) call.diag.theirs.add(candType(data.candidate));
     if (call.pc && call.pc.remoteDescription) call.pc.addIceCandidate(data.candidate).catch(() => {});
     else call.ice.push(data.candidate);
+  } else if (data.type === 'screen') {
+    $('call').classList.toggle('peer-screen', !!data.on);
+    if (data.on) callTiles(false);              // their screen big, so it can be read
   } else if (data.type === 'decline') { logCall('declined'); endCall('কলটি ধরা হয়নি।', true); }
   else if (data.type === 'busy') { logCall('missed'); endCall(`${f.name} অন্য কলে আছেন।`, true); }
   else if (data.type === 'end') { if (call.state === 'live') logCall('ended'); endCall(call.state === 'live' ? 'কল শেষ।' : '', call.state === 'live'); }
@@ -1358,6 +1409,10 @@ function stopMedia() {
 }
 function endCall(message, linger) {
   try { if (navigator.audioSession) navigator.audioSession.type = 'auto'; } catch { /* not this browser */ }
+  stopScreenShare();
+  clearTimeout(callCalm);
+  $('call').classList.remove('swap', 'calm', 'peer-screen', 'sharing');
+  callTiles();
   clearTimeout(call.ring);
   clearInterval(call.clock);
   if (call.pc) { call.pc.onconnectionstatechange = null; call.pc.close(); }
@@ -1451,6 +1506,44 @@ function hangUp() {
     if (track) { track.enabled = !track.enabled; e.currentTarget.classList.toggle('off', !track.enabled); }
   });
   $('call-spk').addEventListener('click', () => { call.loud = !call.loud; applyCallSound(); });
+  $('call-share').addEventListener('click', toggleScreenShare);
+  // the small picture: a tap swaps it with the big one, a drag takes it to the nearest corner
+  {
+    const box = $('call');
+    let drag = null;
+    for (const v of [$('call-remote'), $('call-local')]) {
+      v.addEventListener('pointerdown', e => {
+        if (!v.classList.contains('tile')) return;
+        if (!(call.state === 'live' && call.video)) return;
+        e.preventDefault(); v.setPointerCapture(e.pointerId);
+        drag = { v, x: e.clientX, y: e.clientY, moved: false };
+      });
+      v.addEventListener('pointermove', e => {
+        if (!drag || drag.v !== v) return;
+        const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+        if (Math.abs(dx) + Math.abs(dy) > 8) drag.moved = true;
+        if (drag.moved) { v.classList.add('dragging'); v.style.translate = `${dx}px ${dy}px`; }
+      });
+      const up = e => {
+        if (!drag || drag.v !== v) return;
+        const moved = drag.moved;
+        v.classList.remove('dragging'); v.style.translate = '';
+        if (moved) {
+          const r = box.getBoundingClientRect();
+          box.dataset.corner = (e.clientY - r.top < r.height / 2 ? 't' : 'b') + (e.clientX - r.left < r.width / 2 ? 'l' : 'r');
+        } else callTiles(!box.classList.contains('swap'));
+        drag = null;
+        wakeCallControls();
+      };
+      v.addEventListener('pointerup', up); v.addEventListener('pointercancel', up);
+      // a tap on the big picture shows or hides the controls
+      v.addEventListener('click', () => {
+        if (!v.classList.contains('big') || !(call.state === 'live' && call.video)) return;
+        if (box.classList.contains('calm')) wakeCallControls(); else { clearTimeout(callCalm); box.classList.add('calm'); }
+      });
+    }
+    box.addEventListener('pointermove', e => { if (e.pointerType === 'mouse' && call.state === 'live' && call.video) wakeCallControls(); });
+  }
   $('call-cam').addEventListener('click', e => {
     const track = call.media && call.media.getVideoTracks()[0];
     if (track) { track.enabled = !track.enabled; e.currentTarget.classList.toggle('off', !track.enabled); }

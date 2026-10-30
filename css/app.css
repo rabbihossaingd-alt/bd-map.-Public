@@ -5018,3 +5018,66 @@ body.crop-open { overflow: hidden; }
 #page-settings .menu .theme-pick { flex: none; width: auto; margin-left: auto; justify-content: flex-start; }
 @media (max-width: 480px) { #page-settings .menu > .wrap-row .theme-pick { margin-left: 36px; margin-right: auto; } }
 @media (max-width: 480px) { #page-settings .menu > .wrap-row > span:not(.theme-pick) { flex: 1 1 calc(100% - 48px); } }
+
+/* ================= Calls, as WhatsApp's and Messenger's: dark and quiet, the picture first, glass controls ================= */
+.call { background: radial-gradient(130% 70% at 50% 18%, #1d2624 0%, #0b0f0e 55%, #050707 100%); }
+.call.video[data-state=live] { background: var(--black); }
+.call-info b { font-family: var(--font-head); font-size: 30px; font-weight: 700; margin-top: var(--space-6); }
+.call-info > span { font-size: var(--fs-md); opacity: .72; letter-spacing: .02em; }
+.call-avatar .avatar.xl { width: 128px; height: 128px; font-size: 48px; box-shadow: 0 20px 60px rgb(var(--black-rgb) / 0.5); }
+/* the two pictures: one fills the screen, the other is a small tile in a corner; they swap places smoothly */
+.call { --tw: clamp(96px, 26vw, 168px); --th: calc(var(--tw) * 4 / 3); --top: calc(env(safe-area-inset-top) + 76px); --bot: calc(env(safe-area-inset-bottom) + 132px); }
+#call-remote, #call-local { position: absolute; inset: auto; transform: none; object-fit: cover; background: #111;
+  transition: top .38s cubic-bezier(.3, 1.1, .4, 1), left .38s cubic-bezier(.3, 1.1, .4, 1), width .38s cubic-bezier(.3, 1.1, .4, 1), height .38s cubic-bezier(.3, 1.1, .4, 1),
+    border-radius .38s, opacity .5s, box-shadow .3s; }
+#call-local { transform: scaleX(-1); }
+.call.sharing #call-local { transform: none; object-fit: contain; }
+.call.peer-screen #call-remote { object-fit: contain; background: var(--black); }
+#call-remote.big, #call-local.big { top: 0; left: 0; width: 100%; height: 100%; border-radius: 0; z-index: 0; border: 0; box-shadow: none; cursor: default; }
+#call-remote.tile, #call-local.tile { z-index: 2; width: var(--tw); height: var(--th); border-radius: 18px; cursor: pointer; touch-action: none;
+  border: 1px solid rgb(var(--white-rgb) / 0.18); box-shadow: 0 12px 34px rgb(var(--black-rgb) / 0.55); top: var(--top); left: calc(100% - var(--tw) - 14px); }
+.call[data-corner=tl] .tile { top: var(--top); left: 14px; }
+.call[data-corner=bl] .tile { top: calc(100% - var(--th) - var(--bot)); left: 14px; }
+.call[data-corner=br] .tile { top: calc(100% - var(--th) - var(--bot)); left: calc(100% - var(--tw) - 14px); }
+#call-remote.tile.dragging, #call-local.tile.dragging { transition: none; box-shadow: 0 18px 44px rgb(var(--black-rgb) / 0.65); }
+/* before the call is live, the picture of the other person is not there yet */
+.call:not(.video) #call-remote, .call:not(.video) #call-local { opacity: 0; pointer-events: none; }
+.call.video:not([data-state=live]) #call-remote { opacity: 0; }
+.call.video[data-state=live] #call-remote { opacity: 1; }
+.call.video:not([data-state=live]) #call-local.tile { top: 0; left: 0; width: 100%; height: 100%; border-radius: 0; border: 0; opacity: .55; }
+/* the name and the time over the picture, the controls at the foot, each on a soft shade */
+.call-scrim { position: absolute; inset: 0; z-index: 1; pointer-events: none; opacity: 0; transition: opacity .3s;
+  background: linear-gradient(180deg, rgb(var(--black-rgb) / 0.55) 0%, transparent 22%, transparent 68%, rgb(var(--black-rgb) / 0.65) 100%); }
+.call.video[data-state=live] .call-scrim { opacity: 1; }
+.call.video[data-state=live] .call-info { position: absolute; top: calc(env(safe-area-inset-top) + 14px); left: 18px; right: 18px; z-index: 3; padding: 0; transform: none;
+  justify-items: start; text-align: left; gap: 0; transition: opacity .3s, transform .3s; }
+.call.video[data-state=live] .call-info b { margin: 0; font-size: var(--fs-lg); text-shadow: 0 1px 8px rgb(var(--black-rgb) / 0.5); }
+.call.video[data-state=live] .call-info > span { font-size: var(--fs-sm); }
+.call-actions { z-index: 3; gap: var(--space-4); padding: var(--space-4) var(--space-5) calc(var(--space-6) + env(safe-area-inset-bottom)); transition: opacity .3s, transform .35s cubic-bezier(.3, 1.1, .4, 1); }
+.call.video[data-state=live] .call-actions { position: absolute; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 22px); transform: translateX(-50%); padding: 10px 14px;
+  border-radius: var(--r-full); background: rgb(30 34 33 / 0.62); -webkit-backdrop-filter: blur(22px) saturate(1.4); backdrop-filter: blur(22px) saturate(1.4);
+  border: 1px solid rgb(var(--white-rgb) / 0.08); gap: 10px; }
+.call-btn { width: 58px; height: 58px; font-size: 24px; background: rgb(var(--white-rgb) / 0.14); border: 0; }
+.call.video[data-state=live] .call-btn { width: 52px; height: 52px; font-size: 22px; }
+.call-btn:hover { background: rgb(var(--white-rgb) / 0.22); }
+.call-btn.off, .call-btn.on { background: var(--white); color: #0b0f0e; }
+.call-btn.hang { width: 64px; height: 64px; background: #ff3b30; box-shadow: 0 10px 26px rgb(255 59 48 / 0.35); }
+.call.video[data-state=live] .call-btn.hang { width: 58px; height: 58px; }
+.call-btn.accept { background: #34c759; box-shadow: 0 10px 26px rgb(52 199 89 / 0.35); }
+/* calm: the controls and the name step away until the picture is tapped */
+.call.calm .call-actions { opacity: 0; transform: translate(-50%, 30px); pointer-events: none; }
+.call.calm .call-info, .call.calm .call-scrim { opacity: 0; }
+/* the small picture moves out of the way of the controls */
+.call.calm .tile { --bot: calc(env(safe-area-inset-bottom) + 24px); }
+@media (min-width: 761px) {
+  .call { --tw: 220px; --th: 140px; left: 0; }
+  #call-local.tile, #call-remote.tile { aspect-ratio: auto; }
+}
+@media (prefers-reduced-motion: reduce) { #call-remote, #call-local, .call-actions { transition: none; } }
+.call[data-corner=tl] #call-remote.tile, .call[data-corner=tl] #call-local.tile { top: var(--top); left: 14px; }
+.call[data-corner=bl] #call-remote.tile, .call[data-corner=bl] #call-local.tile { top: calc(100% - var(--th) - var(--bot)); left: 14px; }
+.call[data-corner=br] #call-remote.tile, .call[data-corner=br] #call-local.tile { top: calc(100% - var(--th) - var(--bot)); left: calc(100% - var(--tw) - 14px); }
+/* before the call is live: your own camera behind the name (as WhatsApp), and nothing at all while it rings */
+.call.video:not([data-state=live]) #call-local.tile { z-index: 0; }
+.call[data-state=ringing] #call-local, .call[data-state=over] #call-local { opacity: 0 !important; }
+#call-remote, #call-local { right: auto; bottom: auto; aspect-ratio: auto; margin: 0; max-width: none; max-height: none; box-sizing: border-box; }
