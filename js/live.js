@@ -317,7 +317,6 @@ async function openLiveHub() {
   const leave = () => { if (LIVE && !LIVE.host && LIVE.close) LIVE.close(); onPage = null; };
   const close = () => { clearInterval(timer); leave(); watcher.disconnect(); box.remove(); if (!document.querySelector('.live-room')) document.body.classList.remove('reels-open'); restoreTab(); };
   x.addEventListener('click', close);
-  if (typeof onSideSwipe === 'function') onSideSwipe(box, { skip: '.modal', right: () => slideAway(box, close) });
   go2.addEventListener('click', () => { close(); startStream(); });
   // the page on screen joins its live; the one that leaves, leaves
   const watcher = new IntersectionObserver(entries => {

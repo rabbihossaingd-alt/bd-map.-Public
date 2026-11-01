@@ -554,7 +554,7 @@ async function openPost(id, onGone) {
   $('modal').classList.add('post-modal');
 }
 
-// ---- swiping between Explore's tabs: feed <-> reels <-> stream, a sideways drag with the finger (as on Instagram) ----
+// ---- swiping between Explore's feed and reels, a sideways drag with the finger (as on Instagram) ----
 // A drag counts when it is mostly sideways, at least 70 px, and quick; one that starts on something that scrolls or
 // drags sideways itself (photos in a post, the stories row, a video's time line) is left to it. A drag from the very
 // left edge is the phone's own "back", so it is left alone too.
@@ -824,8 +824,7 @@ async function openReels(startId, user) {
   box.append(column, topbar, close);
   onSideSwipe(box, {
     skip: '.reel-side, .modal',
-    right: () => slideAway(box, closeReels),
-    left: !user && typeof openLiveHub === 'function' ? () => { slideNext(); openLiveHub(); } : null
+    right: () => slideAway(box, closeReels)          // back to the feed (only feed <-> reels; the stream opens from its tab)
   });
   document.body.appendChild(box);
   document.body.classList.add('reels-open');
