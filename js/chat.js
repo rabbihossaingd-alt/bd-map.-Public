@@ -1161,7 +1161,7 @@ function showCall(status) {
   $('call-spk').classList.toggle('on', !!call.loud);
   if (!call.video) $('call-cam').hidden = true;
   // screen share: a video call, live, where the browser can (computers and Android; not iPhone)
-  $('call-share').hidden = !(call.video && call.state === 'live' && navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia);
+  $('call-share').hidden = !(call.video && call.state === 'live' && canShareScreen());
   $('call-share').classList.toggle('on', !!call.screen);
   if (call.state === 'live' && call.video) wakeCallControls();
 }
@@ -1181,12 +1181,17 @@ function wakeCallControls() {
   clearTimeout(callCalm);
   callCalm = setTimeout(() => { if (call.state === 'live' && call.video && !box.hidden) box.classList.add('calm'); }, 4500);
 }
+// Phones cannot share their screen from a web page: Chrome on Android has the function but always refuses, Safari on
+// iPhone has none. Only computers show the button.
+const canShareScreen = () => !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) && !/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)
+  && !(navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent));      // an iPad says it is a Mac
 // ---- screen share: the camera's picture is replaced by the screen's for the other person, and back ----
 async function toggleScreenShare() {
   if (!call.pc || !call.video || call.state !== 'live') return;
   if (call.screen) { stopScreenShare(); return; }
   let s;
-  try { s = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: { ideal: 15, max: 30 } }, audio: false }); } catch { return; }
+  try { s = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: { ideal: 15, max: 30 } }, audio: false }); }
+  catch (e) { if (e && e.name !== 'AbortError' && !/Permission denied by user/i.test(e.message || '')) chatToast(ME, tx('এই ডিভাইস থেকে স্ক্রিন শেয়ার করা যাচ্ছে না।', 'Screen sharing is not possible on this device.')); return; }
   const track = s.getVideoTracks()[0], sender = call.pc.getSenders().find(x => x.track && x.track.kind === 'video');
   if (!track || !sender) { for (const t of s.getTracks()) t.stop(); return; }
   try { await sender.replaceTrack(track); } catch { for (const t of s.getTracks()) t.stop(); chatToast(ME, tx('স্ক্রিন শেয়ার করা গেল না।', 'Could not share the screen.')); return; }
