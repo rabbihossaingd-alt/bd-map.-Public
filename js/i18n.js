@@ -423,6 +423,7 @@ const EXACT = {
   'ভেরিফায়েড ব্যাজ': 'Verified badge',
   'নামের পাশে নীল ব্যাজ — কীভাবে পাবেন': 'The blue badge beside a name — how to get it',
   'আপনার অ্যাকাউন্ট ভেরিফায়েড': 'Your account is verified',
+  'মাসে $১ থেকে · শর্ত ও প্ল্যান': 'From $1 a month · rules and plans',
   'ব্যাজ কেনা যায় না — Manzeela টিম যাচাই করে দেয়।': 'The badge can’t be bought — the Manzeela team gives it after checking.',
   'যা দেখা হয়:': 'What we look at:',
   'প্রোফাইলে আপনার আসল নাম ও নিজের ছবি': 'Your real name and your own photo on the profile',
