@@ -5106,3 +5106,16 @@ body.swipe-in .reels, body.swipe-in .live-hub { animation: slide-in-r .3s cubic-
 .tour-card canvas { width: min(470px, 100%) !important; border-radius: 16px !important; }
 .tour-thumb { width: 64px; height: 80px; border-radius: 12px; }
 .tour-thumb.add { border-radius: 12px; }
+
+/* ---- divisions and districts as Apple's and Google's: quiet grey, small, a little apart; the cities stand out ---- */
+.bn-labels .k-division { font-size: 12px !important; font-weight: 500 !important; letter-spacing: .07em !important; opacity: 1 !important; color: #8b9492 !important; }
+.bn-labels .k-district { font-size: 11px !important; font-weight: 500 !important; letter-spacing: .06em !important; color: #8b9492 !important; }
+:root[data-theme=dark] .bn-labels .k-division, :root[data-theme=dark] .bn-labels .k-district { color: #7f8987 !important; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .bn-labels .k-division, :root:not([data-theme="light"]) .bn-labels .k-district { color: #7f8987 !important; } }
+.bn-labels.on-sat .k-division, .bn-labels.on-sat .k-district { color: rgb(255 255 255 / .78) !important; }
+.bn-labels .k-city { font-size: 13px; font-weight: 700; }
+/* dark map: place names in a soft white on a black halo (they were a dark green, hard to read on the dark map) */
+:root[data-theme=dark] .bn-labels { --halo: #0b0f0e; --ink-map: #e6ebe9; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .bn-labels { --halo: #0b0f0e; --ink-map: #e6ebe9; } }
+:root:not([data-theme=dark]) .bn-labels:not(.on-sat) .k-division, :root:not([data-theme=dark]) .bn-labels:not(.on-sat) .k-district { color: #66706e !important; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .bn-labels:not(.on-sat) .k-division, :root:not([data-theme="light"]) .bn-labels:not(.on-sat) .k-district { color: #7f8987 !important; } }

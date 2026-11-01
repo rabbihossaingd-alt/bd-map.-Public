@@ -1032,6 +1032,18 @@ function drawBanglaLabels() {
     items.push(item);
     if (items.length >= 260) break;
   }
+  // A division or district named as the city at its heart (খুলনা বিভাগ, খুলনা জেলা beside খুলনা): only the city, as
+  // Google's and Apple's maps show it
+  {
+    const base = t => t.replace(/\s*(বিভাগ|জেলা|Division|District)$/i, '').trim();
+    const towns = items.filter(it => /^(city|town|village|district)$/.test(it.kind)).map(it => ({ name: base(it.text), kind: it.kind, p: map.project(it.at) }));
+    for (let i = items.length - 1; i >= 0; i--) {
+      const it = items[i];
+      if (!/^(division|district|state)$/.test(it.kind)) continue;
+      const p = map.project(it.at), b = base(it.text);
+      if (towns.some(t => t !== it._town && t.name === b && t.kind !== it.kind && Math.hypot(t.p.x - p.x, t.p.y - p.y) < 300)) items.splice(i, 1);
+    }
+  }
   const keyOf = it => it.next ? 'road|' + it.text : it.kind + '|' + it.text + '|' + it.at[0].toFixed(4) + '|' + it.at[1].toFixed(4);
   const old = bnLabels.nodes, nodes = new Map(), prev = new Map();
   for (const it of items) {
