@@ -108,7 +108,7 @@ async function drawProfile() {
   const bar = el('div', 'prof-bar');
   const handle = el('span', 'prof-handle no-tr');
   handle.textContent = u.username ? u.username : '';
-  if (isVerified(u)) handle.appendChild(vbadge());
+  if (isVerified(u)) handle.appendChild(vbadge(u));
   bar.appendChild(handle);
   if (mine) bar.append(iconBtn('plus', 'নতুন পোস্ট', openNewPost), iconBtn('menu', 'মেনু', () => go('more')));
   else bar.prepend(iconBtn('back', 'ফিরে যান', () => history.back()));
@@ -266,7 +266,7 @@ async function drawInsights() {
   const tool = (icon, title, sub, fn) => { const b = el('button'); b.innerHTML = `<i class="mi soft">${svg(icon)}</i>`; const sp = el('span'); sp.append(el('b', null, title), el('em', null, sub)); b.append(sp, ic('chev')); b.addEventListener('click', fn); tools.appendChild(b); };
   tool('plus', 'নতুন পোস্ট', 'ছবি, ভিডিও বা শুধু লেখা', openNewPost);
   tool('star', 'পয়েন্ট বাড়ান', `ভাড়া জানান, অনুমোদন হলে প্রতিবার ${num(10)} পয়েন্ট · এখন ${num(d.points)}`, () => go('community'));
-  tool('verified', 'ভেরিফায়েড ব্যাজ', d.verified ? 'আপনার অ্যাকাউন্ট ভেরিফায়েড' : 'কীভাবে পাবেন, আবেদন করুন', openVerifyInfo);
+  tool('verified', 'ভেরিফায়েড ব্যাজ', d.verified ? 'আপনার অ্যাকাউন্ট ভেরিফায়েড' : 'মাসে $১ থেকে · শর্ত ও প্ল্যান', openVerifyInfo);
 
   const money = el('div', 'money-wrap');
   drawMoney(money);
@@ -380,15 +380,8 @@ function openPayout(m, r, done) {
   openModal('টাকা তুলুন', `তোলা যাবে ${taka(m.balance)}`, [el('div', 'info-label', 'কোথায় পাঠাব'), chips, amountBox, numBox, note], [send]);
 }
 
-// How the badge is given. It is not sold: the team gives it to real, active accounts.
-function openVerifyInfo() {
-  if (ME && ME.verified) { openModal('আপনার অ্যাকাউন্ট ভেরিফায়েড', 'নামের পাশে নীল ব্যাজটি সবাই দেখতে পান।', [el('div', 'form-note', 'ব্যাজ টিকিয়ে রাখতে নিয়ম মেনে চলুন। ভুয়া তথ্য বা প্রতারণা পেলে ব্যাজ সরিয়ে নেওয়া হয়।')]); return; }
-  const list = el('ul', 'verify-list');
-  for (const line of ['প্রোফাইলে আপনার আসল নাম ও নিজের ছবি', 'অন্তত কয়েকটি পোস্ট বা জানানো ভাড়া', 'কোনো রিপোর্ট বা নিয়ম ভাঙা নেই', 'দোকান, পরিবহন বা ট্যুর কোম্পানি হলে তার পরিচয়ের প্রমাণ'])
-    list.appendChild(el('li', null, line));
-  const apply = button('send', 'আবেদন করুন', () => { closeModal(); openNewTicket('verify'); });
-  openModal('ভেরিফায়েড ব্যাজ', 'ব্যাজ কেনা যায় না — Manzeela টিম যাচাই করে দেয়।', [el('div', 'form-note', 'যা দেখা হয়:'), list], [apply]);
-}
+// The badge: its rules, plans and payment are on their own page (js/verified.js).
+function openVerifyInfo() { go('verified'); }
 
 // ---- security: two-step verification and where the account is signed in ----
 // The QR code is drawn in the browser by a small library loaded only when it is needed; the secret never leaves

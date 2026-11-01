@@ -52,7 +52,8 @@ function avatar(person, cls = '') {
 const VERIFIED = new Set();
 fetch('api/people/verified').then(r => r.json()).then(d => { for (const id of d.ids || []) VERIFIED.add(id); }).catch(() => {});
 const isVerified = person => !!person && (!!person.verified || VERIFIED.has(person.id));
-function vbadge() {
+// with a person, a tap on it opens who they are (js/verified.js)
+function vbadge(person) {
   if (!document.getElementById('vb-defs')) {
     // One shared gradient for every badge on the page.
     const defs = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -64,6 +65,7 @@ function vbadge() {
   }
   const s = el('span', 'vbadge');
   s.title = LANG === 'en' ? 'Verified' : 'ভেরিফায়েড';
+  if (person && person.id) { s.dataset.who = person.id; s.setAttribute('role', 'button'); }
   s.innerHTML = '<svg viewBox="-1.2 -1.2 26.4 26.4" aria-hidden="true"><path class="b" d="M12.00 2.65Q15.43 -0.82 16.67 3.90Q21.38 2.62 20.10 7.33Q24.82 8.57 21.35 12.00Q24.82 15.43 20.10 16.67Q21.38 21.38 16.67 20.10Q15.43 24.82 12.00 21.35Q8.57 24.82 7.33 20.10Q2.62 21.38 3.90 16.68Q-0.82 15.43 2.65 12.00Q-0.82 8.57 3.90 7.32Q2.62 2.62 7.32 3.90Q8.57 -0.82 12.00 2.65Z"/><path class="t" d="M8.3 12.3l2.5 2.5 5-5.2"/></svg>';
   return s;
 }
@@ -71,7 +73,7 @@ function vbadge() {
 function nameEl(person, tag = 'b', cls = '') {
   const e = el(tag, ('no-tr ' + cls).trim());
   e.appendChild(Object.assign(el('span', 'nm'), { textContent: person.name }));
-  if (isVerified(person)) e.appendChild(vbadge());
+  if (isVerified(person)) e.appendChild(vbadge(person));
   return e;
 }
 

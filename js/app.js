@@ -3,7 +3,7 @@
 for (const n of document.querySelectorAll('[data-ic]')) n.innerHTML = svg(n.dataset.ic);
 
 const BD_LNGLAT = [[87.8, 20.3], [92.9, 26.9]];   // Bangladesh, as [lon, lat] corners
-const PAGES = ['home', 'trip', 'train', 'districts', 'nearby', 'tour', 'fares', 'more', 'chat', 'support', 'community', 'profile', 'settings', 'explore', 'insights'];
+const PAGES = ['home', 'trip', 'train', 'districts', 'nearby', 'tour', 'fares', 'more', 'chat', 'support', 'community', 'profile', 'settings', 'explore', 'insights', 'verified'];
 const trip = { from: null, to: null };          // each: { lat, lon, label }
 const enter = {};                               // page name -> function run when the page opens
 const searches = [];
@@ -267,7 +267,7 @@ function route() {
   if (name === 'community' || name === 'buses') { try { localStorage.setItem('bdmap.fx', 'give'); } catch { /* storage off */ } history.replaceState(null, '', '#/fares'); name = 'fares'; }
   current = PAGES.includes(name) ? name : 'home';
   for (const p of PAGES) $('page-' + p).classList.toggle('on', p === current);
-  const tab = ['profile', 'settings', 'support', 'insights'].includes(current) || (current === 'more' && innerWidth <= 760) ? 'me' : current;
+  const tab = ['profile', 'settings', 'support', 'insights', 'verified'].includes(current) || (current === 'more' && innerWidth <= 760) ? 'me' : current;
   for (const a of document.querySelectorAll('[data-nav]')) a.classList.toggle('on', a.dataset.nav === tab);
   document.body.style.overflow = current === 'trip' ? 'hidden' : '';
   document.body.dataset.page = current;
@@ -2117,7 +2117,7 @@ $('trip-share').addEventListener('click', async () => {
 
 // The back button at the top of inner pages (phones). Each page visit remembers where it came from in its own
 // history entry, so the button goes back exactly there; a page opened from a link goes up to where it lives.
-const PAGE_PARENT = { insights: 'more', settings: 'more', support: 'more' };
+const PAGE_PARENT = { insights: 'more', settings: 'more', support: 'more', verified: 'settings' };
 addEventListener('hashchange', e => {
   const from = new URL(e.oldURL).hash || '#/';
   if (!(history.state && typeof history.state.mz === 'number')) history.replaceState({ ...(history.state || {}), pgFrom: from }, '');

@@ -206,7 +206,9 @@ db.exec(`CREATE TABLE IF NOT EXISTS codes (
 )`);
 if (!db.prepare("SELECT COUNT(*) AS n FROM pragma_table_info('users') WHERE name = 'points'").get().n) db.exec('ALTER TABLE users ADD COLUMN points INTEGER NOT NULL DEFAULT 0');
 for (const [col, def] of [['verified', 'INTEGER NOT NULL DEFAULT 0'], ['prefs', "TEXT NOT NULL DEFAULT '{}'"], ['username', "TEXT NOT NULL DEFAULT ''"],
-                          ['totp', "TEXT NOT NULL DEFAULT ''"], ['totp_on', 'INTEGER NOT NULL DEFAULT 0'], ['backup', "TEXT NOT NULL DEFAULT '[]'"]])
+                          ['totp', "TEXT NOT NULL DEFAULT ''"], ['totp_on', 'INTEGER NOT NULL DEFAULT 0'], ['backup', "TEXT NOT NULL DEFAULT '[]'"],
+                          // the badge: 'team' (given by the team, no end) or 'sub' (bought, ends at verified_until) — lib/verified.cjs
+                          ['verified_kind', "TEXT NOT NULL DEFAULT ''"], ['verified_at', 'INTEGER NOT NULL DEFAULT 0'], ['verified_until', 'INTEGER NOT NULL DEFAULT 0']])
   if (!db.prepare("SELECT COUNT(*) AS n FROM pragma_table_info('users') WHERE name = ?").get(col).n) db.exec(`ALTER TABLE users ADD COLUMN ${col} ${def}`);
 db.exec("CREATE UNIQUE INDEX IF NOT EXISTS users_username ON users (username) WHERE username <> ''");
 const USER_COLS = 'id, email, name, bio, pic_v, role, banned, data, created, seen, points, verified, prefs, username, totp_on';
@@ -3009,6 +3011,8 @@ const ADMIN_DATA = require('./lib/admin-data.cjs')(ADMIN2, { db, json, fs, path,
 // phase 4: strikes, appeals, the moderation queue, risk signals (lib/admin-trust.cjs); creators, payouts, the ledger (lib/admin-money.cjs)
 const ADMIN_TRUST = require('./lib/admin-trust.cjs')(ADMIN2, { db, json, readBody, deletePost, aq, push, pushTo, followers, endStreams: id => { for (const s of streams.get(id) || []) s.end(); } });
 require('./lib/admin-money.cjs')(ADMIN2, { db, json, push, sendMail, MAILS, mailReady, followers, balanceOf, creatorRules, creatorStanding });
+// Manzeela Verified: the badge as a subscription, its payments and their approval (lib/verified.cjs)
+const VERIFY = require('./lib/verified.cjs')(ADMIN2, { db, json, readBody, userOf, push, SITE });
 // phase 5: switches, the read-only switch, announcements and broadcasts, analytics, system health (lib/admin-system.cjs)
 SYS = require('./lib/admin-system.cjs')(ADMIN2, { db, json, readBody, push, pushTo, clientIp, userOf, hasTurn, backupOn, lastBackup: () => lastBackupAt,
   mailInfo: () => ({ ready: mailReady, provider: BREVO ? 'Brevo' : RESEND ? 'Resend' : MAIL.host ? 'SMTP' : '', sent: MAIL_STATS.day === new Date(Date.now() + 6 * 36e5).toISOString().slice(0, 10) ? MAIL_STATS.sent : 0, failed: MAIL_STATS.day === new Date(Date.now() + 6 * 36e5).toISOString().slice(0, 10) ? MAIL_STATS.failed : 0 }),
@@ -3039,6 +3043,7 @@ const server = http.createServer((req, res) => {
   if (pathname.startsWith('/api/push/')) return pushApi(req, res, pathname.slice(10)).catch(e => { console.error(e); if (!res.headersSent) json(res, 500, { error: 'server error' }); });
   if (pathname === '/api/appeal') { const me = userOf(req); if (!me) return json(res, 401, { error: 'login' }); return ADMIN_TRUST.appealApi(req, res, me).catch(e => { console.error(e); if (!res.headersSent) json(res, 500, { error: 'server error' }); }); }
   if (pathname.startsWith('/api/notify/')) return notifyApi(req, res, pathname.slice(12)).catch(e => { console.error(e); if (!res.headersSent) json(res, 500, { error: 'server error' }); });
+  if (pathname.startsWith('/api/verify/')) return VERIFY.api(req, res, pathname.slice(12), searchParams).catch(e => { console.error(e); if (!res.headersSent) json(res, 500, { error: 'server error' }); });
   if (pathname.startsWith('/api/creator/')) return creatorApi(req, res, pathname.slice(13)).catch(e => { console.error(e); if (!res.headersSent) json(res, 500, { error: 'server error' }); });
   if (pathname.startsWith('/api/avatar/')) return avatarApi(req, res, pathname.slice(12));
   if (pathname.startsWith('/media/')) return serveMedia(req, res, pathname.slice(7));

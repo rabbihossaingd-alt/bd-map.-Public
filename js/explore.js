@@ -1548,7 +1548,7 @@ async function openNotifications() {
     const row = el('div', 'notif-row' + (n.seen ? '' : ' new'));
     const t = el('div', 't no-tr');
     const who = Object.assign(el('b'), { textContent: MOD_KINDS.has(n.kind) ? 'Manzeela' : n.actor.username || n.actor.name });   // a removal, a strike or an appeal's answer comes from the team, not a person
-    if (isVerified(n.actor) && !MOD_KINDS.has(n.kind)) who.appendChild(vbadge());
+    if (isVerified(n.actor) && !MOD_KINDS.has(n.kind)) who.appendChild(vbadge(n.actor));
     const [bn, en] = NOTIFY_TEXT[n.kind === 'removed' && n.mod && n.mod.what === 'comment' ? 'removedComment' : n.kind] || ['', ''];
     const said = n.kind === 'broadcast' && n.mod ? (LANG === 'en' && n.mod.bodyEn ? n.mod.bodyEn : n.mod.body) : (LANG === 'en' ? en : bn) + (n.kind === 'comment' ? ' ' + n.body : '');
     t.append(who, document.createTextNode(' ' + said + ' '), el('time', null, shortAgo(n.created)));

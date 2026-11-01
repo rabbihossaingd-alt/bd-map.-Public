@@ -1074,6 +1074,7 @@ function connectChat() {
   on('gcall', p => onGroupCall(p));                    // js/chat-extra.js
   on('gsignal', p => onGroupSignal(p));
   on('creator', () => { if (current === 'insights' && typeof drawInsights === 'function') drawInsights(); });
+  on('verified', () => { if (current === 'verified' && typeof drawVerified === 'function') drawVerified(); });
   on('support', () => { if (typeof loadTickets === 'function') loadTickets(); });
   on('notify', () => { if (typeof refreshNotify === 'function') refreshNotify(); });
   es.onopen = () => { if (CHAT.loaded) loadChat(); };      // back online: catch up on anything missed

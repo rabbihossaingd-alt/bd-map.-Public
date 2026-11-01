@@ -40,7 +40,8 @@ export const NAV = [
   ['আয়', [
     { key: 'creators', title: 'ক্রিয়েটর', ic: 'coins', perm: 'creators.manage', status: 'v2', count: 'creators' },
     { key: 'payouts', title: 'পেআউট', ic: 'wallet', perm: 'payouts.view', status: 'v2', count: 'payouts' },
-    { key: 'ledger', title: 'লেজার', ic: 'book', perm: 'payouts.view', status: 'v2' }]],
+    { key: 'ledger', title: 'লেজার', ic: 'book', perm: 'payouts.view', status: 'v2' },
+    { key: 'verified', title: 'ভেরিফায়েড সাবস্ক্রিপশন', ic: 'checkc', perm: 'verify.manage', status: 'v2', count: 'vorders' }]],
   ['অ্যানালিটিক্স', [
     { key: 'growth', title: 'বৃদ্ধি ও ধরে রাখা', ic: 'chart', perm: 'analytics.view', status: 'v2' },
     { key: 'features', title: 'ফিচার ব্যবহার', ic: 'activity', perm: 'analytics.view', status: 'v2' },
@@ -59,7 +60,7 @@ const PAGE_FILES = { command: './pages/command.js', audit: './pages/audit.js', t
   posts: './pages/content.js', stories: './pages/content.js', comments: './pages/content.js', sounds: './pages/content.js', groups: './pages/content.js',
   media: './pages/media.js', fares: './pages/fares.js', photos: './pages/review.js', gems: './pages/review.js', routes: './pages/routes.js', intercity: './pages/intercity.js', quality: './pages/quality.js',
   growth: './pages/analytics.js', features: './pages/analytics.js', searches: './pages/analytics.js', flags: './pages/flags.js', foryou: './pages/foryou.js', notices: './pages/notices.js', health: './pages/health.js',
-  creators: './pages/creators.js', payouts: './pages/payouts.js', ledger: './pages/ledger.js', strikes: './pages/strikes.js', modqueue: './pages/modqueue.js', risk: './pages/risk.js' };
+  creators: './pages/creators.js', payouts: './pages/payouts.js', verified: './pages/verified.js', ledger: './pages/ledger.js', strikes: './pages/strikes.js', modqueue: './pages/modqueue.js', risk: './pages/risk.js' };
 export const pagesFor = () => ALL_PAGES.filter(p => !p.perm || can(p.perm));
 
 let current = { key: '', mod: null, inst: null };
@@ -148,14 +149,14 @@ addEventListener('popstate', e => { if (drawerOpen() && !(e.state && e.state.dra
 
 function bellMenu(anchor) {
   const lines = [['support', 'সাপোর্টে উত্তর বাকি', 'tickets'], ['reports', 'রিপোর্ট দেখা বাকি', 'reports'], ['fares', 'ভাড়া অনুমোদন বাকি', 'fares'], ['photos', 'জায়গার ছবি', 'photos'], ['gems', 'মেঠোপথ', 'gems'],
-    ['payouts', 'পেআউট অপেক্ষায়', 'payouts'], ['appeals', 'আপিল দেখা বাকি', 'strikes'], ['creators', 'ক্রিয়েটর আবেদন', 'creators'], ['verify', 'ব্যাজের আবেদন', 'tickets']].filter(([k]) => counts[k]);
+    ['payouts', 'পেআউট অপেক্ষায়', 'payouts'], ['appeals', 'আপিল দেখা বাকি', 'strikes'], ['creators', 'ক্রিয়েটর আবেদন', 'creators'], ['vorders', 'ভেরিফায়েড পেমেন্ট যাচাই বাকি', 'verified'], ['verify', 'ব্যাজের আবেদন', 'tickets']].filter(([k]) => counts[k]);
   menu(anchor, [{ label: lines.length ? 'যা বাকি' : 'সব কাজ শেষ — সাবাস' }, ...lines.map(([k, t, page]) => ({ text: `${t} · ${num(counts[k])}`, run: () => go('#/' + page) }))]);
 }
 
 // ---- badges and the live stream ----
 function paintCounts(c) {
   counts = c;
-  const all = ['support', 'reports', 'photos', 'gems', 'fares', 'payouts', 'creators', 'appeals'].reduce((s, k) => s + (c[k] || 0), 0);
+  const all = ['support', 'reports', 'photos', 'gems', 'fares', 'payouts', 'creators', 'appeals', 'vorders'].reduce((s, k) => s + (c[k] || 0), 0);
   for (const [key, el] of badgeEls) {
     const p = ALL_PAGES.find(x => x.key === key), n = p.count === 'all' ? all : c[p.count] || 0;
     el.textContent = num(n); el.hidden = !n;
