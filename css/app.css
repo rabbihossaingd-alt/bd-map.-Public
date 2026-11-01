@@ -5083,3 +5083,14 @@ body.crop-open { overflow: hidden; }
 #call-remote, #call-local { right: auto; bottom: auto; aspect-ratio: auto; margin: 0; max-width: none; max-height: none; box-sizing: border-box; }
 /* the pictures fill their frames edge to edge: no inner space, no border, no outline (only a soft shadow on the small one) */
 #call-remote, #call-local { padding: 0 !important; outline: 0 !important; border: 0 !important; }
+
+/* ---- Explore's tabs by swiping: the next one slides in from the right, going back slides off to the right ---- */
+@keyframes slide-in-r { from { transform: translateX(100%); } to { transform: none; } }
+@keyframes slide-out-r { from { transform: none; } to { transform: translateX(100%); } }
+body.swipe-in .reels, body.swipe-in .live-hub { animation: slide-in-r .3s cubic-bezier(.2, .8, .2, 1) both; }
+.reels.swipe-out, .live-hub.swipe-out { animation: slide-out-r .24s cubic-bezier(.4, 0, .9, .6) both; }
+@media (prefers-reduced-motion: reduce) { body.swipe-in .reels, body.swipe-in .live-hub, .reels.swipe-out, .live-hub.swipe-out { animation: none; } }
+/* Explore: the page itself scrolls up and down only, so a sideways drag is the app's (feed <-> reels <-> stream);
+   photos in a post and the stories row still move sideways */
+#page-explore #explore-feed, .reels .reels-col, .live-hub { touch-action: pan-y; }
+#page-explore .fc-car, #page-explore .faces { touch-action: pan-x pan-y; }

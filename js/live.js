@@ -311,11 +311,13 @@ async function openLiveHub() {
   document.body.classList.add('reels-open');
   let timer = 0, onPage = null, known = new Map();
   const tabs = $('ex-tabs');
-  const restoreTab = () => { if (tabs) [...tabs.children].forEach((b2, i) => b2.classList.toggle('on', i === 0)); };
+  // back to reels if reels are still open under the stream, otherwise to the feed
+  const restoreTab = () => { if (tabs) { const t = document.querySelector('body > .reels') ? 'reels' : 'feed'; [...tabs.children].forEach(b2 => b2.classList.toggle('on', b2.dataset.t === t)); } };
   if (tabs) [...tabs.children].forEach(b2 => b2.classList.toggle('on', b2.dataset.t === 'live'));
   const leave = () => { if (LIVE && !LIVE.host && LIVE.close) LIVE.close(); onPage = null; };
   const close = () => { clearInterval(timer); leave(); watcher.disconnect(); box.remove(); if (!document.querySelector('.live-room')) document.body.classList.remove('reels-open'); restoreTab(); };
   x.addEventListener('click', close);
+  if (typeof onSideSwipe === 'function') onSideSwipe(box, { skip: '.modal', right: () => slideAway(box, close) });
   go2.addEventListener('click', () => { close(); startStream(); });
   // the page on screen joins its live; the one that leaves, leaves
   const watcher = new IntersectionObserver(entries => {

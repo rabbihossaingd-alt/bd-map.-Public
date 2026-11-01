@@ -554,6 +554,47 @@ async function openPost(id, onGone) {
   $('modal').classList.add('post-modal');
 }
 
+// ---- swiping between Explore's tabs: feed <-> reels <-> stream, a sideways drag with the finger (as on Instagram) ----
+// A drag counts when it is mostly sideways, at least 70 px, and quick; one that starts on something that scrolls or
+// drags sideways itself (photos in a post, the stories row, a video's time line) is left to it. A drag from the very
+// left edge is the phone's own "back", so it is left alone too.
+function onSideSwipe(target, { left, right, skip }) {
+  let s = null;
+  target.addEventListener('touchstart', e => {
+    s = null;
+    if (e.touches.length !== 1) return;
+    const t = e.touches[0];
+    if (t.clientX < 24 || (skip && e.target.closest && (typeof skip === 'function' ? skip(e.target) : e.target.closest(skip)))) return;
+    s = { id: t.identifier, x: t.clientX, y: t.clientY, lx: t.clientX, ly: t.clientY, at: Date.now() };
+  }, { passive: true });
+  target.addEventListener('touchmove', e => {
+    if (!s) return;
+    const t = [...e.touches].find(x => x.identifier === s.id);              // only the finger that started it
+    if (!t) return;
+    if (Math.hypot(t.clientX - s.lx, t.clientY - s.ly) > 220) return;        // a point that jumps far is not the finger
+    s.lx = t.clientX; s.ly = t.clientY;
+    const dx = t.clientX - s.x, dy = t.clientY - s.y;
+    if (Math.abs(dy) > 24 && Math.abs(dy) > Math.abs(dx)) s = null;            // a scroll up or down
+  }, { passive: true });
+  target.addEventListener('touchend', e => {
+    if (!s) return;
+    const t = [...e.changedTouches].find(x => x.identifier === s.id);
+    if (!t) return;
+    const far = Math.hypot(t.clientX - s.lx, t.clientY - s.ly) > 220;
+    const dx = (far ? s.lx : t.clientX) - s.x, dy = (far ? s.ly : t.clientY) - s.y, quick = Date.now() - s.at < 800;
+    s = null;
+    if (!quick || Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 1.6) return;
+    if (dx < 0 && left) left(); else if (dx > 0 && right) right();
+  }, { passive: true });
+}
+const slideNext = () => { document.body.classList.add('swipe-in'); setTimeout(() => document.body.classList.remove('swipe-in'), 600); };
+// reels and the stream leave by sliding off to the right
+function slideAway(box, done) {
+  if (!box || !document.body.contains(box)) { done(); return; }
+  box.classList.add('swipe-out');
+  setTimeout(done, 240);
+}
+
 // ---- reels: one video per screen ----
 // A full-screen column that snaps from one video to the next. The video on screen plays, the others wait.
 let reelsBox = null;
@@ -781,6 +822,11 @@ async function openReels(startId, user) {
     loading = false;
   }, { passive: true });
   box.append(column, topbar, close);
+  onSideSwipe(box, {
+    skip: '.reel-side, .modal',
+    right: () => slideAway(box, closeReels),
+    left: !user && typeof openLiveHub === 'function' ? () => { slideNext(); openLiveHub(); } : null
+  });
   document.body.appendChild(box);
   document.body.classList.add('reels-open');
   column.tabIndex = 0;
@@ -1324,6 +1370,16 @@ addEventListener('hashchange', () => { if (current !== 'explore') feedSeen.flush
   }
   // the top bar's hairline only once the feed has scrolled under it
   addEventListener('scroll', () => { if (current === 'explore') page.classList.toggle('scrolled', scrollY > 4); }, { passive: true });
+  // a drag to the left on the feed opens reels (as the tab does)
+  onSideSwipe($('page-explore'), {
+    // photos in a post that has more than one, the stories row, a video's time line: these move sideways themselves
+    skip: t => { const car = t.closest('.fc-car'); return (car && car.scrollWidth > car.clientWidth + 2) || !!t.closest('.faces, .fc-seek, .ex-searchbar, .ex-tabs, input, textarea, .ex-rail'); },
+    left: () => {
+      if (current !== 'explore' || page.classList.contains('searching') || reelsBox || feedCovered()) return;
+      slideNext();
+      $('ex-tabs').querySelector('[data-t=reels]').click();
+    }
+  });
   // Reels: every video, one screen at a time, scrolled up and down.
   for (const b of $('ex-tabs').children) b.addEventListener('click', () => {
     if (b.dataset.t === 'live') { if (typeof openLiveHub === 'function') openLiveHub(); return; }
