@@ -5081,3 +5081,5 @@ body.crop-open { overflow: hidden; }
 .call.video:not([data-state=live]) #call-local.tile { z-index: 0; }
 .call[data-state=ringing] #call-local, .call[data-state=over] #call-local { opacity: 0 !important; }
 #call-remote, #call-local { right: auto; bottom: auto; aspect-ratio: auto; margin: 0; max-width: none; max-height: none; box-sizing: border-box; }
+/* the pictures fill their frames edge to edge: no inner space, no border, no outline (only a soft shadow on the small one) */
+#call-remote, #call-local { padding: 0 !important; outline: 0 !important; border: 0 !important; }
