@@ -304,6 +304,48 @@ MORE_STOPS = {
     'bangabhaban': ('বঙ্গভবন', 'Bangabhaban', 23.7228, 90.4180),
 }
 
+# Stop positions checked against OpenStreetMap (Bangladesh extract, 20 Oct 2026): bus stops, bus stations and places of
+# the same name. A stop is moved only where OSM's bus stops agree on a place and every route through the stop gets
+# straighter there (less detour between its neighbours); OSM's village or area centres alone did not move a stop.
+# Checked 1 Nov 2026 (scratch tools stop-check / stop-judge). Each line: where it was wrong by, and what OSM has there.
+POSITION_FIX = {
+'kalampur': (23.9180, 90.1545),   # 1.44 km off; OSM bus_stop x3; detour 0 -> 0 km
+    'chandra': (24.0469, 90.2390),   # 0.33 km off; OSM bus_stop x7; detour 0 -> 0 km
+    'jirani': (23.9940, 90.2555),   # 1.31 km off; OSM bus_stop x5; detour 0.1 -> 0.04 km
+    'baipayl': (23.9379, 90.2698),   # 0.85 km off; OSM bus_stop x4; detour 8.32 -> 5.15 km
+    'pallibidyut': (23.9244, 90.2634),   # 1.03 km off; OSM bus_stop x2; detour 0 -> 0.02 km
+    'ashuliabazar': (23.8977, 90.3308),   # 0.9 km off; OSM bus_stop x2; detour 0.25 -> 0.11 km
+    'savarcantt': (23.9173, 90.2604),   # 0.61 km off; OSM bus_stop x1; detour 0.41 -> 0 km
+    'sreepur': (24.1989, 90.4782),   # 0.84 km off; OSM place:town x1; detour 0.91 -> 0.46 km
+    'konabari': (24.0109, 90.3213),   # 0.57 km off; OSM bus_stop x3; detour 0.03 -> 0.04 km
+    'surabari': (23.9628, 90.3169),   # 1.89 km off; OSM bus_stop x1; detour 0.34 -> 0.16 km
+    'workshop': (23.7875, 90.3909),   # 1.03 km off; OSM bus_stop x3; detour 1.09 -> 0.28 km
+    'chairmanbari': (23.7883, 90.4002),   # 0.31 km off; OSM bus_stop x2; detour 0.08 -> 0.01 km
+    'duaripara': (23.8236, 90.3570),   # 0.49 km off; OSM bus_stop x2; detour 0 -> 0 km
+    'mirpur2': (23.8052, 90.3633),   # 0.31 km off; OSM bus_stop x3; detour 11.36 -> 2.52 km
+    'kallyanpur': (23.7778, 90.3610),   # 0.38 km off; OSM bus_stop x1; detour 8.11 -> 0.49 km
+    'adabor': (23.7737, 90.3617),   # 0.41 km off; OSM bus_stop x1; detour 1.86 -> 0.94 km
+    'beribadhtin': (23.7566, 90.3562),   # 1.05 km off; OSM bus_stop x1; detour 0.49 -> 0.01 km
+    'rayerbazar': (23.7446, 90.3596),   # 0.45 km off; OSM bus_stop x1; detour 0.7 -> 0.14 km
+    'starkabab': (23.7475, 90.3707),   # 0.57 km off; OSM bus_stop x1; detour 6.97 -> 0.01 km
+    'malibagh': (23.7472, 90.4127),   # 0.31 km off; OSM place:quarter,place:suburb x2; detour 22.91 -> 9.9 km
+    'paltan': (23.7303, 90.4098),   # 0.62 km off; OSM bus_stop x1; detour 50.41 -> 4.3 km
+    'motijheel': (23.7268, 90.4220),   # 0.84 km off; OSM bus_stop x1; detour 7.78 -> 4.37 km
+    'khilgaon': (23.7481, 90.4236),   # 0.35 km off; OSM bus_stop x2; detour 2.97 -> 0.82 km
+    'tarabo': (23.7216, 90.5040),   # 1.24 km off; OSM place:town x1; detour 1.11 -> 0.24 km
+    'hasnabad': (23.6831, 90.4226),   # 0.72 km off; OSM bus_stop x1; detour 0.57 -> 0.05 km
+    'sony': (23.8005, 90.3563),   # 0.79 km off; Overture 'Sony Cinema Hall'; detour 7.64 -> 2.83 km
+    'raysahebbazar': (23.7137, 90.4115),   # 0.29 km off; OSM bus_stop x2 'Ray Saheb Bazaar Bus stop'; detour 3.64 -> 2.68 km
+    'adamjee': (23.7944, 90.3943),   # 0.56 km off; OSM college + Overture 'Adamjee Cantonment College'; detour 0.22 -> 0.01 km
+}
+
+# Stops wrongly listed in a route by the dataset.
+ROUTE_FIX = {
+    # Siam goes Dhour -> Ashulia along the embankment; the dataset's 'Beribadh' here is not Mirpur's Beribadh
+    # (which sent the bus round by Mirpur on the map). Dropped rather than guessed.
+    'Siam Transport': lambda ids: [x for x in ids if x != 'beribadh'],
+}
+
 # Buses the dataset does not list, kept from the earlier hand-made list (stop ids).
 EXTRA_ROUTES = [
     ('তুরাগ', 'Turag', 'tongi abdullahpur uttara airport kuril notunbazar badda rampura malibagh khilgaon bashabo mugda maniknagar sayedabad jatrabari'),
@@ -314,6 +356,14 @@ EXTRA_ROUTES = [
     ('৩ নম্বর (এয়ারপোর্ট)', '3 Number (Airport)', 'bangabazar highcourt shahbag farmgate mohakhali banani kuril airport uttara abdullahpur'),
     ('৯ নম্বর', '9 Number', 'collegegate shyamoli technical mirpur1 mirpur12'),
     ('তরঙ্গ', 'Torongo', 'mohammadpur asadgate farmgate mohakhali gulshan1 badda notunbazar'),
+    # Bus route rationalisation (DTCA), first six routes from 1 Nov 2026: one company per route. Ends and "via" points
+    # only, as reported (Prothom Alo and Ajker Patrika 31 Oct/1 Nov 2026, BSS); the stops in between were not published,
+    # so none are guessed. The sixth (Tongi College Gate - Dhakeshwari, 20 AC buses, Dhaka Chaka) is still a proposal.
+    ('ভিআইপি পরিবহন (নতুন রুট)', 'VIP Paribahan (new route)', 'shibbari abdullahpur dhakeshwari'),
+    ('চিড়িয়াখানা সিটি বাস', 'Chiriyakhana City Bus', 'chiriyakhana sciencelab keraniganj'),
+    ('রমজান আলী এন্টারপ্রাইজ', 'Ramjan Ali Enterprise', 'ghatarchar shahbag matsyabhaban demrastaff'),
+    ('ফোর স্টার বাস লাইন', 'Four Star Bus Line', 'ghatarchar jigatola sciencelab kanchpur'),
+    ('পিএনপি সিটি সার্ভিস', 'PNP City Service', 'ghatarchar mirpur10 abdullahpur dhour'),
 ]
 
 
@@ -329,6 +379,9 @@ def main():
     stops = {sid: (bn, en, lat, lon) for (sid, bn, en, lat, lon) in STOPS.values()}
     for sid, row in MORE_STOPS.items():
         stops[sid] = row
+    for sid, (lat, lon) in POSITION_FIX.items():
+        bn, en = stops[sid][:2]
+        stops[sid] = (bn, en, lat, lon)
     unknown, routes, flagged = set(), [], []
 
     for bus in data:
@@ -355,6 +408,12 @@ def main():
 
     for bn, en, line in EXTRA_ROUTES:
         routes.append([bn, en, line.split()])
+
+    for r in routes:
+        if r[1] in ROUTE_FIX:
+            r[2] = ROUTE_FIX[r[1]](r[2])
+        # a stop listed twice in one bus (Dewan: Science Lab, City College, Science Lab) keeps its first place
+        r[2] = [x for i, x in enumerate(r[2]) if x not in r[2][:i]]
 
     # Names the dataset spells in English or wrongly (the company's own Bangla name).
     NAME_FIX = {'Lal Sabuj': 'লাল সবুজ', 'মাঞ্জিল এক্সপ্রেস': 'মঞ্জিল এক্সপ্রেস'}
