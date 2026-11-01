@@ -693,7 +693,7 @@ function restyle(style, dark) {
       // Places of interest: coloured badge, label beside it in the matching colour, free to switch sides.
       if (l['source-layer'] === 'poi') {
         if (l.id !== 'poi_transit') l.filter = ['all', l.filter, ['has', 'name']];
-        if (l.id === 'poi_r1') l.minzoom = 14; else if (l.id === 'poi_r7') l.minzoom = 15; else if (l.id === 'poi_r20') l.minzoom = 16;
+        if (l.id === 'poi_r1') l.minzoom = 15; else if (l.id === 'poi_r7') l.minzoom = 16.3; else if (l.id === 'poi_r20') l.minzoom = 17.3;   // fewer far out, as Google's
         delete layout['text-anchor'];
         delete layout['text-offset'];
         Object.assign(layout, { 'icon-image': poiMatch(k => 'poi-' + k[0]), 'icon-size': 1, 'text-size': 12, 'text-optional': true,
@@ -917,7 +917,13 @@ async function setMapMode(mode) {
     const keep = mode === 'standard' || (mode === 'hybrid' && (l.type === 'symbol' || (l.type === 'line' && /^(road|bridge|tunnel|admin|boundary)/.test(l.id) && !/casing/.test(l.id))));
     if (l.type === 'background') { map.setPaintProperty(l.id, 'background-opacity', sat ? 0 : 1); continue; }
     map.setLayoutProperty(l.id, 'visibility', keep ? 'visible' : 'none');
-    if (l.type === 'line' && /^(road|bridge|tunnel)/.test(l.id)) map.setPaintProperty(l.id, 'line-opacity', mode === 'hybrid' ? 0.55 : (l.id.startsWith('tunnel_') ? 0.55 : 1));
+    if (l.type === 'line' && /^(road|bridge|tunnel)/.test(l.id)) {
+      if (!map._roadPaint) map._roadPaint = {};
+      if (!map._roadPaint[l.id]) map._roadPaint[l.id] = { color: map.getPaintProperty(l.id, 'line-color') };
+      const major = /motorway|trunk|primary/.test(l.id);
+      map.setPaintProperty(l.id, 'line-color', mode === 'hybrid' ? (major ? '#f6d77a' : '#ffffff') : map._roadPaint[l.id].color);
+      map.setPaintProperty(l.id, 'line-opacity', mode === 'hybrid' ? (major ? 0.4 : 0.3) : (l.id.startsWith('tunnel_') ? 0.55 : 1));
+    }
   }
   if (bnLabels.box) { bnLabels.box.classList.toggle('on-sat', mode === 'hybrid'); bnLabels.box.hidden = mode === 'satellite'; }
   buildingsHere = ''; standBuildings();
@@ -969,8 +975,14 @@ function placeBanglaLabels() {
     const a = map.project(it.at);
     let turn = '';
     if (it.next) {
-      const b = map.project(it.next);
-      let deg = Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI;
+      let b = map.project(it.next), back = a;
+      if (it.line) {
+        // the points about 40 px before and after the name's middle, along the road
+        const reach = (step) => { let p = a; for (let i = it.mid + step; i >= 0 && i < it.line.length; i += step) { p = map.project(it.line[i]); if (Math.hypot(p.x - a.x, p.y - a.y) > 40) break; } return p; };
+        b = reach(1); back = reach(-1);
+        if (b === a) b = map.project(it.next);
+      }
+      let deg = Math.atan2(b.y - back.y, b.x - back.x) * 180 / Math.PI;
       if (deg > 90) deg -= 180; else if (deg < -90) deg += 180;      // never upside down
       turn = ` rotate(${deg.toFixed(1)}deg)`;
     }
@@ -1015,6 +1027,7 @@ function drawBanglaLabels() {
       roads.push({ text, x: p.x, y: p.y });
       item.at = line[mid];
       item.next = line[mid + 1] || line[mid - 1];
+      item.line = line; item.mid = mid;
     }
     items.push(item);
     if (items.length >= 260) break;
@@ -1039,12 +1052,14 @@ function drawBanglaLabels() {
   // The map spaced these names for its own invisible text; ours can be wider. Keep the important ones
   // (places, then roads and water, then shops) and hide any name that would print over one already kept.
   const rank = { country: 0, division: 0.5, city: 1, district: 1.5, town: 2, state: 3, village: 4, road: 5, water: 6, poi: 7 };
-  const kept = [];
+  const kept = [], zNow = map.getZoom();
   for (const it of [...bnLabels.items].sort((a, b) => rank[a.kind] - rank[b.kind] || b.wasShown - a.wasShown)) {
     const r = it.node.getBoundingClientRect();
     const clash = kept.some(k => r.left < k.right + 4 && r.right > k.left - 4 && r.top < k.bottom + 2 && r.bottom > k.top - 2);
-    it.node.style.visibility = clash ? 'hidden' : '';
-    if (!clash) kept.push(r);
+    // far out, a few place names (as Google's); more as you come closer
+    const capped = it.kind === 'poi' && kept.poi >= (zNow < 16 ? 6 : zNow < 17 ? 12 : zNow < 17.8 ? 20 : 60);
+    it.node.style.visibility = clash || capped ? 'hidden' : '';
+    if (!clash && !capped) { kept.push(r); if (it.kind === 'poi') kept.poi = (kept.poi || 0) + 1; }
   }
 }
 function initBanglaLabels() {
@@ -1053,6 +1068,9 @@ function initBanglaLabels() {
   map.getCanvasContainer().appendChild(bnLabels.box);
   map.on('move', placeBanglaLabels);
   map.on('idle', drawBanglaLabels);
+  let again = 0;
+  map.on('moveend', () => { clearTimeout(again); again = setTimeout(drawBanglaLabels, 280); });
+  map.on('sourcedata', e => { if (e.isSourceLoaded && e.sourceId !== 'sat') { clearTimeout(again); again = setTimeout(drawBanglaLabels, 400); } });
   drawBanglaLabels();
 }
 
@@ -1129,6 +1147,9 @@ async function createMap() {
   const firstPoi = (map.getStyle().layers.find(l => l['source-layer'] === 'poi') || {}).id;
   map.addLayer({ id: 'places2', type: 'symbol', source: 'places2', minzoom: 15,
                  layout: { 'icon-image': ['concat', 'poi-', ['get', 'kind']], 'icon-size': 1, 'text-field': ['get', 'name'], 'text-font': ['Noto Sans Regular'], 'text-size': 12,
+                           'icon-padding': 6,
+                           // when badges crowd, these win: a hospital before a shop
+                           'symbol-sort-key': ['match', ['get', 'kind'], 'health', 1, 'sight', 2, 'rail', 2, 'bus', 2, 'green', 3, 'learn', 4, 'worship', 4, 'food', 5, 'bank', 5, 'fuel', 5, 'stay', 6, 'civic', 6, 'shop', 8, 9],
                            'text-optional': true, 'text-variable-anchor': ['left', 'right', 'top', 'bottom'], 'text-radial-offset': 1.05, 'text-justify': 'auto' },
                  paint: { 'text-opacity': 0 } }, firstPoi);
   NAME_LAYERS.push('places2');
@@ -1143,8 +1164,12 @@ async function createMap() {
     const keys = all.sort((p, q) => p[2] - q[2]).slice(0, 20).map(([y, x]) => y + ':' + x);
     await Promise.all(keys.filter(k => !cells.has(k)).map(k => { cells.set(k, []); return fetch('api/pois?c=' + k).then(r => r.json()).then(j => cells.set(k, j.p || [])).catch(() => cells.delete(k)); }));
     const features = [];
-    const close = map.getZoom() >= 17.5;                           // offices and services only once the street is close
-    for (const k of keys) for (const [lat, lon, kind, name, bn, cat] of cells.get(k) || []) if (close || kind !== 'other')
+    // which kinds show at this distance: far out only hospitals, sights, stations and parks; then food, schools, mosques,
+    // banks and the rest people look for; shops and offices once the street is close
+    const z = map.getZoom();
+    const SHOWN = z < 16 ? /^(health|sight|rail|bus|green)$/ : z < 17.2 ? /^(health|sight|rail|bus|green|food|learn|worship|bank|fuel|stay|civic)$/ : z < 17.8 ? /./ : /./;
+    const close = z >= 17.8;
+    for (const k of keys) for (const [lat, lon, kind, name, bn, cat] of cells.get(k) || []) if (SHOWN.test(kind) && (close || kind !== 'other') && (z >= 16 || kind !== 'health' || cat === 'hospital'))
       features.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [lon, lat] }, properties: { kind, name, 'name:latin': name, ...(bn ? { 'name:bn': bn } : {}), class: classOf(kind), cat } });
     const src = map.getSource('places2');
     if (src) src.setData({ type: 'FeatureCollection', features });
