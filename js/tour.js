@@ -448,13 +448,12 @@
   // the base map: the sea, a faint grid of degrees, the land raised a little above it, its coast lit, the towns
   function mapBase(v, T, path) {
     const sea = ctx.createLinearGradient(0, 0, 0, H);
-    sea.addColorStop(0, '#0a1f45'); sea.addColorStop(0.55, '#071a3a'); sea.addColorStop(1, '#040d22');
+    sea.addColorStop(0, '#081726'); sea.addColorStop(1, '#030b14');
     ctx.fillStyle = sea; ctx.fillRect(0, 0, W, H);
-    // aurora: three soft lights drifting slowly — sky blue, magenta and teal
+    // a faint light drifting slowly behind the map
     for (const [x, y, r, c] of [
-      [0.15 + 0.10 * Math.sin(T * 5), 0.18 + 0.06 * Math.cos(T * 4), 720, 'rgba(56,189,248,.26)'],
-      [0.88 + 0.07 * Math.cos(T * 4.4), 0.42 + 0.08 * Math.sin(T * 3.6), 760, 'rgba(217,70,239,.20)'],
-      [0.40 + 0.12 * Math.sin(T * 3 + 2), 0.92, 820, 'rgba(45,212,191,.22)']]) {
+      [0.15 + 0.10 * Math.sin(T * 5), 0.18 + 0.06 * Math.cos(T * 4), 720, 'rgba(56,189,248,.08)'],
+      [0.40 + 0.12 * Math.sin(T * 3 + 2), 0.92, 820, 'rgba(45,212,191,.08)']]) {
       const ag = ctx.createRadialGradient(x * W, y * H, 0, x * W, y * H, r);
       ag.addColorStop(0, c); ag.addColorStop(1, 'rgba(0,0,0,0)');
       ctx.fillStyle = ag; ctx.fillRect(0, 0, W, H);
@@ -473,13 +472,13 @@
     // the land, lifted off the sea by its shadow
     ctx.shadowColor = 'rgba(0,0,0,.65)'; ctx.shadowBlur = 50; ctx.shadowOffsetY = 22;
     const g = ctx.createLinearGradient(0, 0, 0, H);
-    g.addColorStop(0, '#16705a'); g.addColorStop(0.6, '#0f5446'); g.addColorStop(1, '#0b3f3a');
+    g.addColorStop(0, '#173a35'); g.addColorStop(1, '#0e2826');
     ctx.fillStyle = g; ctx.fill(land);
     ctx.shadowColor = 'transparent';
     // the coast: a wide soft glow, then a fine bright line, drawn in as the map appears
     ctx.lineJoin = 'round';
-    ctx.strokeStyle = 'rgba(45,212,191,.28)'; ctx.lineWidth = 22; ctx.stroke(land);
-    ctx.strokeStyle = 'rgba(167,243,208,.9)'; ctx.lineWidth = 3; ctx.stroke(land);
+    ctx.strokeStyle = 'rgba(45,212,191,.16)'; ctx.lineWidth = 16; ctx.stroke(land);
+    ctx.strokeStyle = 'rgba(153,246,228,.6)'; ctx.lineWidth = 2.6; ctx.stroke(land);
     // district towns: points of light, and their names once the camera is close
     const zoom = v.s / path.whole.s, nameA = clamp((zoom - 2.2) / 1.2) * 0.75;
     for (const d of DISTRICTS) {
@@ -564,8 +563,8 @@
       const trail = P.slice(0, head.j); trail.push([hx, hy]);
       const [sx, sy] = P[0], [ex, ey] = P.at(-1);
       const grad = ctx.createLinearGradient(sx, sy, ex, ey);
-      grad.addColorStop(0, '#fde047'); grad.addColorStop(0.55, '#fb923c'); grad.addColorStop(1, '#f472b6');
-      for (const [w, c] of [[46, 'rgba(251,146,60,.20)'], [26, 'rgba(253,224,71,.30)'], [14, grad], [5, 'rgba(255,255,255,.95)']]) {
+      grad.addColorStop(0, '#2dd4bf'); grad.addColorStop(1, '#fbbf24');
+      for (const [w, c] of [[34, 'rgba(45,212,191,.16)'], [16, grad], [5, 'rgba(255,255,255,.9)']]) {
         ctx.strokeStyle = c; ctx.lineWidth = w; ctx.beginPath(); trail.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.stroke();
       }
     }
@@ -630,7 +629,7 @@
     });
     { const u = smooth((T - 0.06) * 8), uy = 290 + title.length * 96 + 6; setFont(600, st.multi ? 32 : 38);
       const uw = Math.min(W - 144, ctx.measureText(route).width) * u, ug = ctx.createLinearGradient(72, 0, 72 + uw, 0);
-      ug.addColorStop(0, '#fde047'); ug.addColorStop(1, '#fb923c'); ctx.fillStyle = ug; if (uw > 1) { ctx.beginPath(); ctx.roundRect(72, uy, uw, 6, 3); ctx.fill(); } }
+      ug.addColorStop(0, 'rgba(94,234,212,.9)'); ug.addColorStop(1, 'rgba(251,191,36,.9)'); ctx.fillStyle = ug; if (uw > 1) { ctx.beginPath(); ctx.roundRect(72, uy, uw, 4, 2); ctx.fill(); } }
     rise(route, 72, 290 + title.length * 96 - 18, st.multi ? 32 : 38, (T - 0.05) * 10, { weight: 600, color: 'rgba(255,255,255,.82)', max: W - 144 });
 
     // the panel at the foot: the journey while it runs, the crew once it is done
@@ -652,7 +651,7 @@
       // progress, with its two ends
       const bx = 92, bw = W - 184, by = py + 148;
       ctx.fillStyle = 'rgba(255,255,255,.14)'; ctx.beginPath(); ctx.roundRect(bx, by, bw, 10, 5); ctx.fill();
-      const pg = ctx.createLinearGradient(bx, 0, bx + bw, 0); pg.addColorStop(0, '#fde047'); pg.addColorStop(0.55, '#fb923c'); pg.addColorStop(1, '#f472b6');
+      const pg = ctx.createLinearGradient(bx, 0, bx + bw, 0); pg.addColorStop(0, '#2dd4bf'); pg.addColorStop(1, '#fbbf24');
       ctx.fillStyle = pg; ctx.beginPath(); ctx.roundRect(bx, by, Math.max(10, bw * p), 10, 5); ctx.fill();
       ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(bx + Math.max(5, bw * p), by + 5, 10, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
@@ -677,16 +676,17 @@
     // arrival: confetti bursting from the destination
     if (T > PH.land && T < PH.back + 0.06) {
       const dest = path.stops.at(-1), [x, y] = toScreen(v, [dest.d.lon, dest.d.lat]), el = (T - PH.land) * 12;   // about seconds
-      const cols = ['#fde047', '#fb923c', '#f472b6', '#38bdf8', '#34d399', '#ffffff', '#a78bfa'];
+      const cols = ['#fde68a', '#ffffff', '#fbbf24', '#99f6e4'];
       ctx.save();
-      for (let i = 0; i < 80; i++) {
-        const ang = rand(i + 200) * Math.PI * 2, sp = 420 + rand(i + 201) * 620, vx = Math.cos(ang) * sp, vy = Math.sin(ang) * sp - 380;
+      ctx.globalCompositeOperation = 'lighter';
+      for (let i = 0; i < 48; i++) {
+        const ang = rand(i + 200) * Math.PI * 2, sp = 300 + rand(i + 201) * 460, vx = Math.cos(ang) * sp, vy = Math.sin(ang) * sp - 380;
         const px = x + vx * el * (1 - el * 0.25), py = y - 40 + vy * el + 900 * el * el;
         const a = 1 - clamp((el - 0.9) / 0.6);
         if (a <= 0) continue;
         ctx.globalAlpha = a; ctx.fillStyle = cols[i % cols.length];
         ctx.save(); ctx.translate(px, py); ctx.rotate(el * (6 + rand(i + 202) * 10) + i);
-        if (i % 3) ctx.fillRect(-7, -3.5, 14, 7); else { ctx.beginPath(); ctx.arc(0, 0, 5, 0, Math.PI * 2); ctx.fill(); }
+        ctx.globalAlpha = a * 0.85; ctx.beginPath(); ctx.arc(0, 0, 2.5 + rand(i + 203) * 3.5, 0, Math.PI * 2); ctx.fill();
         ctx.restore();
       }
       ctx.restore();
@@ -851,7 +851,7 @@
     // the photo, settling from a slow zoom
     const z = 1.14 - 0.14 * e(t / 0.8);
     ctx.save(); ctx.translate(W / 2, H / 2); ctx.scale(z, z); ctx.translate(-W / 2, -H / 2);
-    if (photo) { if ('filter' in ctx) ctx.filter = 'saturate(1.45) contrast(1.12) brightness(1.04)'; cover(photo, 0, 0, W, H); ctx.filter = 'none'; }
+    if (photo) { if ('filter' in ctx) ctx.filter = 'saturate(1.3) contrast(1.08)'; cover(photo, 0, 0, W, H); ctx.filter = 'none'; }
     else {
       const g = ctx.createLinearGradient(0, 0, W, H); g.addColorStop(0, '#0e5a7a'); g.addColorStop(0.55, '#0a7a5c'); g.addColorStop(1, '#073b33');
       ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
@@ -887,17 +887,13 @@
     ctx.save();
     ctx.globalAlpha = e((t - 0.08) * 4);
     ctx.translate(86, 300 - (1 - e((t - 0.08) * 4)) * 30); ctx.rotate(-0.07);
-    ctx.font = `400 96px ${SCRIPT}`;
-    ctx.lineWidth = 10; ctx.strokeStyle = 'rgba(30,12,0,.45)'; ctx.lineJoin = 'round'; ctx.strokeText(tr(st.multi ? 'ঘুরে আসি' : 'চলো যাই'), 0, 0);
-    { const sg = ctx.createLinearGradient(0, -80, 0, 10); sg.addColorStop(0, '#fde047'); sg.addColorStop(1, '#fb923c'); ctx.fillStyle = sg; }
+    ctx.font = `400 96px ${SCRIPT}`; ctx.fillStyle = '#fbbf24';
     ctx.shadowColor = 'rgba(0,0,0,.35)'; ctx.shadowBlur = 18;
     ctx.fillText(tr(st.multi ? 'ঘুরে আসি' : 'চলো যাই'), 0, 0);
     ctx.restore();
     const hs = fitFont(hero, 800, 210, W - 150, -6);
     ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.35)'; ctx.shadowBlur = 30; ctx.shadowOffsetY = 8;
-    { const hg = ctx.createLinearGradient(0, 300, 0, 300 + hs); hg.addColorStop(0, '#ffffff'); hg.addColorStop(0.62, '#ffffff'); hg.addColorStop(1, '#fde68a');
-      const hk = pop((t - 0.14) * 3.2); ctx.translate(72, 300 + hs * 0.86); ctx.scale(Math.max(0.01, hk), Math.max(0.01, hk)); ctx.translate(-72, -(300 + hs * 0.86));
-      rise(hero, 72, 300 + hs * 0.86, hs, Math.min(1, hk), { tracking: lerp(10, -6, e((t - 0.14) * 2.5)), max: W - 144, color: hg }); }
+    rise(hero, 72, 300 + hs * 0.86, hs, (t - 0.14) * 3, { tracking: lerp(10, -6, e((t - 0.14) * 2.5)), max: W - 144 });
     ctx.restore();
     const sub = own && own !== hero ? own : st.multi ? chainText() : tr(`${st.to.division} বিভাগ`) + ' · ' + tr('বাংলাদেশ');
     rise(sub, 78, 300 + hs * 0.86 + 70, 40, (t - 0.24) * 3, { weight: 600, color: 'rgba(255,255,255,.92)', max: W - 156 });
