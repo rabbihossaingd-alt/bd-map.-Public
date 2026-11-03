@@ -161,6 +161,6 @@ function soundLabel(p) {
   const l = p.music.label;
   if (l.kind === 'gen') return `${MUSIC.name(l.track)} · Manzeela Music`;
   if (l.kind === 'post') return `${l.by} · ${LANG === 'en' ? 'Original audio' : 'মূল অডিও'}`;
-  if (l.kind === 'file') return `${l.title} · ${l.by}`;
+  if (l.kind === 'file') return `${l.title} · ${l.by}${l.lic ? ' · ' + l.lic : ''}`;   // a Jamendo track: its licence asks for the credit
   return '';
 }

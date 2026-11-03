@@ -1563,19 +1563,23 @@ function cleanMusic(m) {
   return '';
 }
 const usesOf = id => count('SELECT COUNT(*) AS n FROM posts WHERE music = ?', id);
-// Jamendo (jamendo.com): free music under Creative Commons licences, searchable. Needs JAMENDO_ID (a free
-// client id from devportal.jamendo.com). Results are kept in ext_tracks so posts can refer to them.
+// Jamendo (jamendo.com): music under Creative Commons licences, searchable. Needs JAMENDO_ID (a client id from
+// devportal.jamendo.com). Results are kept in ext_tracks so posts can refer to them.
+// Only CC BY and CC BY-SA are used: Manzeela is a commercial app (NC forbids that) and a sound under a video is
+// an adaptation (ND forbids that). Each use shows the artist and the licence, as both licences require.
+const MUSIC_OK = lic => /creativecommons\.org\/licenses\/(by|by-sa)\/\d/i.test(lic || '');
+const licName = lic => { const m = /licenses\/([a-z-]+)\/([\d.]+)/i.exec(lic || ''); return m ? `CC ${m[1].toUpperCase()} ${m[2]}` : ''; };
 async function jamendo(params) {
   if (!process.env.JAMENDO_ID) return [];
-  const q = new URLSearchParams({ client_id: process.env.JAMENDO_ID, format: 'json', limit: '30', audioformat: 'mp32', imagesize: '200', include: 'licenses', ...params });
+  const q = new URLSearchParams({ client_id: process.env.JAMENDO_ID, format: 'json', limit: '100', audioformat: 'mp32', imagesize: '200', include: 'licenses', ...params });
   try {
     const r = await fetch('https://api.jamendo.com/v3.0/tracks/?' + q, { signal: AbortSignal.timeout(6000) });
     const d = await r.json();
-    return (d.results || []).filter(t => t.audio && t.audiodownload_allowed !== false).map(t => {
+    return (d.results || []).filter(t => t.audio && t.audiodownload_allowed !== false && MUSIC_OK(t.license_ccurl)).slice(0, 30).map(t => {
       const row = { id: 'jam:' + t.id, title: String(t.name || '').slice(0, 120), artist: String(t.artist_name || '').slice(0, 80), image: t.image || t.album_image || '', audio: t.audio, secs: Number(t.duration) || 0, licence: t.license_ccurl || '' };
       db.prepare('INSERT INTO ext_tracks (id, title, artist, image, audio, secs, licence) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO UPDATE SET audio = excluded.audio, image = excluded.image')
         .run(row.id, row.title, row.artist, row.image, row.audio, row.secs, row.licence);
-      return { ...row, uses: usesOf(row.id) };
+      return { ...row, lic: licName(row.licence), page: 'https://www.jamendo.com/track/' + t.id, uses: usesOf(row.id) };
     });
   } catch (e) { console.error('jamendo failed:', e.message); return []; }
 }
@@ -1660,7 +1664,8 @@ function musicLabel(m) {
   }
   if (m.startsWith('jam:')) {
     const t = db.prepare('SELECT * FROM ext_tracks WHERE id = ?').get(m);
-    return t ? { kind: 'file', src: t.audio, title: t.title, by: t.artist, licence: t.licence } : { kind: 'gone' };
+    // a track under a licence that does not allow this use is no longer played (posts made before the rule)
+    return t && MUSIC_OK(t.licence) ? { kind: 'file', src: t.audio, title: t.title, by: t.artist, licence: t.licence, lic: licName(t.licence), page: 'https://www.jamendo.com/track/' + m.slice(4) } : { kind: 'gone' };
   }
   const src = db.prepare('SELECT p.id, p.file, p.aname, u.name FROM posts p JOIN users u ON u.id = p.user WHERE p.id = ?').get(Number(m.slice(5)));
   return src ? { kind: 'post', post: src.id, src: 'media/' + src.file, by: src.name, title: src.aname || '' } : { kind: 'gone' };
@@ -2997,7 +3002,7 @@ function serveDistrict(req, res, id) {
 }
 
 const ROBOTS = `User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /admin.html\nSitemap: ${SITE}/sitemap.xml\n`;
-const sitemap = () => `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${['/', ...[...SEO_DISTRICTS.keys()].map(id => '/district/' + id), '/privacy.html', '/terms.html', '/delete-account.html']
+const sitemap = () => `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${['/', ...[...SEO_DISTRICTS.keys()].map(id => '/district/' + id), '/privacy.html', '/terms.html', '/licenses.html', '/delete-account.html']
   .map(p => `  <url><loc>${SITE}${p}</loc><changefreq>${p === '/' ? 'daily' : 'monthly'}</changefreq></url>`).join('\n')}\n</urlset>\n`;
 
 // The admin panel v2 (lib/admin-v2.cjs): roles, its own locked session, the append-only audit log, a live stream.

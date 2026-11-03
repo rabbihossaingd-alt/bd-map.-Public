@@ -670,6 +670,15 @@ function openAudioSheet(p) {
   const t = el('div', 't no-tr');
   t.append(el('b', null, audioName(p)), el('small', null, p.user.name));
   head.append(art, t);
+  // a Jamendo track: who made it and under which licence, with a link to both
+  const l = p.music && p.music.label;
+  if (l && l.kind === 'file' && l.lic) {
+    const c = el('p', 'aud-credit no-tr');
+    const a1 = Object.assign(el('a', null, `${l.title} — ${l.by}`), { href: l.page || '#', target: '_blank', rel: 'noopener' });
+    const a2 = Object.assign(el('a', null, l.lic), { href: l.licence, target: '_blank', rel: 'noopener license' });
+    c.append(a1, document.createTextNode(' · Jamendo · '), a2);
+    t.appendChild(c);
+  }
   openModal(LANG === 'en' ? 'Audio' : 'অডিও', LANG === 'en' ? 'Make your own reel with this sound' : 'এই সাউন্ড দিয়ে নিজের রিল বানান', [head], [go2]);
 }
 function useAudioOf(p) {
@@ -1607,7 +1616,7 @@ async function paintExploreRail() {
     list.appendChild(row);
   }
   const foot = el('div', 'rail-foot');
-  foot.innerHTML = '<a href="#/support">সাহায্য</a> · <a href="privacy.html">প্রাইভেসি</a> · <a href="terms.html">নিয়ম</a> · <a href="#/more">আরও</a><br>© ' + new Date().getFullYear() + ' Manzeela';
+  foot.innerHTML = '<a href="#/support">সাহায্য</a> · <a href="privacy.html">প্রাইভেসি</a> · <a href="terms.html">নিয়ম</a> · <a href="licenses.html">লাইসেন্স</a> · <a href="#/more">আরও</a><br>© ' + new Date().getFullYear() + ' Manzeela';
   rail.replaceChildren(me, ...(top.length ? [head, list] : []), foot);
 }
 {

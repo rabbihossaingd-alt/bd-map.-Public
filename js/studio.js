@@ -1143,7 +1143,7 @@ async function openMusicSheet(done) {
   const genItem = (t, i) => ({ id: 'gen:' + t.id, title: MUSIC.name(t.id), by: `Manzeela Music · ${MUSIC.mood(t.id)}`, art: 'g' + (i % 8), secs: 0, uses: (data.tracks.find(x => x.id === t.id) || {}).uses || 0 });
   const soundItem = s => ({ id: s.id, title: s.title, by: s.user.name, art: '', pic: s.user, secs: s.secs, uses: s.uses || 0, src: s.src });
   const reelItem = a => ({ id: a.id, title: `${a.user.name} · ${LANG === 'en' ? 'original sound' : 'মূল সাউন্ড'}`, by: a.user.name, art: a.poster, secs: 0, uses: a.uses || 0, src: a.src });
-  const extItem = t => ({ id: t.id, title: t.title, by: t.artist, art: t.image, secs: t.secs, uses: t.uses || 0, src: t.audio });
+  const extItem = t => ({ id: t.id, title: t.title, by: t.lic ? `${t.artist} · ${t.lic}` : t.artist, art: t.image, secs: t.secs, uses: t.uses || 0, src: t.audio });
   const all = () => [...MUSIC.TRACKS.map(genItem), ...data.sounds.map(soundItem), ...data.audios.map(reelItem), ...data.tracksUsed.map(extItem), ...chart.map(extItem)];
 
   function choose(it) {
