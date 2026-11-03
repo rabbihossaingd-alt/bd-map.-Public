@@ -424,6 +424,9 @@ const EXACT = {
   'নামের পাশে নীল ব্যাজ — কীভাবে পাবেন': 'The blue badge beside a name — how to get it',
   'আপনার অ্যাকাউন্ট ভেরিফায়েড': 'Your account is verified',
   'মাসে $১ থেকে · শর্ত ও প্ল্যান': 'From $1 a month · rules and plans',
+  // the tour poster
+  'ট্যুর পাস': 'TOUR PASS', 'থেকে': 'From', 'গন্তব্য': 'To', 'হয়ে': 'Via', 'সময়': 'Time', 'পথ': 'Distance', 'দল': 'Group', 'থাকা': 'Stay',
+  'চলো যাই': 'Let’s go', 'ঘুরে আসি': 'Off we go', 'বাংলাদেশ': 'Bangladesh', 'Manzeela দিয়ে পরিকল্পনা': 'Planned with Manzeela', 'বঙ্গোপসাগর': 'Bay of Bengal',
   'ব্যাজ কেনা যায় না — Manzeela টিম যাচাই করে দেয়।': 'The badge can’t be bought — the Manzeela team gives it after checking.',
   'যা দেখা হয়:': 'What we look at:',
   'প্রোফাইলে আপনার আসল নাম ও নিজের ছবি': 'Your real name and your own photo on the profile',

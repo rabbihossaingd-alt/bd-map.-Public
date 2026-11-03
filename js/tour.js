@@ -258,6 +258,8 @@
   // trip. No money is shown anywhere — they are about the trip, not its cost.
   const TINTS = ['#2dd4bf', '#f59e0b', '#f472b6', '#8b5cf6', '#22c55e'];
   const FONT = '"Anek Bangla", sans-serif';
+  // a number with its word, in either language (the dictionary would read 'N জন' as ratings)
+  const count = (n, bn, one, many) => LANG === 'en' ? `${num(n)} ${n === 1 ? one : many}` : `${num(n)} ${bn}`;
   const lerp = (a, b, k) => a + (b - a) * k;
   const clamp = v => Math.max(0, Math.min(1, v));
   const smooth = v => { const x = clamp(v); return x * x * (3 - 2 * x); };
@@ -576,7 +578,7 @@
     ctx.fillStyle = foot; ctx.fillRect(0, H - 420, W, 420);
     brandPill(smooth(T / 0.05));
     const st = ST(), route = st.multi ? chainText() : `${tr(st.from.bn)}  →  ${tr(st.to.bn)}`;
-    rise(`${tr(air ? 'বিমানে' : 'সড়কপথে')} · ${tr(`${num(st.days)} দিন`)}${tripDate() ? ' · ' + tripDate() : ''}`, 72, 196, 32, (T - 0.02) * 12, { weight: 600, color: '#5eead4', tracking: 2 });
+    rise(`${tr(air ? 'বিমানে' : 'সড়কপথে')} · ${count(st.days, 'দিন', 'day', 'days')}${tripDate() ? ' · ' + tripDate() : ''}`, 72, 196, 32, (T - 0.02) * 12, { weight: 600, color: '#5eead4', tracking: 2 });
     setFont(800, 88, -2);
     const title = wrap(tripTitle(), W - 144).slice(0, 2);
     title.forEach((l, i) => rise(l, 72, 290 + i * 96, 88, (T - 0.03 - i * 0.01) * 10, { tracking: -2 }));
@@ -617,9 +619,9 @@
       }
       const tx = 92 + r * 2 + (n - 1) * step + 28, tw = W - 92 - tx;
       setFont(700, 34); ctx.fillStyle = '#ffffff';
-      ctx.fillText(nm.length ? joined(nm.slice(0, n)) : tr(`${num(st.people)} জনের দল`), tx, py + 84, tw);
+      ctx.fillText(nm.length ? joined(nm.slice(0, n)) : (LANG === 'en' ? `A group of ${num(st.people)}` : `${num(st.people)} জনের দল`), tx, py + 84, tw);
       setFont(500, 27); ctx.fillStyle = 'rgba(255,255,255,.7)';
-      const facts = [tr(`${num(st.days)} দিন`), tr(`${num(Math.round(tripKm()))} কিমি`), st.multi ? tr(`${num(st.stops.filter(d => d !== st.from).length)} জেলা`) : (st.nights ? tr(`${num(st.nights)} রাত`) : tr('দিনে দিনে'))];
+      const facts = [count(st.days, 'দিন', 'day', 'days'), count(Math.round(tripKm()), 'কিমি', 'km', 'km'), st.multi ? count(st.stops.filter(d => d !== st.from).length, 'জেলা', 'district', 'districts') : (st.nights ? count(st.nights, 'রাত', 'night', 'nights') : tr('দিনে দিনে'))];
       ctx.fillText(facts.join(' · '), tx, py + 128, tw);
       ctx.restore();
     }
@@ -633,7 +635,7 @@
     }
   }
 
-  // ---- the poster (1080 × 1350): a photo mosaic of the trip, the title, the route, the crew, a small map ----
+  // ---- the photos for the poster, and the small map on its ticket ----
   // The photos are the destination districts' own (their guide covers and best places), loaded with CORS so the
   // poster can still be saved. No money is shown.
   const mosaicCache = new Map();
@@ -656,13 +658,6 @@
     }
     mosaic = (await Promise.all(urls.slice(0, 3).map(loadImage))).filter(Boolean);
   }
-  // a photo in a rounded tile, gently zooming
-  function tile(img, x, y, w, h, r, z = 1) {
-    ctx.save(); ctx.beginPath(); ctx.roundRect(x, y, w, h, r); ctx.clip();
-    if (img) { ctx.translate(x + w / 2, y + h / 2); ctx.scale(z, z); ctx.translate(-(x + w / 2), -(y + h / 2)); cover(img, x, y, w, h); }
-    else { const g = ctx.createLinearGradient(x, y, x + w, y + h); g.addColorStop(0, '#0f766e'); g.addColorStop(1, '#1e1b4b'); ctx.fillStyle = g; ctx.fillRect(x, y, w, h); }
-    ctx.restore();
-  }
   function miniMap(x, y, h, p) {
     const b = boundsOf(BD_OUTLINE[0]), s = h / (b.y1 - b.y0), w = (b.x1 - b.x0) * s;
     const at = q => { const [px, py] = proj(q); return [x + (px - b.x0) * s, y + (py - b.y0) * s]; };
@@ -677,97 +672,228 @@
     ctx.restore();
     return w;
   }
-  function drawCard(t) {
-    const st = ST(), z = 1.06 - 0.06 * smooth(t);
-    ctx.fillStyle = '#05070d'; ctx.fillRect(0, 0, W, H);
-    // mosaic: one big photo and, when there are more, two beside it
-    const top = 0, mh = 820, gap = 8, k = i => smooth((t - i * 0.06) / 0.4);
-    const [a, b, c] = mosaic;
-    ctx.globalAlpha = k(0);
-    if (b) {
-      tile(a, 0, top, 676, mh, 0, z);
-      ctx.globalAlpha = k(1); tile(b, 676 + gap, top, W - 676 - gap, c ? (mh - gap) / 2 : mh, 0, z);
-      if (c) { ctx.globalAlpha = k(2); tile(c, 676 + gap, top + (mh - gap) / 2 + gap, W - 676 - gap, (mh - gap) / 2, 0, z); }
-    } else tile(a, 0, top, W, mh, 0, z);
-    ctx.globalAlpha = 1;
-    const fade = ctx.createLinearGradient(0, 360, 0, mh + 40);
-    fade.addColorStop(0, 'rgba(5,7,13,0)'); fade.addColorStop(0.65, 'rgba(5,7,13,.78)'); fade.addColorStop(1, '#05070d');
-    ctx.fillStyle = fade; ctx.fillRect(0, 0, W, mh + 40);
-    const shade = ctx.createLinearGradient(0, 0, 0, 220); shade.addColorStop(0, 'rgba(5,7,13,.55)'); shade.addColorStop(1, 'rgba(5,7,13,0)');
-    ctx.fillStyle = shade; ctx.fillRect(0, 0, W, 220);
-    // brand
-    ctx.globalAlpha = clamp(t * 4);
-    glass(56, 56, 300, 66, 33, { tint: 'rgba(10,15,25,.35)' });
-    ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.roundRect(70, 69, 40, 40, 12); ctx.fill();
-    ctx.fillStyle = '#0a8f62'; ctx.beginPath(); ctx.arc(90, 89, 8, 0, Math.PI * 2); ctx.fill();
-    setFont(800, 28); ctx.fillStyle = '#ffffff'; ctx.fillText('Manzeela', 124, 99);
-    setFont(600, 24); ctx.fillStyle = 'rgba(255,255,255,.75)'; ctx.fillText(tr('· ট্যুর'), 230, 98);
-    ctx.globalAlpha = 1;
-    // title over the photos' foot
-    setFont(800, 104, -3);
-    const lines = wrap(tripTitle(), W - 144).slice(0, 2), base = 744, first = base - (lines.length - 1) * 110;
-    rise(tripDate() || tr(st.multi ? `${num(st.days)} দিনে ${num(st.stops.filter(d => d !== st.from).length)} জেলা` : `${num(st.days)} দিনের ট্যুর`), 72, first - 100, 34, (t - 0.1) * 4, { weight: 700, color: '#5eead4', tracking: 3 });
-    lines.forEach((l, i) => rise(l, 72, first + i * 110, 104, (t - 0.14 - i * 0.05) * 3, { tracking: -3 }));
-    // the route as a chain of pills
-    let x = 72, y = base + 44;
-    const chain = st.stops;
-    chain.forEach((d, i) => {
-      const s = pop((t - 0.3 - i * 0.05) / 0.3);
-      if (s <= 0) return;
-      setFont(700, 30);
-      const w = ctx.measureText(tr(d.bn)).width + 40;
-      if (x + w > W - 72) { x = 72; y += 66; }
-      ctx.save(); ctx.globalAlpha = Math.min(1, s); ctx.translate(x + w / 2, y + 26); ctx.scale(s, s); ctx.translate(-(x + w / 2), -(y + 26));
-      ctx.fillStyle = i === 0 || (i === chain.length - 1 && d === st.from) ? 'rgba(255,255,255,.14)' : 'rgba(251,191,36,.18)';
-      ctx.beginPath(); ctx.roundRect(x, y, w, 52, 26); ctx.fill();
-      ctx.fillStyle = i === 0 || (i === chain.length - 1 && d === st.from) ? '#ffffff' : '#fde68a'; ctx.fillText(tr(d.bn), x + 20, y + 36);
-      ctx.restore();
-      x += w + 8;
-      if (i < chain.length - 1) { ctx.globalAlpha = Math.min(1, s); ctx.save(); ctx.translate(x + 12, y + 26); ctx.scale(0.62, 0.62); glyph(st.air ? 'plane' : 'bus', 'rgba(255,255,255,.7)'); ctx.restore(); ctx.globalAlpha = 1; x += 34; }
-    });
-    // crew on the left, the little map on the right
-    const cy = y + 150, n = groupSize(), nm = names(), r = 62, stepX = Math.min(104, 380 / Math.max(1, n - 1));
-    for (let i = 0; i < n; i++) {
-      const s = pop((t - 0.45 - i * 0.05) / 0.3);
-      if (s <= 0) continue;
-      ctx.save(); ctx.translate(72 + r + i * stepX, cy); ctx.scale(s, s); ctx.globalAlpha = Math.min(1, s); face(i, 0, 0, r); ctx.restore();
+  // ---- the poster (1080 × 1350), in the manner of a travel agency's: the place's photo edge to edge, a hand-lettered
+  // line over a huge name, a dotted path with the bus or plane, a boarding-pass ticket with the route, the days, the
+  // group and a small map, and what the trip includes. No money is shown.
+  const SCRIPT = '"Galada", "Anek Bangla", cursive';
+  let scriptReady = null;
+  // Galada (a Bangla hand-lettered face) is loaded only when a poster is made
+  function loadScript() {
+    if (!scriptReady) {
+      const l = document.createElement('link');
+      l.rel = 'stylesheet'; l.href = 'https://fonts.googleapis.com/css2?family=Galada&display=swap';
+      document.head.appendChild(l);
+      scriptReady = Promise.race([new Promise(r => { l.onload = () => document.fonts.load('80px "Galada"', 'চলো যাই').then(r, r); l.onerror = r; }), new Promise(r => setTimeout(r, 3000))]);
     }
-    ctx.globalAlpha = clamp((t - 0.6) * 4);
-    setFont(700, 32); ctx.fillStyle = '#ffffff';
-    ctx.fillText(nm.length ? joined(nm.slice(0, 5)) : tr(`${num(st.people)} জনের দল`), 72, cy + r + 52, 640);
-    ctx.globalAlpha = 1;
-    ctx.globalAlpha = clamp((t - 0.35) * 3);
-    miniMap(W - 72 - 150, cy - 128, 250, (t - 0.4) / 0.5);
-    ctx.globalAlpha = 1;
-    // three numbers on glass
-    const py = H - 196, pw = W - 144;
-    ctx.globalAlpha = clamp((t - 0.62) * 3);
-    glass(72, py, pw, 132, 32, { tint: 'rgba(255,255,255,.07)' });
-    const stats = [
-      [tr('দূরত্ব'), tr(`${num(Math.round(tripKm()))} কিমি`)],
-      [tr('সময়'), st.multi ? tr(`${num(st.days)} দিন`) : tr(`${st.air ? 'বিমানে' : 'বাসে'} ~${fmtMin(tripHours() * 60)}`)],
-      st.multi ? [tr('জেলা'), tr(`${num(st.stops.filter(d => d !== st.from).length)}টি`)] : [tr('থাকা'), st.nights ? tr(`${num(st.nights)} রাত`) : tr('দিনে দিনে')]
+    return scriptReady;
+  }
+  // the app's own line icons, as pictures for the canvas (white)
+  const iconCache = new Map();
+  function iconImg(name) {
+    if (!iconCache.has(name)) {
+      const img = new Image();
+      img.src = 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="96" height="96" fill="none" stroke="#ffffff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${ICONS[name] || ''}</svg>`);
+      iconCache.set(name, img);
+    }
+    return iconCache.get(name);
+  }
+  const posterIcons = () => ['bed', 'fork', 'compass', 'users'].forEach(iconImg);
+
+  // the name as large as it fits
+  function fitFont(text, weight, max, width, tracking = 0) {
+    let size = max;
+    for (; size > 60; size -= 6) { setFont(weight, size, tracking); if (ctx.measureText(text).width <= width) break; }
+    return size;
+  }
+  function ticket(x, y, w, h, k) {
+    const st = ST(), stubX = x + w - 250;
+    ctx.save();
+    // the paper, with a notch at each end of the tear line
+    ctx.shadowColor = 'rgba(0,0,0,.35)'; ctx.shadowBlur = 40; ctx.shadowOffsetY = 18;
+    // the outline drawn by hand, so the two notches bite into the paper
+    const paper = new Path2D(), rr = 34, nr = 22;
+    paper.moveTo(x + rr, y); paper.lineTo(stubX - nr, y); paper.arc(stubX, y, nr, Math.PI, 0, true);
+    paper.arcTo(x + w, y, x + w, y + h, rr); paper.arcTo(x + w, y + h, x, y + h, rr);
+    paper.lineTo(stubX + nr, y + h); paper.arc(stubX, y + h, nr, 0, Math.PI, true);
+    paper.arcTo(x, y + h, x, y, rr); paper.arcTo(x, y, x + w, y, rr); paper.closePath();
+    ctx.fillStyle = '#ffffff'; ctx.fill(paper);
+    ctx.shadowColor = 'transparent';
+    ctx.strokeStyle = 'rgba(11,18,32,.18)'; ctx.lineWidth = 3; ctx.setLineDash([10, 10]);
+    ctx.beginPath(); ctx.moveTo(stubX, y + 30); ctx.lineTo(stubX, y + h - 30); ctx.stroke(); ctx.setLineDash([]);
+    // the tag in the corner
+    setFont(800, 22, 1);
+    const tag = tr('ট্যুর পাস'), tw = ctx.measureText(tag).width + 36;
+    ctx.fillStyle = '#e11d48'; ctx.beginPath(); ctx.roundRect(stubX - tw - 26, y + 26, tw, 40, 20); ctx.fill();
+    ctx.fillStyle = '#ffffff'; ctx.fillText(tag, stubX - tw - 8, y + 54);
+    if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
+    // from → to
+    const ink = '#0b1220', soft = 'rgba(11,18,32,.5)', L = x + 44, R = stubX - 44;
+    const last = st.multi ? st.stops.filter(d => d !== st.from).at(-1) : st.to;
+    setFont(600, 24); ctx.fillStyle = soft;
+    ctx.fillText(tr('থেকে'), L, y + 104);
+    ctx.textAlign = 'right'; ctx.fillText(tr(st.multi ? 'হয়ে' : 'গন্তব্য'), R, y + 104); ctx.textAlign = 'left';
+    const a = tr(st.from.bn), b = st.multi ? count(st.stops.filter(d => d !== st.from).length, 'জেলা', 'district', 'districts') : tr(last.bn);
+    const big = Math.min(fitFont(a, 800, 64, (R - L) * 0.36), fitFont(b, 800, 64, (R - L) * 0.36));
+    setFont(800, big, -1); ctx.fillStyle = ink; ctx.fillText(a, L, y + 104 + big + 6);
+    const aw = ctx.measureText(a).width;
+    ctx.textAlign = 'right'; ctx.fillText(b, R, y + 104 + big + 6); const bw = ctx.measureText(b).width; ctx.textAlign = 'left';
+    // the line between, with the vehicle in its middle
+    const ly = y + 104 + big * 0.62, lx0 = L + aw + 26, lx1 = R - bw - 26;
+    if (lx1 - lx0 > 60) {
+      ctx.strokeStyle = 'rgba(11,18,32,.28)'; ctx.lineWidth = 3; ctx.setLineDash([2, 10]); ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(lx0, ly); ctx.lineTo(lx1, ly); ctx.stroke(); ctx.setLineDash([]);
+      const mx = lx0 + (lx1 - lx0) * clamp(0.5 + (k - 1) * 0.5 + 0.0001);
+      ctx.fillStyle = '#0a8f62'; ctx.beginPath(); ctx.arc(mx, ly, 26, 0, Math.PI * 2); ctx.fill();
+      ctx.save(); ctx.translate(mx, ly); ctx.scale(0.72, 0.72); glyph(st.air ? 'plane' : 'bus', '#ffffff'); ctx.restore();
+      for (const ex of [lx0, lx1]) { ctx.fillStyle = '#0a8f62'; ctx.beginPath(); ctx.arc(ex, ly, 6, 0, Math.PI * 2); ctx.fill(); }
+    }
+    // the facts in three columns
+    const cy = y + h - 76, cw = (R - L) / 3;
+    ctx.fillStyle = 'rgba(11,18,32,.08)'; ctx.fillRect(L, cy - 44, R - L, 2);
+    const cols = [
+      [tr('সময়'), count(st.days, 'দিন', 'day', 'days') + (st.nights ? ' · ' + count(st.nights, 'রাত', 'night', 'nights') : '')],
+      [tr('পথ'), count(Math.round(tripKm()), 'কিমি', 'km', 'km')],
+      [tr('দল'), count(st.people, 'জন', 'person', 'people')]
     ];
-    stats.forEach(([kk, v], i) => {
-      const cx = 72 + pw / 6 + i * pw / 3;
-      ctx.textAlign = 'center';
-      setFont(600, 24); ctx.fillStyle = 'rgba(255,255,255,.6)'; ctx.fillText(kk, cx, py + 50);
-      setFont(800, 40); ctx.fillStyle = '#ffffff'; ctx.fillText(v, cx, py + 100, pw / 3 - 28);
-      if (i) { ctx.fillStyle = 'rgba(255,255,255,.14)'; ctx.fillRect(72 + i * pw / 3, py + 30, 2, 72); }
+    cols.forEach(([kk, v], i) => {
+      const cx = L + i * cw;
+      setFont(600, 22); ctx.fillStyle = soft; ctx.fillText(kk, cx, cy);
+      setFont(800, 32); ctx.fillStyle = ink; ctx.fillText(v, cx, cy + 42, cw - 16);
     });
-    ctx.textAlign = 'left'; ctx.globalAlpha = 1;
-    setFont(500, 20); ctx.fillStyle = 'rgba(255,255,255,.45)';
-    ctx.fillText(tr('Manzeela দিয়ে পরিকল্পনা'), 72, H - 30);
-    if (mosaic.length) { ctx.textAlign = 'right'; ctx.fillText(tr('ছবি: উইকিমিডিয়া কমন্স'), W - 72, H - 30); ctx.textAlign = 'left'; }
+    if (tripDate()) { setFont(600, 22); ctx.fillStyle = soft; ctx.textAlign = 'right'; ctx.fillText(tripDate(), R, y + 54); ctx.textAlign = 'left'; }
+    // the stub: the route on the map of Bangladesh, and the group's faces
+    ctx.save();
+    ctx.beginPath(); ctx.roundRect(stubX + 24, y + 24, x + w - stubX - 48, h - 48, 22); ctx.clip();
+    const sg = ctx.createLinearGradient(0, y, 0, y + h); sg.addColorStop(0, '#0b2a33'); sg.addColorStop(1, '#071a20');
+    ctx.fillStyle = sg; ctx.fillRect(stubX, y, x + w - stubX, h);
+    ctx.restore();
+    const mh = h - 150, mb = boundsOf(BD_OUTLINE[0]), mw = (mb.x1 - mb.x0) * mh / (mb.y1 - mb.y0);
+    miniMap(stubX + (x + w - stubX - mw) / 2, y + 40, mh, k * 1.4);
+    const n = groupSize(), r = 26, step = 34, fx = stubX + (x + w - stubX) / 2 - ((n - 1) * step) / 2;
+    for (let i = 0; i < n; i++) face(i, fx + i * step, y + h - 62, r);
+    ctx.restore();
+  }
+  function feature(icon, label, x, y) {
+    glass(x - 46, y - 46, 92, 92, 46, { tint: 'rgba(255,255,255,.12)' });
+    if (icon === 'bus' || icon === 'plane') { ctx.save(); ctx.translate(x, y); ctx.scale(1.1, 1.1); glyph(icon, '#ffffff'); ctx.restore(); }
+    else { const img = iconImg(icon); if (img.complete && img.naturalWidth) ctx.drawImage(img, x - 23, y - 23, 46, 46); }
+    setFont(700, 24); ctx.fillStyle = '#ffffff'; ctx.textAlign = 'center'; ctx.fillText(label, x, y + 80); ctx.textAlign = 'left';
+  }
+  function drawCard(t) {
+    const st = ST(), e = k => ease(clamp(k));
+    const photo = mosaic[0];
+    // the photo, settling from a slow zoom
+    const z = 1.14 - 0.14 * e(t / 0.8);
+    ctx.save(); ctx.translate(W / 2, H / 2); ctx.scale(z, z); ctx.translate(-W / 2, -H / 2);
+    if (photo) { if ('filter' in ctx) ctx.filter = 'saturate(1.3) contrast(1.08)'; cover(photo, 0, 0, W, H); ctx.filter = 'none'; }
+    else {
+      const g = ctx.createLinearGradient(0, 0, W, H); g.addColorStop(0, '#0e5a7a'); g.addColorStop(0.55, '#0a7a5c'); g.addColorStop(1, '#073b33');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+      const v = fit(boundsOf(BD_OUTLINE[0]), -120);
+      ctx.globalAlpha = 0.14; ctx.fillStyle = '#ffffff';
+      for (const ring of BD_OUTLINE) { ctx.beginPath(); ring.forEach((p, i) => { const [x, y] = toScreen(v, p); if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); }); ctx.closePath(); ctx.fill(); }
+      ctx.globalAlpha = 1;
+    }
+    ctx.restore();
+    // light: a deeper sky at the top for the words, a dark foot for the ticket
+    let g = ctx.createLinearGradient(0, 0, 0, 640);
+    g.addColorStop(0, 'rgba(3,10,22,.72)'); g.addColorStop(0.55, 'rgba(3,10,22,.28)'); g.addColorStop(1, 'rgba(3,10,22,0)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, 640);
+    g = ctx.createLinearGradient(0, 700, 0, H);
+    g.addColorStop(0, 'rgba(3,8,14,0)'); g.addColorStop(0.45, 'rgba(3,8,14,.55)'); g.addColorStop(1, 'rgba(3,8,14,.94)');
+    ctx.fillStyle = g; ctx.fillRect(0, 700, W, H - 700);
+
+    // the top: the brand, and the days and nights
+    ctx.globalAlpha = e(t * 4);
+    glass(56, 52, 252, 62, 31, { tint: 'rgba(10,15,25,.30)' });
+    ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.roundRect(68, 63, 40, 40, 12); ctx.fill();
+    ctx.fillStyle = '#0a8f62'; ctx.beginPath(); ctx.arc(88, 83, 8, 0, Math.PI * 2); ctx.fill();
+    setFont(800, 28); ctx.fillStyle = '#ffffff'; ctx.fillText('Manzeela', 120, 93);
+    const dn = count(st.days, 'দিন', 'day', 'days') + (st.nights ? '  |  ' + count(st.nights, 'রাত', 'night', 'nights') : '');
+    setFont(800, 30); const dw = ctx.measureText(dn).width + 48;
+    glass(W - 56 - dw, 52, dw, 62, 31, { tint: 'rgba(10,15,25,.30)' });
+    ctx.fillStyle = '#ffffff'; ctx.fillText(dn, W - 56 - dw + 24, 94);
+    ctx.globalAlpha = 1;
+
+    // the hand-lettered line, then the name, huge
+    const hero = st.multi ? tripTitle() : tr(st.to.bn);
+    const own = st.multi ? '' : $('tour-name').value.trim();   // a several-district trip's name is already its headline
+    ctx.save();
+    ctx.globalAlpha = e((t - 0.08) * 4);
+    ctx.translate(86, 300 - (1 - e((t - 0.08) * 4)) * 30); ctx.rotate(-0.07);
+    ctx.font = `400 96px ${SCRIPT}`; ctx.fillStyle = '#fbbf24';
+    ctx.shadowColor = 'rgba(0,0,0,.35)'; ctx.shadowBlur = 18;
+    ctx.fillText(tr(st.multi ? 'ঘুরে আসি' : 'চলো যাই'), 0, 0);
+    ctx.restore();
+    const hs = fitFont(hero, 800, 210, W - 150, -6);
+    ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.35)'; ctx.shadowBlur = 30; ctx.shadowOffsetY = 8;
+    rise(hero, 72, 300 + hs * 0.86, hs, (t - 0.14) * 3, { tracking: lerp(10, -6, e((t - 0.14) * 2.5)), max: W - 144 });
+    ctx.restore();
+    const sub = own && own !== hero ? own : st.multi ? chainText() : tr(`${st.to.division} বিভাগ`) + ' · ' + tr('বাংলাদেশ');
+    rise(sub, 78, 300 + hs * 0.86 + 70, 40, (t - 0.24) * 3, { weight: 600, color: 'rgba(255,255,255,.92)', max: W - 156 });
+
+    // the dotted path across the picture, drawn in, with the vehicle at its head
+    const pk = e((t - 0.3) / 0.45);
+    if (pk > 0) {
+      const P0 = [30, 770], C1 = [330, 560], C2 = [700, 830], P1 = [1010, 650];
+      const bz = u => { const m = 1 - u; return [m * m * m * P0[0] + 3 * m * m * u * C1[0] + 3 * m * u * u * C2[0] + u * u * u * P1[0], m * m * m * P0[1] + 3 * m * m * u * C1[1] + 3 * m * u * u * C2[1] + u * u * u * P1[1]]; };
+      ctx.save(); ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.lineWidth = 4; ctx.setLineDash([14, 12]); ctx.lineCap = 'round';
+      ctx.beginPath(); for (let i = 0; i <= 60 * pk; i++) { const [x, y] = bz(i / 60); if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); } ctx.stroke(); ctx.setLineDash([]);
+      const [hx, hy] = bz(pk), [nx, ny] = bz(Math.min(1, pk + 0.02));
+      ctx.translate(hx, hy); if (st.air) ctx.rotate(Math.atan2(ny - hy, nx - hx) + 0.35);
+      ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(0, 0, 30, 0, Math.PI * 2); ctx.fill();
+      ctx.scale(0.85, 0.85); glyph(st.air ? 'plane' : 'bus');
+      ctx.restore();
+    }
+
+    // the ticket rises in
+    const tk = e((t - 0.36) / 0.4);
+    if (tk > 0) {
+      ctx.save(); ctx.globalAlpha = Math.min(1, tk * 1.4);
+      ctx.translate(W / 2, 968 + (1 - tk) * 160); ctx.rotate((1 - tk) * 0.05); ctx.translate(-W / 2, -968);
+      ticket(56, 820, W - 112, 296, tk);
+      ctx.restore();
+    }
+    // what is included: getting there, a place to stay, food, the sights
+    const items = [[st.air ? 'plane' : 'bus', tr('যাতায়াত')], ...(st.nights ? [['bed', tr('থাকা')]] : []), ['fork', tr('খাবার')], ['compass', tr('ঘোরাঘুরি')]];
+    const gap = 196, x0 = W / 2 - (items.length - 1) * gap / 2;
+    items.forEach(([icon, label], i) => {
+      const s = pop((t - 0.55 - i * 0.05) / 0.25);
+      if (s <= 0) return;
+      ctx.save(); ctx.globalAlpha = Math.min(1, s); ctx.translate(x0 + i * gap, 1194); ctx.scale(s, s); feature(icon, label, 0, 0); ctx.restore();
+    });
+    // the foot
+    ctx.globalAlpha = e((t - 0.7) * 4);
+    setFont(600, 22); ctx.fillStyle = 'rgba(255,255,255,.6)';
+    ctx.fillText(tr('Manzeela দিয়ে পরিকল্পনা') + ' · manzeela.com', 72, H - 24);
+    if (photo) { ctx.textAlign = 'right'; ctx.fillText(tr('ছবি: উইকিমিডিয়া কমন্স'), W - 72, H - 24); ctx.textAlign = 'left'; }
+    ctx.globalAlpha = 1;
   }
 
-  // The whole piece, T from 0 to 1: the map story; its last frame stays.
+  // The whole piece, T from 0 to 1: the journey on the map, then the poster opens out of the destination's pin
+  // in a widening circle and builds itself; the poster stays as the last frame (and is the picture saved).
+  const MAP_END = 0.7, IRIS = 0.06;
+  const buffer = document.createElement('canvas');
   function drawScene(T) {
     ctx.globalAlpha = 1; ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left';
-    beatMap(Math.min(1, T));
+    if (T < MAP_END) { beatMap(T / MAP_END); return; }
+    const k = (T - MAP_END) / (1 - MAP_END);
+    drawCard(k);
+    const iris = (T - MAP_END) / IRIS;
+    if (iris < 1) {
+      // the map's last frame, with a hole opening from the destination
+      buffer.width = W; buffer.height = H;
+      const b = buffer.getContext('2d'), keep = ctx;
+      b.drawImage(canvas, 0, 0);                     // the poster, kept aside
+      beatMap(1);
+      const path = routePath(), v = camera(1, path), dest = path.stops.at(-1), [dx, dy] = toScreen(v, [dest.d.lon, dest.d.lat]);
+      const r = smooth(iris) * Math.hypot(W, H);
+      keep.save(); keep.beginPath(); keep.arc(dx, dy - 40, Math.max(1, r), 0, Math.PI * 2); keep.clip(); keep.drawImage(buffer, 0, 0); keep.restore();
+      keep.strokeStyle = `rgba(255,255,255,${0.6 * (1 - iris)})`; keep.lineWidth = 6; keep.beginPath(); keep.arc(dx, dy - 40, Math.max(1, r), 0, Math.PI * 2); keep.stroke();
+    }
   }
 
-  function play(duration = 15000) {
+  function play(duration = 18000) {
     const mine = ++frame, start = performance.now();
     return new Promise(resolve => {
       const step = now => {
@@ -786,7 +912,7 @@
     $('tour-card').scrollIntoView({ behavior: 'smooth', block: 'center' });
     await document.fonts.ready;
     drawScene(0);
-    await loadMosaic();
+    posterIcons(); await Promise.all([loadMosaic(), loadScript()]);
     await play();
   }
 
@@ -819,7 +945,7 @@
       requestAnimationFrame(() => player.classList.add('in'));
       await document.fonts.ready;
       drawScene(0);
-      await loadMosaic();
+      posterIcons(); await Promise.all([loadMosaic(), loadScript()]);
       await play();
     },
     close() {
@@ -870,7 +996,7 @@
     rec.ondataavailable = e => chunks.push(e.data);
     const done = new Promise(r => { rec.onstop = r; });
     rec.start();
-    await play(15000);
+    await play(18000);
     await new Promise(r => setTimeout(r, 1600));     // hold the finished card
     rec.stop();
     await done;
