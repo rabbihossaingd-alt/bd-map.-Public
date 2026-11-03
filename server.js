@@ -1569,19 +1569,26 @@ const usesOf = id => count('SELECT COUNT(*) AS n FROM posts WHERE music = ?', id
 // an adaptation (ND forbids that). Each use shows the artist and the licence, as both licences require.
 const MUSIC_OK = lic => /creativecommons\.org\/licenses\/(by|by-sa)\/\d/i.test(lic || '');
 const licName = lic => { const m = /licenses\/([a-z-]+)\/([\d.]+)/i.exec(lic || ''); return m ? `CC ${m[1].toUpperCase()} ${m[2]}` : ''; };
+// the last good answer for each question, kept 10 minutes: a slow Jamendo then shows that, not an empty list
+const jamCache = new Map();
 async function jamendo(params) {
   if (!process.env.JAMENDO_ID) return [];
-  const q = new URLSearchParams({ client_id: process.env.JAMENDO_ID, format: 'json', limit: '100', audioformat: 'mp32', imagesize: '200', include: 'licenses', ...params });
+  const ck = JSON.stringify(params), hit = jamCache.get(ck);
+  if (hit && Date.now() - hit.at < 10 * 60_000) return hit.rows.map(r => ({ ...r, uses: usesOf(r.id) }));
+  const q = new URLSearchParams({ client_id: process.env.JAMENDO_ID, format: 'json', limit: '60', audioformat: 'mp32', imagesize: '200', include: 'licenses', ...params });
   try {
-    const r = await fetch('https://api.jamendo.com/v3.0/tracks/?' + q, { signal: AbortSignal.timeout(6000) });
+    const r = await fetch('https://api.jamendo.com/v3.0/tracks/?' + q, { signal: AbortSignal.timeout(10000) });
     const d = await r.json();
-    return (d.results || []).filter(t => t.audio && t.audiodownload_allowed !== false && MUSIC_OK(t.license_ccurl)).slice(0, 30).map(t => {
+    const rows = (d.results || []).filter(t => t.audio && t.audiodownload_allowed !== false && MUSIC_OK(t.license_ccurl)).slice(0, 30).map(t => {
       const row = { id: 'jam:' + t.id, title: String(t.name || '').slice(0, 120), artist: String(t.artist_name || '').slice(0, 80), image: t.image || t.album_image || '', audio: t.audio, secs: Number(t.duration) || 0, licence: t.license_ccurl || '' };
       db.prepare('INSERT INTO ext_tracks (id, title, artist, image, audio, secs, licence) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO UPDATE SET audio = excluded.audio, image = excluded.image')
         .run(row.id, row.title, row.artist, row.image, row.audio, row.secs, row.licence);
       return { ...row, lic: licName(row.licence), page: 'https://www.jamendo.com/track/' + t.id, uses: usesOf(row.id) };
     });
-  } catch (e) { console.error('jamendo failed:', e.message); return []; }
+    if (rows.length) jamCache.set(ck, { at: Date.now(), rows });
+    if (jamCache.size > 200) jamCache.delete(jamCache.keys().next().value);
+    return rows;
+  } catch (e) { console.error('jamendo failed:', e.message); return hit ? hit.rows.map(r => ({ ...r, uses: usesOf(r.id) })) : []; }
 }
 db.exec(`CREATE TABLE IF NOT EXISTS post_saves (post INTEGER NOT NULL, user INTEGER NOT NULL, made INTEGER NOT NULL, PRIMARY KEY (post, user))`);
 // A story is a photo or video that shows for 24 hours and is then deleted, file and all.
