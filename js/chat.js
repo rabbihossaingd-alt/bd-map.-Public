@@ -171,7 +171,16 @@ function threadRow(t) {
 function renderList() {
   const reqBox = $('chat-requests'), list = $('chat-list');
   const waiting = CHAT.requests.length;
-  $('chat-me').textContent = ME ? (ME.username || ME.name) : '';
+  // your own name at the top, as Messenger and Instagram show it: your picture, the username, the badge
+  const meKey = ME ? [ME.id, ME.username, ME.name, ME.pic, isVerified(ME)].join('|') : '';
+  if ($('chat-me').dataset.k !== meKey) {
+    $('chat-me').dataset.k = meKey;
+    if (ME) {
+      const n = el('span', 'cm-name'); n.append(Object.assign(el('b'), { textContent: ME.username || ME.name }));
+      if (isVerified(ME)) n.appendChild(vbadge(ME));
+      $('chat-me').replaceChildren(avatar(ME, 'cm-av'), n);
+    } else $('chat-me').replaceChildren();
+  }
   for (const t of $('chat-tabs').children) {
     t.classList.toggle('on', t.dataset.tab === inbox.tab);
     const n = t.dataset.tab === 'requests' ? waiting : t.dataset.tab === 'unread' ? allThreads().filter(x => x.unread && !x.muted).length : 0;

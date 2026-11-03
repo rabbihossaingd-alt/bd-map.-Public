@@ -5323,3 +5323,13 @@ input.upper::placeholder { text-transform: none; }
 .trip-acts .btn:not(.trip-story) { background: color-mix(in srgb, var(--ink) 6%, transparent); color: var(--ink); box-shadow: none; border: 0; }
 .tpm-i svg, .tpm-lock svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .trip-acts .btn { white-space: nowrap; }
+
+/* messages: your picture and username at the top (as Messenger / Instagram), and the add-people button */
+.chat-top h2#chat-me { display: flex; align-items: center; gap: 10px; min-width: 0; overflow: visible; }
+#chat-me .cm-av { flex: none; width: 36px; height: 36px; font-size: 15px; box-shadow: 0 0 0 2px var(--bg), 0 0 0 3.5px rgb(var(--brand-rgb) / 0.55); }
+#chat-me .cm-name { display: inline-flex; align-items: center; min-width: 0; }
+#chat-me .cm-name b { font-size: 22px; font-weight: 800; letter-spacing: -.02em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#chat-me .vbadge { width: 18px; height: 18px; margin-left: 6px; }
+.chat-top .cm-add { width: 40px; height: 40px; border-radius: 50%; background: color-mix(in srgb, var(--ink) 7%, transparent); color: var(--ink); }
+.chat-top .cm-add:hover { background: color-mix(in srgb, var(--ink) 12%, transparent); }
+.chat-top .cm-add svg { width: 21px; height: 21px; }
