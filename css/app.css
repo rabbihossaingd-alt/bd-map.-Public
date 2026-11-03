@@ -5270,3 +5270,56 @@ input.upper::placeholder { text-transform: none; }
 .tpm-field input::placeholder { color: var(--muted); opacity: .6; font-weight: 500; }
 .tpm-field input[type="date"] { min-height: 26px; color-scheme: light dark; }
 .tp-make .tp-go { margin-top: 20px; height: 54px; border-radius: 18px; }
+
+/* ---- কয়েক জেলা ঘুরে, refined to match the one-district tour: the same cards, the app's tile colours on the
+   steps, the same inset list and photo slots, and nothing wider than its card ---- */
+.trip-form { grid-template-columns: minmax(0, 1fr); }
+.trip .tp-card { border: 0; border-radius: 24px; background: var(--bg); box-shadow: 0 1px 2px rgb(var(--black-rgb) / 0.04), 0 8px 28px -12px rgb(var(--black-rgb) / 0.14); min-width: 0; }
+:root[data-theme="dark"] .trip .tp-card { background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); }
+.trip-step .n { width: 40px; height: 40px; border-radius: 12px; font-size: var(--fs-md); color: var(--white);
+  box-shadow: inset 0 1px 0 rgb(var(--white-rgb) / 0.35), inset 0 -1px 0 rgb(var(--black-rgb) / 0.12), 0 6px 14px -6px var(--tb); }
+.trip-form > .tp-card:nth-child(1) .trip-step .n { --tb: var(--tile-blue-b); background: linear-gradient(165deg, var(--tile-blue-a), var(--tile-blue-b)); }
+.trip-form > .tp-card:nth-child(2) .trip-step .n { --tb: var(--tile-teal-b); background: linear-gradient(165deg, var(--tile-teal-a), var(--tile-teal-b)); }
+.trip-form > .tp-card:nth-child(3) .trip-step .n { --tb: var(--tile-violet-b); background: linear-gradient(165deg, var(--tile-violet-a), var(--tile-violet-b)); }
+.trip-form > .tp-card:nth-child(4) .trip-step .n { --tb: var(--tile-pink-b); background: linear-gradient(165deg, var(--tile-pink-a), var(--tile-pink-b)); }
+.trip-step h4 { font-size: var(--fs-lg); letter-spacing: -.01em; }
+.trip-select select { background-color: color-mix(in srgb, var(--ink) 5%, transparent); }
+/* the chosen districts and the nearby ones */
+.trip-chip.on { background: linear-gradient(180deg, color-mix(in srgb, var(--brand) 88%, #fff), var(--brand)); box-shadow: inset 0 1px 0 rgb(var(--white-rgb) / 0.25), 0 6px 14px -8px rgb(var(--brand-rgb) / 0.7); }
+.trip-sug { margin: var(--space-3) -20px 0; padding: 2px 20px var(--space-1); flex-wrap: nowrap; overflow-x: auto; }
+.trip-sug > small { width: auto; flex: none; margin-right: var(--space-1); }
+.trip-sug .trip-chip { border: 0; background: color-mix(in srgb, var(--ink) 5%, transparent); }
+.trip-styles .trip-style { min-width: 0; }
+.trip-style.on { border-color: var(--brand); background: rgb(var(--brand-rgb) / 0.08); box-shadow: 0 6px 16px -10px rgb(var(--brand-rgb) / 0.6); }
+/* photos and names: the same as the tour card */
+.trip .tour-thumbs { gap: 10px; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding: 2px; }
+.trip .tour-thumb { flex: none; width: 58px; height: 58px; border-radius: 50%; border: 0; box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px rgb(var(--brand-rgb) / 0.55); }
+.trip .tour-thumb.add { color: var(--brand-text); background: rgb(var(--brand-rgb) / 0.10); box-shadow: inset 0 0 0 2px rgb(var(--brand-rgb) / 0.45); border: 0; }
+/* the trip at a glance: every name reads on the photos; the home town a little quieter */
+.trip-chain span.home { color: rgb(var(--white-rgb) / 0.78); }
+.trip-chain span { color: var(--white); }
+.trip-head { border-radius: 24px; }
+.trip-stats > div { border-radius: 16px; }
+/* day by day */
+.trip-card { border: 0; border-radius: 20px; background: var(--bg); box-shadow: 0 1px 2px rgb(var(--black-rgb) / 0.04), 0 8px 24px -14px rgb(var(--black-rgb) / 0.16); }
+:root[data-theme="dark"] .trip-card { background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); }
+.trip-go i { width: 40px; height: 40px; border-radius: 12px; background: linear-gradient(165deg, var(--tile-teal-a), var(--tile-teal-b)); box-shadow: inset 0 1px 0 rgb(var(--white-rgb) / 0.35), 0 6px 14px -6px var(--tile-teal-b); }
+.trip-go { grid-template-columns: 40px 1fr; }
+.trip-sight { border-radius: 16px; }
+/* the cost: each part in its colour, as on the one-district card */
+.trip-cost .rule:not(.total) { position: relative; padding-left: 20px; }
+.trip-cost .rule:not(.total)::before { content: ""; position: absolute; left: 0; top: 50%; width: 10px; height: 10px; margin-top: -5px; border-radius: 50%; }
+.trip-cost .rule:nth-of-type(1)::before { background: linear-gradient(90deg, var(--tile-teal-a), var(--tile-teal-b)); }
+.trip-cost .rule:nth-of-type(2)::before { background: linear-gradient(90deg, var(--tile-violet-a), var(--tile-violet-b)); }
+.trip-cost .rule:nth-of-type(3)::before { background: linear-gradient(90deg, var(--tile-amber-a), var(--tile-amber-b)); }
+.trip-cost .rule:nth-of-type(4)::before { background: linear-gradient(90deg, var(--tile-blue-a), var(--tile-blue-b)); }
+.trip-cost .per-head { border-radius: 18px; background: linear-gradient(180deg, color-mix(in srgb, var(--brand) 88%, #fff), var(--brand)); box-shadow: inset 0 1px 0 rgb(var(--white-rgb) / 0.25), 0 10px 24px -12px rgb(var(--brand-rgb) / 0.7); }
+/* the buttons: the story in the app's green, across; share and print beside each other */
+.trip-acts { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); }
+.trip-acts .btn { justify-content: center; height: 48px; border-radius: 16px; }
+.trip-acts .trip-story { grid-column: 1 / -1; height: 54px; border-radius: 18px; font-size: var(--fs-md); font-weight: 800; color: var(--on-brand);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--brand) 88%, #fff), var(--brand)); box-shadow: inset 0 1px 0 rgb(var(--white-rgb) / 0.25), 0 10px 24px -10px rgb(var(--brand-rgb) / 0.7); }
+.trip-acts .trip-story svg { width: 18px; height: 18px; }
+.trip-acts .btn:not(.trip-story) { background: color-mix(in srgb, var(--ink) 6%, transparent); color: var(--ink); box-shadow: none; border: 0; }
+.tpm-i svg, .tpm-lock svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.trip-acts .btn { white-space: nowrap; }

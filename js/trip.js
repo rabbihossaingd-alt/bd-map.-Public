@@ -129,7 +129,7 @@
       c3.append(two, styles, back);
       // 4 the crew: their photos and names, for the story and the poster
       const c4 = el('section', 'tp-card');
-      c4.appendChild(step(4, tl2('দলের ছবি ও নাম', 'The crew'), tl2('গল্প আর পোস্টারে সবার মুখ থাকবে — ছবি আপনার ফোনেই থাকে, কোথাও যায় না', 'Everyone appears in the story and the poster — photos stay on your phone')));
+      c4.appendChild(step(4, tl2('দলের ছবি ও নাম', 'The crew'), tl2('গল্প আর পোস্টারে সবার মুখ থাকবে', 'Everyone appears in the story and the poster')));
       const thumbs = el('div', 'tour-thumbs');
       const pick = Object.assign(el('input'), { type: 'file', accept: 'image/*', multiple: true, hidden: true });
       const drawCrew = () => {
@@ -143,9 +143,19 @@
       names.addEventListener('input', () => { const t = document.getElementById('tour-names'); if (t) t.value = names.value; });
       const title = Object.assign(el('input'), { type: 'text', maxLength: 40, placeholder: tl2('ট্রিপের নাম — যেমন: সিলেট বিভাগ ঘোরা', 'Trip name'), value: T.title || '' });
       title.addEventListener('input', () => { T.title = title.value; save(); });
-      const nameWrap = el('label', 'trip-select'), titleWrap = el('label', 'trip-select');
-      nameWrap.appendChild(names); titleWrap.appendChild(title);
-      c4.append(thumbs, pick, nameWrap, titleWrap);
+      // the same inset list as the one-district tour card: an icon, a small label, the field
+      const field = (icon, label, input) => { const f = el('label', 'tpm-field'); const i = el('i', 'tpm-i'); i.innerHTML = svg(icon); const sp = el('span'); sp.append(el('small', null, label), input); f.append(i, sp); return f; };
+      names.placeholder = tl2('যেমন: রাতুল, সিয়াম, সাব্বির', 'e.g. Ratul, Siam, Sabbir'); title.placeholder = tl2('যেমন: সিলেট বিভাগ ঘোরা', 'e.g. Around Sylhet');
+      const list = el('div', 'tpm-list');
+      list.append(field('users', tl2('সদস্যদের নাম (কমা দিয়ে)', 'Names (separated by commas)'), names), field('edit', tl2('ট্রিপের নাম', 'Trip name'), title));
+      const photosBox = el('div', 'tpm-photos');
+      const count = el('em');
+      const row = el('div', 'tpm-row'); row.append(el('b', null, tl2('দলের ছবি', 'Group photos')), count);
+      const lock = el('p', 'tpm-lock'); lock.innerHTML = svg('lock'); lock.append(tl2('ছবি আপনার ফোনেই থাকে, কোথাও আপলোড হয় না।', 'Photos stay on your phone and are never uploaded.'));
+      photosBox.append(row, thumbs, lock);
+      new MutationObserver(() => { count.textContent = `${num(window.TourStory ? TourStory.photos().length : 0)}/${num(5)}`; }).observe(thumbs, { childList: true });
+      count.textContent = `${num(window.TourStory ? TourStory.photos().length : 0)}/${num(5)}`;
+      c4.append(photosBox, pick, list);
       form.append(c1, c2, c3, c4);
       const out = el('div', 'trip-out');
       box.append(form, out);
@@ -287,11 +297,11 @@
     const text = () => [tl2('Manzeela ট্রিপ প্ল্যান', 'Manzeela trip plan'), p.ends.map(d => d.bn).join(' → '), '',
       ...p.days.map(d => `${tl2('দিন', 'Day')} ${num(d.day)}: ${d.a ? `${d.a.bn} → ${d.b.bn} (${num(Math.round(d.km))} ${tl2('কিমি', 'km')})` : d.b.bn}${d.see && d.see.length ? ' — ' + d.see.map(s => s.name).join(', ') : ''}`),
       '', `${tl2('জনপ্রতি আনুমানিক', 'Per person, roughly')} ${taka(p.perHead)}`].join('\n');
-    const share = el('button', 'btn'); share.append(ic('send'), el('span', null, tl2('প্ল্যান শেয়ার করুন', 'Share the plan')));
+    const share = el('button', 'btn'); share.append(ic('send'), el('span', null, tl2('শেয়ার করুন', 'Share')));
     share.addEventListener('click', async () => { try { if (navigator.share) await navigator.share({ title: tl2('ট্রিপ প্ল্যান', 'Trip plan'), text: text() }); else { await navigator.clipboard.writeText(text()); share.querySelector('span').textContent = tl2('কপি হয়েছে ✓', 'Copied ✓'); } } catch { /* cancelled */ } });
     const print = el('button', 'btn quiet'); print.append(ic('copy'), el('span', null, tl2('প্রিন্ট / PDF', 'Print / PDF')));
     print.addEventListener('click', () => { document.body.classList.add('trip-print'); setTimeout(() => { window.print(); document.body.classList.remove('trip-print'); }, 50); });
-    const story = el('button', 'btn trip-story'); story.append(ic('star'), el('span', null, tl2('গল্প আর পোস্টার বানান', 'Make the story and poster')));
+    const story = el('button', 'btn trip-story'); story.append(ic('play'), el('span', null, tl2('ভিডিও আর পোস্টার বানান', 'Make the video and poster')));
     story.addEventListener('click', () => {
       if (!window.TourStory) return;
       const visit = p.route;

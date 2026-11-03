@@ -674,24 +674,6 @@
       ctx.fillText(facts.join(' · '), tx, py + 128, tw);
       ctx.restore();
     }
-    // arrival: confetti bursting from the destination
-    if (T > PH.land && T < PH.back + 0.06) {
-      const dest = path.stops.at(-1), [x, y] = toScreen(v, [dest.d.lon, dest.d.lat]), el = (T - PH.land) * 12;   // about seconds
-      const cols = ['#fde68a', '#ffffff', '#fbbf24', '#99f6e4'];
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      for (let i = 0; i < 48; i++) {
-        const ang = rand(i + 200) * Math.PI * 2, sp = 300 + rand(i + 201) * 460, vx = Math.cos(ang) * sp, vy = Math.sin(ang) * sp - 380;
-        const px = x + vx * el * (1 - el * 0.25), py = y - 40 + vy * el + 900 * el * el;
-        const a = 1 - clamp((el - 0.9) / 0.6);
-        if (a <= 0) continue;
-        ctx.globalAlpha = a; ctx.fillStyle = cols[i % cols.length];
-        ctx.save(); ctx.translate(px, py); ctx.rotate(el * (6 + rand(i + 202) * 10) + i);
-        ctx.globalAlpha = a * 0.85; ctx.beginPath(); ctx.arc(0, 0, 2.5 + rand(i + 203) * 3.5, 0, Math.PI * 2); ctx.fill();
-        ctx.restore();
-      }
-      ctx.restore();
-    }
     // arrival: a gold pill over the destination
     const arr = pop((T - PH.land) / 0.05) * (1 - clamp((T - PH.back) * 10));
     if (arr > 0) {
@@ -956,7 +938,7 @@
 
   // The whole piece, T from 0 to 1: the journey on the map, then the poster opens out of the destination's pin
   // in a widening circle and builds itself; the poster stays as the last frame (and is the picture saved).
-  const MAP_END = 0.66, IRIS = 0.06;
+  const MAP_END = 0.72, IRIS = 0.05;
   const buffer = document.createElement('canvas');
   function drawScene(T) {
     ctx.globalAlpha = 1; ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left';
@@ -980,7 +962,7 @@
     }
   }
 
-  function play(duration = 16000) {
+  function play(duration = 24000) {
     const mine = ++frame, start = performance.now();
     return new Promise(resolve => {
       const step = now => {
@@ -1007,7 +989,7 @@
     rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
     const done = new Promise(r => { rec.onstop = r; });
     rec.start();
-    const whole = await play(16000);
+    const whole = await play(24000);
     if (whole) for (let i = 0; i < 16; i++) { await new Promise(r => setTimeout(r, 100)); drawScene(1); }
     rec.stop();
     await done;
