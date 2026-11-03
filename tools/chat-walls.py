@@ -93,15 +93,15 @@ sunset = svg(BG + glow(300, 560, 160, '#fff3d6', .9) + "<path d='M-50,720 C140,6
 W = {k: uri(v) for k, v in dict(lava=peach, cats=cats, ocean=sky, green=waves, forest=forest, mist=mist, berry=love, grape=night, sunset=sunset).items()}
 THEMES = {
     # id: (wall, my bubble, my text, their bubble, their text, accent, chip bg, chip text)
-    'lava':   (W['lava'], 'linear-gradient(180deg, #ff9f6e, #ff7a45)', '#fff', '#ffffff', '#1c1c1e', '#ff7a45', 'rgb(255 255 255 / .6)', '#8a4a2a'),
+    'lava':   (W['lava'], '#ff7a45', '#fff', '#ffffff', '#1c1c1e', '#ff7a45', 'rgb(255 255 255 / .6)', '#8a4a2a'),
     'cats':   (W['cats'], '#1c1c1e', '#ffffff', '#ffffff', '#1c1c1e', '#1c1c1e', 'rgb(255 255 255 / .5)', '#2b4a37'),
-    'ocean':  (W['ocean'], 'linear-gradient(180deg, #3d9bff, #0a84ff)', '#fff', '#ffffff', '#1c1c1e', '#0a84ff', 'rgb(255 255 255 / .6)', '#2a5a8f'),
-    'green':  (W['green'], 'linear-gradient(180deg, #43b27a, #2f9e6a)', '#fff', '#ffffff', '#1c1c1e', '#2f9e6a', 'rgb(255 255 255 / .65)', '#3a6a50'),
-    'forest': (W['forest'], 'linear-gradient(180deg, #4cd97b, #30d158)', '#04210f', '#1e3a2d', '#effff4', '#30d158', 'rgb(255 255 255 / .1)', '#bfe8cf'),
+    'ocean':  (W['ocean'], '#0a84ff', '#fff', '#ffffff', '#1c1c1e', '#0a84ff', 'rgb(255 255 255 / .6)', '#2a5a8f'),
+    'green':  (W['green'], '#2f9e6a', '#fff', '#ffffff', '#1c1c1e', '#2f9e6a', 'rgb(255 255 255 / .65)', '#3a6a50'),
+    'forest': (W['forest'], '#30d158', '#04210f', '#1e3a2d', '#effff4', '#30d158', 'rgb(255 255 255 / .1)', '#bfe8cf'),
     'mist':   (W['mist'], '#ffffff', '#14432c', 'rgb(10 50 32 / .42)', '#ffffff', '#1f7a52', 'rgb(10 50 32 / .3)', '#effff5'),
-    'berry':  (W['berry'], 'linear-gradient(180deg, #ff5a7a, #ff375f)', '#fff', '#ffffff', '#1c1c1e', '#ff375f', 'rgb(255 255 255 / .7)', '#a33a52'),
-    'grape':  (W['grape'], 'linear-gradient(180deg, #7d7bff, #5e5ce6)', '#fff', '#2c2c54', '#f2f2ff', '#7d7bff', 'rgb(255 255 255 / .1)', '#d6d6ff'),
-    'sunset': (W['sunset'], 'linear-gradient(180deg, #ff8a70, #ff5f6d)', '#fff', '#ffffff', '#1c1c1e', '#ff6a6a', 'rgb(255 255 255 / .55)', '#7a3a4a'),
+    'berry':  (W['berry'], '#ff375f', '#fff', '#ffffff', '#1c1c1e', '#ff375f', 'rgb(255 255 255 / .7)', '#a33a52'),
+    'grape':  (W['grape'], '#5e5ce6', '#fff', '#2c2c54', '#f2f2ff', '#7d7bff', 'rgb(255 255 255 / .1)', '#d6d6ff'),
+    'sunset': (W['sunset'], '#ff5f6d', '#fff', '#ffffff', '#1c1c1e', '#ff6a6a', 'rgb(255 255 255 / .55)', '#7a3a4a'),
     'mono':   ('#f2f2f7', '#1c1c1e', '#ffffff', '#ffffff', '#1c1c1e', '#1c1c1e', 'rgb(0 0 0 / .05)', '#6e6e73'),
 }
 css = ["/* ---- chat themes (drawn by tools/chat-walls.py: python tools/chat-walls.py) ----\n"
@@ -118,8 +118,8 @@ css += [
     f":root[data-theme=dark] {T} .chat-head {{ background: rgb(28 28 30 / .62); border-bottom-color: rgb(255 255 255 / .06); }}",
     f"{T} .chat-compose {{ background: rgb(var(--white-rgb) / 0.72); border-color: rgb(var(--black-rgb) / 0.06); -webkit-backdrop-filter: saturate(1.8) blur(20px); backdrop-filter: saturate(1.8) blur(20px); }}",
     f":root[data-theme=dark] {T} .chat-compose {{ background: rgb(28 28 30 / .72); border-color: rgb(255 255 255 / .08); }}",
-    f"{T} .me .bubble:not(.emoji):not(.media):not(.gone) {{ background: var(--mb); background-size: auto; color: var(--mfg); }}",
-    f"{T} .them .bubble:not(.emoji):not(.media):not(.gone) {{ background: var(--tb); color: var(--tfg); }}",
+    f"{T} .me .bubble:not(.emoji):not(.media):not(.gone) {{ background: var(--mb); background-image: none; color: var(--mfg); box-shadow: none; }}",
+    f"{T} .them .bubble:not(.emoji):not(.media):not(.gone) {{ background: var(--tb); background-image: none; color: var(--tfg); box-shadow: none; }}",
     f"{T} .me .bubble a, {T} .me .bubble.file {{ color: var(--mfg); }}",
     f"{T} .them .bubble a, {T} .them .bubble.file {{ color: var(--tfg); }}",
     f"{T} :is(.day, .sys, .seen-by) {{ align-self: center; padding: 3px 11px; border-radius: 999px; background: var(--chip); color: var(--chipfg); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }}",
