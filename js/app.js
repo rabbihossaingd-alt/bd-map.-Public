@@ -848,18 +848,17 @@ function addAdmin(style, vector, dark) {
 }
 
 // ---- Standard, satellite and hybrid, as Apple and Google offer them ----
-// Imagery: Esri World Imagery (Esri, Vantor, Earthstar Geographics), through ArcGIS Location Platform with our key
-// (from the server, /api/map-config) so the use counts against our free allowance; without a key, the public copy.
-const SAT_PUBLIC = 'esri://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
-let SAT_TILES = SAT_PUBLIC;
-// The key is tried on one tile first: a wrong or expired key would turn every photo into an error, so then the
-// public copy is used instead.
+// Imagery: Esri World Imagery (Esri, Vantor, Earthstar Geographics), only through ArcGIS Location Platform with our
+// key (from the server, /api/map-config), as Esri's terms ask of an app like this. Without a working key there is no
+// satellite view: the map stays standard (Esri's keyless public copy is not for use in a commercial app).
+let SAT_TILES = '';
+// The key is tried on one tile first: a wrong or expired key would turn every photo into an error.
 const satKey = fetch('api/map-config').then(r => r.json()).then(async j => {
   if (!j.esriKey) return;
   const keyed = 'https://ibasemaps-api.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}?token=' + encodeURIComponent(j.esriKey);
   const test = await fetch(keyed.replace('{z}', '6').replace('{y}', '27').replace('{x}', '48'));
   if (test.ok && (test.headers.get('content-type') || '').startsWith('image')) SAT_TILES = keyed.replace('https://', 'esri://');
-  else console.warn('imagery key refused; using the public imagery');
+  else console.warn('imagery key refused; no satellite view');
 }).catch(() => {});
 let esriOn = false;
 const satShallow = new Map();
@@ -873,12 +872,7 @@ function satZoomLimit() {
   map.setMaxZoom(real != null ? Math.min(19, real + 1) : 19);
 }
 // A tile Esri has no photo for is drawn from its parent: the parent's quarter, enlarged (up to three levels up).
-// Esri's "Clarity" copy of World Imagery is tried first: one clear, recent photo per place, so the seams between
-// photos of different dates (a river in squares of three colours) mostly go. Where it has none it says 404.
-const CLARITY = 'https://clarity.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/';
 async function esriTile(url, signal, depth = 0) {
-  const zyx = /\/tile\/(\d+\/\d+\/\d+)/.exec(url);
-  if (zyx) { try { const c = await fetch(CLARITY + zyx[1], { signal }); if (c.ok && (c.headers.get('content-type') || '').startsWith('image')) return await c.arrayBuffer(); } catch (e) { if (signal.aborted) throw e; } }
   const r = await fetch(url, { signal });
   const data = await r.arrayBuffer();
   if (r.ok && data.byteLength !== 2521) return data;
@@ -896,11 +890,11 @@ async function esriTile(url, signal, depth = 0) {
 let mapMode = (() => { try { return localStorage.getItem('bdmap.mapmode') || 'hybrid'; } catch { return 'standard'; } })();
 const OUR_LAYERS = /^(route|bus|stops|places2|sat)/;
 async function setMapMode(mode) {
+  if (mode !== 'standard') { await satKey; if (!SAT_TILES) mode = 'standard'; }     // no working key: no satellite view
   mapMode = mode;
   try { localStorage.setItem('bdmap.mapmode', mode); } catch { /* storage off */ }
   if (!map || !map.getStyle()) return;
-  if (mode !== 'standard') await satKey;
-  if (!map.getSource('sat')) {
+  if (SAT_TILES && !map.getSource('sat')) {
     // Past its last zoom Esri answers with a grey 'Map data not yet available' picture (always the same 2,521
     // bytes) instead of an error. Treat it as missing, so the map stretches the last real photo, as Apple does.
     if (!esriOn) { maplibregl.addProtocol('esri', (req, abort) => esriTile(req.url.replace('esri://', 'https://'), abort.signal).then(data => ({ data }))); esriOn = true; }
@@ -938,11 +932,13 @@ async function setMapMode(mode) {
   const card = el('div', 'mm-panel');
   const head = el('div', 'mm-head'); head.append(el('b', null, 'ম্যাপের ধরন'));
   const x = el('button', 'mm-x'); x.innerHTML = svg('close'); x.setAttribute('aria-label', 'বন্ধ করুন'); head.appendChild(x);
-  const sat = SAT_TILES.replace('esri://', 'https://').replace('{z}', '15').replace('{y}', '14159').replace('{x}', '24613');
+  const satPic = () => SAT_TILES.replace('esri://', 'https://').replace('{z}', '15').replace('{y}', '14159').replace('{x}', '24613');
   const cards = el('div', 'mm-cards');
   for (const [mode, label] of [['standard', 'সাধারণ'], ['hybrid', 'হাইব্রিড'], ['satellite', 'স্যাটেলাইট']]) {
     const c = el('button', 'mm-card ' + mode); c.dataset.mode = mode;
-    const pic = el('span', 'mm-pic'); if (mode !== 'standard') pic.style.backgroundImage = `url("${sat}")`;
+    const pic = el('span', 'mm-pic');
+    // the photo cards wait for the key; without one they stay off
+    if (mode !== 'standard') satKey.then(() => { if (SAT_TILES) pic.style.backgroundImage = `url("${satPic()}")`; else { c.disabled = true; c.title = 'স্যাটেলাইট ছবি এখন পাওয়া যাচ্ছে না'; } });
     c.append(pic, el('span', 'mm-name', label));
     c.addEventListener('click', () => { setMapMode(mode); });
     cards.appendChild(c);
