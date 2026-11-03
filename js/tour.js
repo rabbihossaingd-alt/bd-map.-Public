@@ -441,15 +441,24 @@
     if (T < PH.fly) return wide;
     if (T < PH.go) return mix(wide, at(0), smooth((T - PH.fly) / (PH.go - PH.fly)));
     if (T < PH.land) return at(travel(T));
-    if (T < PH.back) return mix(at(1), all, smooth((T - PH.land) / (PH.back - PH.land)));
+    if (T < PH.back) { const k = (T - PH.land) / (PH.back - PH.land), punch = 1 + 0.08 * Math.sin(Math.PI * clamp(k * 3)) * (1 - k); const m = mix(at(1), all, smooth(k)); return { ...m, s: m.s * punch }; }
     return { ...all, s: all.s * (1 + 0.03 * smooth((T - PH.back) / (1 - PH.back))) };
   }
 
   // the base map: the sea, a faint grid of degrees, the land raised a little above it, its coast lit, the towns
   function mapBase(v, T, path) {
     const sea = ctx.createLinearGradient(0, 0, 0, H);
-    sea.addColorStop(0, '#081726'); sea.addColorStop(1, '#030b14');
+    sea.addColorStop(0, '#0a1f45'); sea.addColorStop(0.55, '#071a3a'); sea.addColorStop(1, '#040d22');
     ctx.fillStyle = sea; ctx.fillRect(0, 0, W, H);
+    // aurora: three soft lights drifting slowly — sky blue, magenta and teal
+    for (const [x, y, r, c] of [
+      [0.15 + 0.10 * Math.sin(T * 5), 0.18 + 0.06 * Math.cos(T * 4), 720, 'rgba(56,189,248,.26)'],
+      [0.88 + 0.07 * Math.cos(T * 4.4), 0.42 + 0.08 * Math.sin(T * 3.6), 760, 'rgba(217,70,239,.20)'],
+      [0.40 + 0.12 * Math.sin(T * 3 + 2), 0.92, 820, 'rgba(45,212,191,.22)']]) {
+      const ag = ctx.createRadialGradient(x * W, y * H, 0, x * W, y * H, r);
+      ag.addColorStop(0, c); ag.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = ag; ctx.fillRect(0, 0, W, H);
+    }
     ctx.save();
     ctx.strokeStyle = 'rgba(148,190,230,.06)'; ctx.lineWidth = 1.5;
     for (let lon = 78; lon <= 104; lon++) { const [a, b] = toScreen(v, [lon, 10]), [c, d] = toScreen(v, [lon, 34]); ctx.beginPath(); ctx.moveTo(a, b); ctx.lineTo(c, d); ctx.stroke(); }
@@ -464,13 +473,13 @@
     // the land, lifted off the sea by its shadow
     ctx.shadowColor = 'rgba(0,0,0,.65)'; ctx.shadowBlur = 50; ctx.shadowOffsetY = 22;
     const g = ctx.createLinearGradient(0, 0, 0, H);
-    g.addColorStop(0, '#173a35'); g.addColorStop(1, '#0e2826');
+    g.addColorStop(0, '#16705a'); g.addColorStop(0.6, '#0f5446'); g.addColorStop(1, '#0b3f3a');
     ctx.fillStyle = g; ctx.fill(land);
     ctx.shadowColor = 'transparent';
     // the coast: a wide soft glow, then a fine bright line, drawn in as the map appears
     ctx.lineJoin = 'round';
-    ctx.strokeStyle = 'rgba(45,212,191,.14)'; ctx.lineWidth = 14; ctx.stroke(land);
-    ctx.strokeStyle = 'rgba(153,246,228,.55)'; ctx.lineWidth = 2.4; ctx.stroke(land);
+    ctx.strokeStyle = 'rgba(45,212,191,.28)'; ctx.lineWidth = 22; ctx.stroke(land);
+    ctx.strokeStyle = 'rgba(167,243,208,.9)'; ctx.lineWidth = 3; ctx.stroke(land);
     // district towns: points of light, and their names once the camera is close
     const zoom = v.s / path.whole.s, nameA = clamp((zoom - 2.2) / 1.2) * 0.75;
     for (const d of DISTRICTS) {
@@ -555,8 +564,8 @@
       const trail = P.slice(0, head.j); trail.push([hx, hy]);
       const [sx, sy] = P[0], [ex, ey] = P.at(-1);
       const grad = ctx.createLinearGradient(sx, sy, ex, ey);
-      grad.addColorStop(0, '#2dd4bf'); grad.addColorStop(1, '#fbbf24');
-      for (const [w, c] of [[34, 'rgba(45,212,191,.16)'], [16, grad], [5, 'rgba(255,255,255,.9)']]) {
+      grad.addColorStop(0, '#fde047'); grad.addColorStop(0.55, '#fb923c'); grad.addColorStop(1, '#f472b6');
+      for (const [w, c] of [[46, 'rgba(251,146,60,.20)'], [26, 'rgba(253,224,71,.30)'], [14, grad], [5, 'rgba(255,255,255,.95)']]) {
         ctx.strokeStyle = c; ctx.lineWidth = w; ctx.beginPath(); trail.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.stroke();
       }
     }
@@ -611,7 +620,17 @@
     rise(`${tr(air ? 'বিমানে' : 'সড়কপথে')} · ${count(st.days, 'দিন', 'day', 'days')}${tripDate() ? ' · ' + tripDate() : ''}`, 72, 196, 32, (T - 0.02) * 12, { weight: 600, color: '#5eead4', tracking: 2 });
     setFont(800, 88, -2);
     const title = wrap(tripTitle(), W - 144).slice(0, 2);
-    title.forEach((l, i) => rise(l, 72, 290 + i * 96, 88, (T - 0.03 - i * 0.01) * 10, { tracking: -2 }));
+    title.forEach((l, i) => {
+      const k = pop((T - 0.03 - i * 0.012) * 9);
+      if (k <= 0) return;
+      ctx.save(); ctx.translate(72, 290 + i * 96); ctx.scale(k, k); ctx.translate(-72, -(290 + i * 96));
+      ctx.shadowColor = 'rgba(0,0,0,.45)'; ctx.shadowBlur = 24;
+      rise(l, 72, 290 + i * 96, 88, Math.min(1, k), { tracking: -2 });
+      ctx.restore();
+    });
+    { const u = smooth((T - 0.06) * 8), uy = 290 + title.length * 96 + 6; setFont(600, st.multi ? 32 : 38);
+      const uw = Math.min(W - 144, ctx.measureText(route).width) * u, ug = ctx.createLinearGradient(72, 0, 72 + uw, 0);
+      ug.addColorStop(0, '#fde047'); ug.addColorStop(1, '#fb923c'); ctx.fillStyle = ug; if (uw > 1) { ctx.beginPath(); ctx.roundRect(72, uy, uw, 6, 3); ctx.fill(); } }
     rise(route, 72, 290 + title.length * 96 - 18, st.multi ? 32 : 38, (T - 0.05) * 10, { weight: 600, color: 'rgba(255,255,255,.82)', max: W - 144 });
 
     // the panel at the foot: the journey while it runs, the crew once it is done
@@ -633,7 +652,7 @@
       // progress, with its two ends
       const bx = 92, bw = W - 184, by = py + 148;
       ctx.fillStyle = 'rgba(255,255,255,.14)'; ctx.beginPath(); ctx.roundRect(bx, by, bw, 10, 5); ctx.fill();
-      const pg = ctx.createLinearGradient(bx, 0, bx + bw, 0); pg.addColorStop(0, '#2dd4bf'); pg.addColorStop(1, '#fbbf24');
+      const pg = ctx.createLinearGradient(bx, 0, bx + bw, 0); pg.addColorStop(0, '#fde047'); pg.addColorStop(0.55, '#fb923c'); pg.addColorStop(1, '#f472b6');
       ctx.fillStyle = pg; ctx.beginPath(); ctx.roundRect(bx, by, Math.max(10, bw * p), 10, 5); ctx.fill();
       ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(bx + Math.max(5, bw * p), by + 5, 10, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
@@ -653,6 +672,23 @@
       setFont(500, 27); ctx.fillStyle = 'rgba(255,255,255,.7)';
       const facts = [count(st.days, 'দিন', 'day', 'days'), count(Math.round(tripKm()), 'কিমি', 'km', 'km'), st.multi ? count(st.stops.filter(d => d !== st.from).length, 'জেলা', 'district', 'districts') : (st.nights ? count(st.nights, 'রাত', 'night', 'nights') : tr('দিনে দিনে'))];
       ctx.fillText(facts.join(' · '), tx, py + 128, tw);
+      ctx.restore();
+    }
+    // arrival: confetti bursting from the destination
+    if (T > PH.land && T < PH.back + 0.06) {
+      const dest = path.stops.at(-1), [x, y] = toScreen(v, [dest.d.lon, dest.d.lat]), el = (T - PH.land) * 12;   // about seconds
+      const cols = ['#fde047', '#fb923c', '#f472b6', '#38bdf8', '#34d399', '#ffffff', '#a78bfa'];
+      ctx.save();
+      for (let i = 0; i < 80; i++) {
+        const ang = rand(i + 200) * Math.PI * 2, sp = 420 + rand(i + 201) * 620, vx = Math.cos(ang) * sp, vy = Math.sin(ang) * sp - 380;
+        const px = x + vx * el * (1 - el * 0.25), py = y - 40 + vy * el + 900 * el * el;
+        const a = 1 - clamp((el - 0.9) / 0.6);
+        if (a <= 0) continue;
+        ctx.globalAlpha = a; ctx.fillStyle = cols[i % cols.length];
+        ctx.save(); ctx.translate(px, py); ctx.rotate(el * (6 + rand(i + 202) * 10) + i);
+        if (i % 3) ctx.fillRect(-7, -3.5, 14, 7); else { ctx.beginPath(); ctx.arc(0, 0, 5, 0, Math.PI * 2); ctx.fill(); }
+        ctx.restore();
+      }
       ctx.restore();
     }
     // arrival: a gold pill over the destination
@@ -815,7 +851,7 @@
     // the photo, settling from a slow zoom
     const z = 1.14 - 0.14 * e(t / 0.8);
     ctx.save(); ctx.translate(W / 2, H / 2); ctx.scale(z, z); ctx.translate(-W / 2, -H / 2);
-    if (photo) { if ('filter' in ctx) ctx.filter = 'saturate(1.3) contrast(1.08)'; cover(photo, 0, 0, W, H); ctx.filter = 'none'; }
+    if (photo) { if ('filter' in ctx) ctx.filter = 'saturate(1.45) contrast(1.12) brightness(1.04)'; cover(photo, 0, 0, W, H); ctx.filter = 'none'; }
     else {
       const g = ctx.createLinearGradient(0, 0, W, H); g.addColorStop(0, '#0e5a7a'); g.addColorStop(0.55, '#0a7a5c'); g.addColorStop(1, '#073b33');
       ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
@@ -851,13 +887,17 @@
     ctx.save();
     ctx.globalAlpha = e((t - 0.08) * 4);
     ctx.translate(86, 300 - (1 - e((t - 0.08) * 4)) * 30); ctx.rotate(-0.07);
-    ctx.font = `400 96px ${SCRIPT}`; ctx.fillStyle = '#fbbf24';
+    ctx.font = `400 96px ${SCRIPT}`;
+    ctx.lineWidth = 10; ctx.strokeStyle = 'rgba(30,12,0,.45)'; ctx.lineJoin = 'round'; ctx.strokeText(tr(st.multi ? 'ঘুরে আসি' : 'চলো যাই'), 0, 0);
+    { const sg = ctx.createLinearGradient(0, -80, 0, 10); sg.addColorStop(0, '#fde047'); sg.addColorStop(1, '#fb923c'); ctx.fillStyle = sg; }
     ctx.shadowColor = 'rgba(0,0,0,.35)'; ctx.shadowBlur = 18;
     ctx.fillText(tr(st.multi ? 'ঘুরে আসি' : 'চলো যাই'), 0, 0);
     ctx.restore();
     const hs = fitFont(hero, 800, 210, W - 150, -6);
     ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.35)'; ctx.shadowBlur = 30; ctx.shadowOffsetY = 8;
-    rise(hero, 72, 300 + hs * 0.86, hs, (t - 0.14) * 3, { tracking: lerp(10, -6, e((t - 0.14) * 2.5)), max: W - 144 });
+    { const hg = ctx.createLinearGradient(0, 300, 0, 300 + hs); hg.addColorStop(0, '#ffffff'); hg.addColorStop(0.62, '#ffffff'); hg.addColorStop(1, '#fde68a');
+      const hk = pop((t - 0.14) * 3.2); ctx.translate(72, 300 + hs * 0.86); ctx.scale(Math.max(0.01, hk), Math.max(0.01, hk)); ctx.translate(-72, -(300 + hs * 0.86));
+      rise(hero, 72, 300 + hs * 0.86, hs, Math.min(1, hk), { tracking: lerp(10, -6, e((t - 0.14) * 2.5)), max: W - 144, color: hg }); }
     ctx.restore();
     const sub = own && own !== hero ? own : st.multi ? chainText() : tr(`${st.to.division} বিভাগ`) + ' · ' + tr('বাংলাদেশ');
     rise(sub, 78, 300 + hs * 0.86 + 70, 40, (t - 0.24) * 3, { weight: 600, color: 'rgba(255,255,255,.92)', max: W - 156 });
@@ -919,7 +959,7 @@
 
   // The whole piece, T from 0 to 1: the journey on the map, then the poster opens out of the destination's pin
   // in a widening circle and builds itself; the poster stays as the last frame (and is the picture saved).
-  const MAP_END = 0.7, IRIS = 0.06;
+  const MAP_END = 0.66, IRIS = 0.06;
   const buffer = document.createElement('canvas');
   function drawScene(T) {
     ctx.globalAlpha = 1; ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left';
@@ -943,7 +983,7 @@
     }
   }
 
-  function play(duration = 18000) {
+  function play(duration = 16000) {
     const mine = ++frame, start = performance.now();
     return new Promise(resolve => {
       const step = now => {
@@ -970,7 +1010,7 @@
     rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
     const done = new Promise(r => { rec.onstop = r; });
     rec.start();
-    const whole = await play(18000);
+    const whole = await play(16000);
     if (whole) for (let i = 0; i < 16; i++) { await new Promise(r => setTimeout(r, 100)); drawScene(1); }
     rec.stop();
     await done;
