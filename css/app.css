@@ -5216,3 +5216,57 @@ body.swipe-in .reels, body.swipe-in .live-hub { animation: slide-in-r .3s cubic-
 .vf-agree input { margin-top: 3px; width: 18px; height: 18px; flex: none; accent-color: #1d8cf8; }
 input.upper { text-transform: uppercase; }
 input.upper::placeholder { text-transform: none; }
+
+/* ---- ট্যুর প্ল্যান, refined: the app's own tile colours on every card, the cost bar in the same colours,
+   the app's green for the buttons, and the tour card as an inset list (as iOS settings) ---- */
+.tp { --tp-r: 24px; }
+.tp-card, .tp .tour-sum { border: 0; background: var(--bg); box-shadow: 0 1px 2px rgb(var(--black-rgb) / 0.04), 0 8px 28px -12px rgb(var(--black-rgb) / 0.14); }
+:root[data-theme="dark"] .tp-card, :root[data-theme="dark"] .tp .tour-sum { background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); }
+.tp-ic { width: 40px; height: 40px; border-radius: 12px; box-shadow: inset 0 1px 0 rgb(var(--white-rgb) / 0.35), inset 0 -1px 0 rgb(var(--black-rgb) / 0.12), 0 6px 14px -6px var(--tb, var(--brand)); }
+.tp-ic.c1 { --tb: var(--tile-blue-b); background: linear-gradient(165deg, var(--tile-blue-a), var(--tile-blue-b)); }
+.tp-ic.c2 { --tb: var(--tile-teal-b); background: linear-gradient(165deg, var(--tile-teal-a), var(--tile-teal-b)); }
+.tp-ic.c3 { --tb: var(--tile-violet-b); background: linear-gradient(165deg, var(--tile-violet-a), var(--tile-violet-b)); }
+.tp-ic.c4 { --tb: var(--tile-amber-b); background: linear-gradient(165deg, var(--tile-amber-a), var(--tile-amber-b)); }
+.tp-ic.c5 { --tb: var(--tile-pink-b); background: linear-gradient(165deg, var(--tile-pink-a), var(--tile-pink-b)); }
+/* the cost: each part in its card's colour (travel teal, stay violet, food amber, the rest blue) */
+.tp-bar { height: 8px; gap: 4px; }
+.tp-bar i { border-radius: 4px; }
+.tp-bar i:nth-child(1), .tp-rows .rule:nth-child(1)::before { background: linear-gradient(90deg, var(--tile-teal-a), var(--tile-teal-b)); }
+.tp-bar i:nth-child(2), .tp-rows .rule:nth-child(2)::before { background: linear-gradient(90deg, var(--tile-violet-a), var(--tile-violet-b)); }
+.tp-bar i:nth-child(3), .tp-rows .rule:nth-child(3)::before { background: linear-gradient(90deg, var(--tile-amber-a), var(--tile-amber-b)); }
+.tp-bar i:nth-child(4), .tp-rows .rule:nth-child(4)::before { background: linear-gradient(90deg, var(--tile-blue-a), var(--tile-blue-b)); }
+.tp-rows .rule::before { width: 10px; height: 10px; border-radius: 50%; margin-top: -5px; }
+.tp-sum::before { background: radial-gradient(circle, rgb(var(--brand-rgb) / 0.14), transparent 70%); }
+.tp-sum-top > b { color: var(--brand-text); }
+/* the app's green, lit from above, for the main buttons */
+.tp-go { background: linear-gradient(180deg, color-mix(in srgb, var(--brand) 88%, #fff), var(--brand)); color: var(--on-brand); border: 0;
+  box-shadow: inset 0 1px 0 rgb(var(--white-rgb) / 0.25), 0 10px 24px -10px rgb(var(--brand-rgb) / 0.7); gap: var(--space-2); }
+.tp-go:hover { filter: brightness(1.05); }
+.tp-go:active { transform: scale(.985); }
+.tp-go svg { width: 18px; height: 18px; }
+
+/* the tour card */
+.tp-make > header { margin-bottom: 20px; }
+.tpm-photos { padding: var(--space-4); border-radius: 18px; background: color-mix(in srgb, var(--ink) 4%, transparent); }
+.tpm-row { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: var(--space-3); }
+.tpm-row b { font-size: var(--fs-sm); font-weight: 800; }
+.tpm-row em { font-style: normal; font-size: var(--fs-xs); font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
+.tp-make .tour-thumbs { gap: 10px; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding: 2px; }
+.tp-make .tour-thumb { flex: none; width: 58px; height: 58px; border-radius: 50%; border: 0; box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px rgb(var(--brand-rgb) / 0.55); }
+.tp-make .tour-thumb.add { color: var(--brand-text); background: rgb(var(--brand-rgb) / 0.10); box-shadow: inset 0 0 0 2px rgb(var(--brand-rgb) / 0.45); border: 0; }
+.tp-make .tour-thumb.add:hover { background: rgb(var(--brand-rgb) / 0.16); }
+.tpm-lock { display: flex; align-items: center; gap: 6px; margin: var(--space-3) 0 0; font-size: var(--fs-xs); color: var(--muted); }
+.tpm-lock svg { width: 13px; height: 13px; flex: none; }
+.tpm-list { margin-top: var(--space-3); border-radius: 18px; background: color-mix(in srgb, var(--ink) 4%, transparent); overflow: hidden; }
+.tpm-field { position: relative; display: flex; align-items: center; gap: var(--space-3); padding: 12px var(--space-4); cursor: text; transition: background .2s; }
+.tpm-field + .tpm-field::before { content: ""; position: absolute; top: 0; left: 56px; right: 0; height: 1px; background: var(--line); }
+.tpm-field:focus-within { background: color-mix(in srgb, var(--brand) 7%, transparent); }
+.tpm-i { flex: none; width: 24px; height: 24px; display: grid; place-items: center; color: var(--muted); }
+.tpm-i svg { width: 20px; height: 20px; }
+.tpm-field:focus-within .tpm-i { color: var(--brand-text); }
+.tpm-field > span { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.tpm-field small { font-size: 11px; font-weight: 700; color: var(--muted); letter-spacing: .01em; }
+.tpm-field input { width: 100%; min-width: 0; border: 0; outline: 0; padding: 2px 0; margin: 0; background: none; color: var(--ink); font: inherit; font-size: var(--fs-md); font-weight: 600; box-shadow: none; }
+.tpm-field input::placeholder { color: var(--muted); opacity: .6; font-weight: 500; }
+.tpm-field input[type="date"] { min-height: 26px; color-scheme: light dark; }
+.tp-make .tp-go { margin-top: 20px; height: 54px; border-radius: 18px; }

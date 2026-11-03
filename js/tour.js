@@ -199,6 +199,7 @@
   // ---- photos ----
   function drawThumbs() {
     const box = $('tour-photos');
+    if ($('tour-photo-n')) $('tour-photo-n').textContent = `${num(photos.length)}/${num(5)}`;
     box.replaceChildren(...photos.map((img, i) => {
       const b = el('button', 'tour-thumb');
       b.setAttribute('aria-label', 'ছবি সরান');
