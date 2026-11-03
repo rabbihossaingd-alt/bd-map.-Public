@@ -688,7 +688,7 @@
   // The photos are the destination districts' own (their guide covers and best places), loaded with CORS so the
   // poster can still be saved. No money is shown.
   const mosaicCache = new Map();
-  let mosaic = [];
+  let mosaic = [], mosaicCredit = [];
   function loadImage(url) {
     if (!url) return Promise.resolve(null);
     if (!mosaicCache.has(url)) mosaicCache.set(url, new Promise(res => { const i = new Image(); i.crossOrigin = 'anonymous'; i.onload = () => res(i); i.onerror = () => res(null); i.src = typeof sized === 'function' ? sized(url, 960) : url; }));
@@ -705,7 +705,19 @@
     for (const d of visit) {                          // then their best-known places, to fill three tiles
       for (const s of ((G && G[d.id] && G[d.id].sights) || []).filter(s => s.img).slice(0, 3)) if (urls.length < 3 && !seen.has(s.img)) { seen.add(s.img); urls.push(s.img); }
     }
-    mosaic = (await Promise.all(urls.slice(0, 3).map(loadImage))).filter(Boolean);
+    // who took each photo, and its licence (tools/add-photo-credits.mjs): the poster prints the one it shows
+    const creditOf = u => {
+      for (const d of visit) {
+        const g = G && G[d.id]; if (!g) continue;
+        if (g.img === u) return { by: g.fileBy || '', lic: g.fileLic || '' };
+        for (const x of g.sights || []) if (x.img === u) return { by: x.imgBy || '', lic: x.imgLic || '' };
+      }
+      return { by: '', lic: '' };
+    };
+    const got = await Promise.all(urls.slice(0, 3).map(async u => ({ img: await loadImage(u), credit: creditOf(u) })));
+    const ok = got.filter(x => x.img);
+    mosaic = ok.map(x => x.img);
+    mosaicCredit = ok.map(x => x.credit);
   }
   function miniMap(x, y, h, p) {
     const b = boundsOf(BD_OUTLINE[0]), s = h / (b.y1 - b.y0), w = (b.x1 - b.x0) * s;
@@ -932,7 +944,18 @@
     ctx.globalAlpha = e((t - 0.7) * 4);
     setFont(600, 22); ctx.fillStyle = 'rgba(255,255,255,.6)';
     ctx.fillText(tr('Manzeela দিয়ে পরিকল্পনা') + ' · manzeela.com', 72, H - 24);
-    if (photo) { ctx.textAlign = 'right'; ctx.fillText(tr('ছবি: উইকিমিডিয়া কমন্স'), W - 72, H - 24); ctx.textAlign = 'left'; }
+    if (photo) {
+      // the photographer and the licence, as CC BY and CC BY-SA ask; cut short with … where it would reach the left line
+      const c = mosaicCredit[0] || {}, room = W - 144 - ctx.measureText(tr('Manzeela দিয়ে পরিকল্পনা') + ' · manzeela.com').width - 32;
+      let line = `${tr('ছবি')}: ${c.by || tr('উইকিমিডিয়া কমন্স')}${c.lic ? ' · ' + c.lic : ''}`;
+      if (ctx.measureText(line).width > room) {
+        const tail = c.lic ? ' · ' + c.lic : '';
+        let by = c.by || '';
+        while (by.length > 1 && ctx.measureText(`${tr('ছবি')}: ${by}…${tail}`).width > room) by = by.slice(0, -1);
+        line = `${tr('ছবি')}: ${by}…${tail}`;
+      }
+      ctx.textAlign = 'right'; ctx.fillText(line, W - 72, H - 24); ctx.textAlign = 'left';
+    }
     ctx.globalAlpha = 1;
   }
 

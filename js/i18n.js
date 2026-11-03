@@ -426,6 +426,7 @@ const EXACT = {
   'মাসে $১ থেকে · শর্ত ও প্ল্যান': 'From $1 a month · rules and plans',
   'লাইসেন্স ও উৎস': 'Licences and sources', 'লাইসেন্স': 'Licences',
   // the tour poster
+  'ছবি': 'Photo',
   'দলের ছবি': 'Group photos', 'ছবি আপনার ফোনেই থাকে, কোথাও আপলোড হয় না।': 'Photos stay on your phone and are never uploaded.', 'ম্যাপে যাত্রার ভিডিও আর শেয়ার করার পোস্টার': 'A video of the journey on the map, and a poster to share', 'কার্ড আর ভিডিও বানান': 'Make the card and video', 'সদস্যদের নাম (কমা দিয়ে)': 'Names (separated by commas)',
   'ট্যুর পাস': 'TOUR PASS', 'থেকে': 'From', 'গন্তব্য': 'To', 'হয়ে': 'Via', 'সময়': 'Time', 'পথ': 'Distance', 'দল': 'Group', 'থাকা': 'Stay',
   'চলো যাই': 'Let’s go', 'ঘুরে আসি': 'Off we go', 'বাংলাদেশ': 'Bangladesh', 'Manzeela দিয়ে পরিকল্পনা': 'Planned with Manzeela', 'বঙ্গোপসাগর': 'Bay of Bengal',
