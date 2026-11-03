@@ -253,9 +253,9 @@
     return lines;
   }
 
-  // ---- the story and the card: motion graphics over a dark, softly lit stage ----
-  // Five beats: the title, the crew, the journey across the map of Bangladesh, arrival over a photo of the
-  // place, and the card. No money is shown anywhere — the card is about the trip, not its cost.
+  // ---- the story and the card ----
+  // The story is the journey on the map of Bangladesh; the card (the picture that is saved) is a poster of the
+  // trip. No money is shown anywhere — they are about the trip, not its cost.
   const TINTS = ['#2dd4bf', '#f59e0b', '#f472b6', '#8b5cf6', '#22c55e'];
   const FONT = '"Anek Bangla", sans-serif';
   const lerp = (a, b, k) => a + (b - a) * k;
@@ -299,23 +299,6 @@
     ctx.fillText(text, x, y + (1 - e) * size * 0.9, max);
     ctx.restore();
     if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
-  }
-  // The stage: near-black with slow, drifting light — teal, emerald and violet.
-  function stage(t, warm = 0) {
-    ctx.fillStyle = '#04070d'; ctx.fillRect(0, 0, W, H);
-    const blobs = [
-      [0.2 + 0.08 * Math.sin(t * 2.1), 0.22 + 0.05 * Math.cos(t * 1.7), 760, warm ? 'rgba(251,146,60,.30)' : 'rgba(45,212,191,.28)'],
-      [0.85 + 0.06 * Math.cos(t * 1.3), 0.45 + 0.06 * Math.sin(t * 1.9), 820, 'rgba(139,92,246,.26)'],
-      [0.35 + 0.1 * Math.sin(t * 1.1 + 2), 0.95, 900, 'rgba(34,197,94,.20)']
-    ];
-    for (const [x, y, r, c] of blobs) {
-      const g = ctx.createRadialGradient(x * W, y * H, 0, x * W, y * H, r);
-      g.addColorStop(0, c); g.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-    }
-    const v = ctx.createRadialGradient(W / 2, H / 2, H * 0.35, W / 2, H / 2, H * 0.85);
-    v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,.55)');
-    ctx.fillStyle = v; ctx.fillRect(0, 0, W, H);
   }
   function glass(x, y, w, h, r, { blurFrom = null, tint = 'rgba(255,255,255,.10)' } = {}) {
     ctx.save();
@@ -362,16 +345,6 @@
     ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.lineWidth = Math.max(3, r * 0.06);
     ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
   }
-  // Soft out-of-focus lights drifting upward.
-  function bokeh(t, n = 26, a = 1) {
-    for (let i = 0; i < n; i++) {
-      const r = 10 + rand(i) * 46, x = rand(i + 11) * W + Math.sin(t * 3 + i) * 24;
-      const y = H + 80 - ((rand(i + 23) * H + t * (260 + rand(i + 5) * 340)) % (H + 160));
-      const g = ctx.createRadialGradient(x, y, 0, x, y, r);
-      g.addColorStop(0, `rgba(255,240,210,${0.35 * a * (0.4 + rand(i + 7) * 0.6)})`); g.addColorStop(1, 'rgba(255,240,210,0)');
-      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
-    }
-  }
   // Small line icons, drawn in a 48 px box centred on (0, 0).
   function glyph(kind, color = '#04140f') {
     ctx.strokeStyle = color; ctx.lineWidth = 3.4; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
@@ -410,21 +383,6 @@
   const blend = (a, b, k) => ({ s: Math.exp(lerp(Math.log(a.s), Math.log(b.s), k)), cx: lerp(a.cx, b.cx, k), cy: lerp(a.cy, b.cy, k), ox: a.ox, oy: a.oy });
   const toScreen = (v, p) => { const [x, y] = proj(p); return [v.ox + (x - v.cx) * v.s, v.oy + (y - v.cy) * v.s]; };
 
-  function country(v, a) {
-    ctx.save(); ctx.globalAlpha = a;
-    for (const ring of BD_OUTLINE) {
-      ctx.beginPath();
-      ring.forEach((p, i) => { const [x, y] = toScreen(v, p); if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); });
-      ctx.closePath();
-      const g = ctx.createLinearGradient(0, 300, 0, H - 200);
-      g.addColorStop(0, 'rgba(45,212,191,.16)'); g.addColorStop(1, 'rgba(34,197,94,.08)');
-      ctx.fillStyle = g; ctx.fill();
-      ctx.strokeStyle = 'rgba(94,234,212,.55)'; ctx.lineWidth = 2.5; ctx.stroke();
-    }
-    // the district towns, as faint points of light
-    for (const d of DISTRICTS) { const [x, y] = toScreen(v, [d.lon, d.lat]); ctx.fillStyle = 'rgba(255,255,255,.28)'; ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2); ctx.fill(); }
-    ctx.restore();
-  }
   // Districts the road passes, in order, with how far along the road each one is (0..1).
   function along(line) {
     const pts = []; let run = 0;
@@ -437,153 +395,242 @@
     }).filter(x => x.dist < cut && x.u > 0.06 && x.u < 0.94).sort((x, y) => x.u - y.u).slice(0, 5);
   }
 
-  // ---- beat 1: the title ----
-  function beatTitle(t) {
-    stage(t);
-    bokeh(t, 14, 0.5);
-    const k = clamp(t / 0.8);
-    rise(tr(ST().air ? 'বিমানে' : 'সড়কপথে') + ' · ' + tr(`${num(ST().nights + 1)} দিন`), 72, 520, 36, k * 3, { weight: 600, color: 'rgba(255,255,255,.7)', tracking: 2 });
-    setFont(800, 132, -3);
-    const lines = wrap(tripTitle(), W - 144).slice(0, 2);
-    lines.forEach((l, i) => rise(l, 72, 680 + i * 150, 132, (k - 0.12 - i * 0.1) * 2.4, { tracking: -3 }));
-    const y = 680 + lines.length * 150;
-    rise(ST().multi ? chainText() : `${tr(ST().from.bn)}  →  ${tr(ST().to.bn)}`, 72, y, ST().multi ? 40 : 50, (k - 0.35) * 2.5, { weight: 600, color: 'rgba(255,255,255,.88)' });
-    if (tripDate()) rise(tripDate(), 72, y + 74, 38, (k - 0.45) * 2.5, { weight: 500, color: 'rgba(255,255,255,.6)' });
-    // a sweep of light across the stage
-    const sx = lerp(-400, W + 400, smooth((t - 0.2) / 0.6));
-    const sw = ctx.createLinearGradient(sx - 200, 0, sx + 200, 0);
-    sw.addColorStop(0, 'rgba(255,255,255,0)'); sw.addColorStop(0.5, 'rgba(255,255,255,.07)'); sw.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.fillStyle = sw; ctx.fillRect(0, 0, W, H);
+  // ---- the story: one continuous flight over the map of Bangladesh ----
+  // The country rises out of the dark, the camera flies down to where the trip starts, follows the bus (or the
+  // plane) along the real road while the kilometres count up and towns on the way light up, a pin drops at the
+  // destination, and the camera pulls back over the whole route with the trip's name and its people.
+  const toScreenP = (v, [x, y]) => [v.ox + (x - v.cx) * v.s, v.oy + (y - v.cy) * v.s];
+  const mix = (a, b, k) => ({ s: Math.exp(lerp(Math.log(a.s), Math.log(b.s), k)), cx: lerp(a.cx, b.cx, k), cy: lerp(a.cy, b.cy, k), ox: lerp(a.ox, b.ox, k), oy: lerp(a.oy, b.oy, k) });
+  let pathCache = null;
+  // the route in map units, with its length so far at each point, where each stop sits on it, and the towns it passes
+  function routePath() {
+    const line = routeLine(), key = ST().stops.map(d => d.id).join('>') + ':' + line.length + ':' + line[0] + ':' + line.at(-1) + ':' + ST().air;
+    if (pathCache && pathCache.key === key) return pathCache;
+    const P = line.map(proj), len = [0];
+    for (let i = 1; i < P.length; i++) len.push(len[i - 1] + Math.hypot(P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1]));
+    const total = len.at(-1) || 1e-9;
+    const stops = ST().stops.filter((d, i, a) => a.indexOf(d) === i).map(d => {
+      if (d === ST().from) return { d, u: 0 };
+      const q = proj([d.lon, d.lat]); let bi = 0, bd = Infinity;
+      P.forEach((p, i) => { const dd = Math.hypot(p[0] - q[0], p[1] - q[1]); if (dd < bd) { bd = dd; bi = i; } });
+      return { d, u: len[bi] / total };
+    });
+    pathCache = { key, line, P, len, total, stops, towns: along(line), whole: fit(boundsOf(BD_OUTLINE[0]), 56), all: { ...fit(boundsOf(line), 170), oy: 780 } };
+    return pathCache;
+  }
+  // a point (and the heading) at a fraction of the way
+  function pointAt(path, u) {
+    const target = path.total * clamp(u), { P, len } = path;
+    if (P.length < 2) return { x: P[0][0], y: P[0][1], ang: 0 };
+    let j = 1; while (j < P.length - 1 && len[j] < target) j++;
+    const k = clamp((target - len[j - 1]) / ((len[j] - len[j - 1]) || 1));
+    return { x: lerp(P[j - 1][0], P[j][0], k), y: lerp(P[j - 1][1], P[j][1], k), j, ang: Math.atan2(P[j][1] - P[j - 1][1], P[j][0] - P[j - 1][0]) };
+  }
+  // the timeline (T from 0 to 1)
+  const PH = { fly: 0.09, go: 0.2, land: 0.8, back: 0.9 };
+  const travel = T => { const x = clamp((T - PH.go) / (PH.land - PH.go)); return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2; };   // ease in and out
+  function camera(T, path) {
+    const { whole, all } = path;
+    const near = Math.min(Math.max(all.s * 2.2, whole.s * 3.2), whole.s * 4.5);
+    const at = u => { const h = pointAt(path, u); return { s: near, cx: h.x, cy: h.y, ox: W / 2, oy: H * 0.5 }; };
+    const wide = { ...whole, s: whole.s * (0.94 + 0.06 * smooth(T / PH.fly)) };
+    if (T < PH.fly) return wide;
+    if (T < PH.go) return mix(wide, at(0), smooth((T - PH.fly) / (PH.go - PH.fly)));
+    if (T < PH.land) return at(travel(T));
+    if (T < PH.back) return mix(at(1), all, smooth((T - PH.land) / (PH.back - PH.land)));
+    return { ...all, s: all.s * (1 + 0.03 * smooth((T - PH.back) / (1 - PH.back))) };
   }
 
-  // ---- beat 2: the crew ----
-  function beatCrew(t) {
-    stage(t + 1);
-    bokeh(t + 1, 18, 0.6);
-    const n = groupSize(), nm = names();
-    rise(tr('সঙ্গে যারা'), 72, 300, 42, t * 3, { weight: 600, color: 'rgba(255,255,255,.7)', tracking: 2 });
-    rise(nm.length ? joined(nm.slice(0, n)) : tr(`${num(ST().people)} জনের দল`), 72, 400, 76, (t - 0.08) * 3, { max: W - 144 });
-    // faces on a gentle arc, each arriving with a spring
-    const r = n > 3 ? 112 : 136, gap = Math.min(r * 2.15, (W - 144 - r * 2) / Math.max(1, n - 1));
-    for (let i = 0; i < n; i++) {
-      const s = pop((t - 0.18 - i * 0.08) / 0.32);
-      if (s <= 0) continue;
-      const cx = W / 2 + (i - (n - 1) / 2) * gap, cy = 820 - Math.cos((i - (n - 1) / 2) / Math.max(1, n - 1) * 1.6) * 60 + Math.sin(t * 6 + i) * 6;
-      ctx.save(); ctx.translate(cx, cy); ctx.scale(s, s);
-      ctx.globalAlpha = Math.min(1, s);
-      face(i, 0, 0, r, 1);
-      ctx.restore();
-      if (nm[i]) { ctx.globalAlpha = clamp((t - 0.3 - i * 0.08) * 4); glassPill(nm[i], cx, cy + r + 30, { size: 30, align: 'center' }); ctx.globalAlpha = 1; }
-    }
-    if (ST().people > n) { ctx.globalAlpha = clamp((t - 0.6) * 4); glassPill(tr(`আরও ${num(ST().people - n)} জন`), W / 2, 1120, { size: 30, align: 'center' }); ctx.globalAlpha = 1; }
-  }
-
-  // ---- beat 3: the journey on the map ----
-  function beatJourney(t) {
-    stage(t + 2);
-    const line = routeLine(), air = ST().air;
-    const whole = fit(boundsOf(BD_OUTLINE[0]), 70), near = fit(boundsOf(line), 190);
-    // the camera settles from the whole country onto the route, and drifts with the traveller
-    const p = smooth((t - 0.12) / 0.78);                           // how far along the route
-    let v = blend(whole, near, smooth(t / 0.3) * (ST().multi ? 1 : 0.85));
-    country(v, smooth(t / 0.15));
-    // route: a faint full line, then the travelled part glowing, with a bright head
-    const pts = line.map(q => toScreen(v, q));
-    const lens = [0]; for (let i = 1; i < pts.length; i++) lens.push(lens[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
-    const total = lens.at(-1) || 1, upto = total * p;
-    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    ctx.strokeStyle = 'rgba(255,255,255,.18)'; ctx.lineWidth = 4; ctx.setLineDash([2, 14]);
-    ctx.beginPath(); pts.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.stroke(); ctx.setLineDash([]);
-    let head = pts[0], j = 0;
-    const trail = [pts[0]];
-    for (j = 1; j < pts.length && lens[j] <= upto; j++) trail.push(pts[j]);
-    if (j < pts.length) { const k = (upto - lens[j - 1]) / ((lens[j] - lens[j - 1]) || 1); head = [lerp(pts[j - 1][0], pts[j][0], k), lerp(pts[j - 1][1], pts[j][1], k)]; trail.push(head); } else head = pts.at(-1);
-    for (const [w, c] of [[26, 'rgba(45,212,191,.16)'], [14, 'rgba(94,234,212,.35)'], [6, '#ecfeff']]) {
-      ctx.strokeStyle = c; ctx.lineWidth = w; ctx.beginPath(); trail.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.stroke();
-    }
-    // the two ends
-    const ends = ST().stops.filter((d, i, a) => a.indexOf(d) === i).map((d, i) => [toScreen(v, [d.lon, d.lat]), d, 0.05 + i * 0.04]);
-    for (const [n, [[x, y], d, when]] of ends.entries()) {
-      const s = pop((t - when) / 0.2);
-      if (s <= 0) continue;
-      const arrived = d !== ST().from && p > 0.98;
-      ctx.fillStyle = arrived ? 'rgba(251,191,36,.35)' : 'rgba(255,255,255,.18)'; ctx.beginPath(); ctx.arc(x, y, 30 * s * (arrived ? 1 + 0.25 * Math.sin(t * 30) : 1), 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = d !== ST().from ? '#fbbf24' : '#ffffff'; ctx.beginPath(); ctx.arc(x, y, 12 * s, 0, Math.PI * 2); ctx.fill();
-      ctx.globalAlpha = Math.min(1, s);
-      const below = ST().multi ? n % 2 === 0 : y <= H * 0.6;             // close stops take turns above and below their dot
-      glassPill(tr(d.bn), x, y + (below ? 34 : -96), { size: ST().multi ? 26 : 30, align: 'center', strong: d !== ST().from });
-      ctx.globalAlpha = 1;
-    }
-    // towns on the way light up as the head passes them
-    for (const x of along(line)) {
-      if (x.u > p) continue;
-      const [tx, ty] = toScreen(v, [x.d.lon, x.d.lat]), a = clamp((p - x.u) * 10);
-      ctx.globalAlpha = a; ctx.fillStyle = '#5eead4'; ctx.beginPath(); ctx.arc(tx, ty, 8, 0, Math.PI * 2); ctx.fill();
-      setFont(600, 26); ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.textAlign = tx > W / 2 ? 'right' : 'left';
-      ctx.fillText(tr(x.d.bn), tx + (tx > W / 2 ? -18 : 18), ty + 9); ctx.textAlign = 'left'; ctx.globalAlpha = 1;
-    }
-    // the traveller: a white disc with a bus or a plane, and a soft halo
-    if (p > 0.001 && p < 0.995) {
-      const halo = ctx.createRadialGradient(head[0], head[1], 0, head[0], head[1], 90);
-      halo.addColorStop(0, 'rgba(94,234,212,.55)'); halo.addColorStop(1, 'rgba(94,234,212,0)');
-      ctx.fillStyle = halo; ctx.beginPath(); ctx.arc(head[0], head[1], 90, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(head[0], head[1], 34, 0, Math.PI * 2); ctx.fill();
-      ctx.save(); ctx.translate(head[0], head[1]); glyph(air ? 'plane' : 'bus'); ctx.restore();
-    }
-    // headline and the panel with the distance counting up
-    rise(tr('যাত্রা শুরু'), 72, 190, 40, t * 4, { weight: 600, color: 'rgba(255,255,255,.65)', tracking: 2 });
-    rise(ST().multi ? chainText() : `${tr(ST().from.bn)} → ${tr(ST().to.bn)}`, 72, 284, ST().multi ? 52 : 80, (t - 0.04) * 4, { max: W - 144 });
-    const py = H - 268;
-    ctx.globalAlpha = clamp((t - 0.1) * 5);
-    glass(48, py, W - 96, 200, 40, { tint: 'rgba(255,255,255,.08)' });
-    setFont(800, 92, -2); ctx.fillStyle = '#ffffff'; ctx.fillText(num(Math.round(tripKm() * p)), 92, py + 122);
-    const kw = ctx.measureText(num(Math.round(tripKm() * p))).width;
-    setFont(600, 38); ctx.fillStyle = 'rgba(255,255,255,.7)'; ctx.fillText(tr('কিমি'), 92 + kw + 14, py + 122);
-    setFont(600, 30); ctx.fillStyle = 'rgba(255,255,255,.65)';
-    ctx.fillText(tr(air ? 'আকাশপথে' : 'সড়কপথে'), 92, py + 168);
-    ctx.textAlign = 'right'; setFont(700, 40); ctx.fillStyle = '#ffffff';
-    ctx.fillText(p > 0.98 ? tr('পৌঁছে গেছি') : tr(`আর ${fmtMin(tripHours() * (1 - p) * 60)}`), W - 92, py + 112);
-    setFont(500, 28); ctx.fillStyle = 'rgba(255,255,255,.6)';
-    ctx.fillText(tr(`মোট প্রায় ${fmtMin(tripHours() * 60)}`), W - 92, py + 160);
-    ctx.textAlign = 'left'; ctx.globalAlpha = 1;
-  }
-
-  // ---- beat 4: arrival ----
-  function placeBackdrop(z) {
+  // the base map: the sea, a faint grid of degrees, the land raised a little above it, its coast lit, the towns
+  function mapBase(v, T, path) {
+    const sea = ctx.createLinearGradient(0, 0, 0, H);
+    sea.addColorStop(0, '#081726'); sea.addColorStop(1, '#030b14');
+    ctx.fillStyle = sea; ctx.fillRect(0, 0, W, H);
     ctx.save();
-    ctx.translate(W / 2, H / 2); ctx.scale(z, z); ctx.translate(-W / 2, -H / 2);
-    const pic = ST().multi && mosaic[0] ? mosaic[0] : backdrop;      // several districts: the trip's best photo
-    if (pic) cover(pic, 0, 0, W, H);
-    else { stage(2.5, 1); }
+    ctx.strokeStyle = 'rgba(148,190,230,.06)'; ctx.lineWidth = 1.5;
+    for (let lon = 78; lon <= 104; lon++) { const [a, b] = toScreen(v, [lon, 10]), [c, d] = toScreen(v, [lon, 34]); ctx.beginPath(); ctx.moveTo(a, b); ctx.lineTo(c, d); ctx.stroke(); }
+    for (let lat = 10; lat <= 34; lat++) { const [a, b] = toScreen(v, [78, lat]), [c, d] = toScreen(v, [104, lat]); ctx.beginPath(); ctx.moveTo(a, b); ctx.lineTo(c, d); ctx.stroke(); }
+    ctx.restore();
+    const show = smooth(T / 0.06);
+    const land = new Path2D();
+    for (const ring of BD_OUTLINE) { ring.forEach((p, i) => { const [x, y] = toScreen(v, p); if (i) land.lineTo(x, y); else land.moveTo(x, y); }); land.closePath(); }
+    ctx.save(); ctx.globalAlpha = show;
+    // the sea's name, quietly
+    { const [bx, by] = toScreen(v, [90.4, 20.9]); setFont(600, 30); ctx.fillStyle = 'rgba(148,190,230,.30)'; ctx.textAlign = 'center'; ctx.fillText(tr('বঙ্গোপসাগর'), bx, by); ctx.textAlign = 'left'; }
+    // the land, lifted off the sea by its shadow
+    ctx.shadowColor = 'rgba(0,0,0,.65)'; ctx.shadowBlur = 50; ctx.shadowOffsetY = 22;
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, '#173a35'); g.addColorStop(1, '#0e2826');
+    ctx.fillStyle = g; ctx.fill(land);
+    ctx.shadowColor = 'transparent';
+    // the coast: a wide soft glow, then a fine bright line, drawn in as the map appears
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = 'rgba(45,212,191,.14)'; ctx.lineWidth = 14; ctx.stroke(land);
+    ctx.strokeStyle = 'rgba(153,246,228,.55)'; ctx.lineWidth = 2.4; ctx.stroke(land);
+    // district towns: points of light, and their names once the camera is close
+    const zoom = v.s / path.whole.s, nameA = clamp((zoom - 2.2) / 1.2) * 0.75;
+    for (const d of DISTRICTS) {
+      const [x, y] = toScreen(v, [d.lon, d.lat]);
+      if (x < -60 || x > W + 60 || y < -60 || y > H + 60) continue;
+      ctx.fillStyle = 'rgba(255,255,255,.30)'; ctx.beginPath(); ctx.arc(x, y, zoom > 2 ? 5 : 3.5, 0, Math.PI * 2); ctx.fill();
+      if (nameA > 0 && !ST().stops.includes(d)) { setFont(500, 24); ctx.fillStyle = `rgba(226,240,236,${nameA * 0.7})`; ctx.fillText(tr(d.bn), x + 12, y + 8); }
+    }
     ctx.restore();
   }
-  function beatArrive(t) {
-    const z = 1.18 - 0.14 * smooth(t);
-    placeBackdrop(z);
-    const veil = ctx.createLinearGradient(0, 0, 0, H);
-    veil.addColorStop(0, 'rgba(2,6,12,.55)'); veil.addColorStop(0.35, 'rgba(2,6,12,.05)'); veil.addColorStop(0.7, 'rgba(2,6,12,.25)'); veil.addColorStop(1, 'rgba(2,6,12,.85)');
-    ctx.fillStyle = veil; ctx.fillRect(0, 0, W, H);
-    // letterbox bars opening
-    const bar = 90 * (1 - smooth(t / 0.35));
-    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, bar); ctx.fillRect(0, H - bar, W, bar);
-    bokeh(t + 3, 22, 0.8);
-    rise(ST().multi ? tr('সব ঘুরে এলাম') : tr('পৌঁছে গেছি'), 72, 230, 42, (t - 0.1) * 3, { weight: 600, color: 'rgba(255,255,255,.8)', tracking: 3 });
-    // the place's name, its letters drawing closer together as it settles
-    const k = smooth((t - 0.15) / 0.45);
-    rise(ST().multi ? tr(`${num(ST().stops.filter(d => d !== ST().from).length)} জেলা ঘুরে`) : tr(ST().to.bn), 72, 380, ST().multi ? 120 : 150, k * 1.4, { tracking: lerp(18, -3, k), max: W - 144 });
-    rise(ST().multi ? ST().stops.filter(d => d !== ST().from).map(d => tr(d.bn)).join(' · ') : tr(`${ST().to.division} বিভাগ`), 72, 450, 36, (t - 0.35) * 3, { weight: 500, color: 'rgba(255,255,255,.75)' });
-    // the crew in a glass strip
-    const n = groupSize(), nm = names(), r = 58, step = 104;
-    const y = H - 260;
-    ctx.globalAlpha = clamp((t - 0.4) * 3);
-    glass(60, y, W - 120, 168, 84, { blurFrom: () => placeBackdrop(z), tint: 'rgba(255,255,255,.12)' });
-    for (let i = 0; i < n; i++) face(i, 60 + 84 + i * step, y + 84, r);
-    setFont(700, 34); ctx.fillStyle = '#ffffff';
-    const label = nm.length ? joined(nm.slice(0, n)) : tr(`${num(ST().people)} জন`);
-    ctx.fillText(label, 60 + 84 + n * step - 20, y + 78, W - 120 - (84 + n * step) - 20);
-    setFont(500, 28); ctx.fillStyle = 'rgba(255,255,255,.75)';
-    ctx.fillText(tr(`${num(ST().days)} দিনের ট্যুর`), 60 + 84 + n * step - 20, y + 120, W - 120 - (84 + n * step) - 20);
-    ctx.globalAlpha = 1;
+  // a map pin that drops in and lands with a ripple
+  function pin(x, y, color, s, t) {
+    if (s <= 0) return;
+    const drop = (1 - Math.min(1, s)) * 90;
+    ctx.save();
+    // the ripple where it lands
+    if (s >= 1) for (let k = 0; k < 2; k++) {
+      const r = ((t * 1.6 + k * 0.5) % 1);
+      ctx.strokeStyle = color; ctx.globalAlpha = 0.5 * (1 - r); ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.ellipse(x, y, 20 + r * 60, (20 + r * 60) * 0.42, 0, 0, Math.PI * 2); ctx.stroke();
+    }
+    ctx.globalAlpha = Math.min(1, s * 1.5);
+    ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.beginPath(); ctx.ellipse(x, y + 2, 14, 6, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.translate(x, y - drop);
+    ctx.shadowColor = 'rgba(0,0,0,.45)'; ctx.shadowBlur = 18; ctx.shadowOffsetY = 8;
+    ctx.fillStyle = color;
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.bezierCurveTo(-8, -18, -28, -30, -28, -54); ctx.arc(0, -54, 28, Math.PI, 0); ctx.bezierCurveTo(28, -30, 8, -18, 0, 0); ctx.fill();
+    ctx.shadowColor = 'transparent';
+    ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.lineWidth = 3; ctx.stroke();
+    ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(0, -54, 10, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+  function brandPill(a) {
+    ctx.save(); ctx.globalAlpha = a;
+    glass(56, 56, 252, 62, 31, { tint: 'rgba(10,15,25,.35)' });
+    ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.roundRect(68, 67, 40, 40, 12); ctx.fill();
+    ctx.fillStyle = '#0a8f62'; ctx.beginPath(); ctx.arc(88, 87, 8, 0, Math.PI * 2); ctx.fill();
+    setFont(800, 28); ctx.fillStyle = '#ffffff'; ctx.fillText('Manzeela', 120, 97);
+    ctx.restore();
+  }
+
+  function beatMap(T) {
+    const path = routePath(), v = camera(T, path), air = ST().air, p = travel(T);
+    mapBase(v, T, path);
+    const P = path.P.map(q => toScreenP(v, q)), head = pointAt(path, p), [hx, hy] = toScreenP(v, [head.x, head.y]);
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    // the way still ahead: a soft dotted line
+    if (T > PH.fly) {
+      ctx.globalAlpha = smooth((T - PH.fly) / 0.06);
+      ctx.strokeStyle = 'rgba(255,255,255,.30)'; ctx.lineWidth = 5; ctx.setLineDash([1, 16]);
+      ctx.beginPath(); P.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.stroke(); ctx.setLineDash([]);
+      ctx.globalAlpha = 1;
+    }
+    // the way travelled: glow, a teal-to-gold line, a white core
+    if (p > 0) {
+      const trail = P.slice(0, head.j); trail.push([hx, hy]);
+      const [sx, sy] = P[0], [ex, ey] = P.at(-1);
+      const grad = ctx.createLinearGradient(sx, sy, ex, ey);
+      grad.addColorStop(0, '#2dd4bf'); grad.addColorStop(1, '#fbbf24');
+      for (const [w, c] of [[34, 'rgba(45,212,191,.16)'], [16, grad], [5, 'rgba(255,255,255,.9)']]) {
+        ctx.strokeStyle = c; ctx.lineWidth = w; ctx.beginPath(); trail.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.stroke();
+      }
+    }
+    // towns on the way light up as the traveller passes them
+    for (const x of path.towns) {
+      if (x.u > p) continue;
+      const [tx, ty] = toScreen(v, [x.d.lon, x.d.lat]), a = clamp((p - x.u) * 12);
+      ctx.globalAlpha = a; ctx.fillStyle = '#5eead4'; ctx.beginPath(); ctx.arc(tx, ty, 9, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = 'rgba(94,234,212,.4)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(tx, ty, 9 + 16 * (1 - a), 0, Math.PI * 2); ctx.stroke();
+      setFont(700, 28); ctx.fillStyle = '#ffffff'; ctx.textAlign = tx > W * 0.6 ? 'right' : 'left';
+      ctx.fillText(tr(x.d.bn), tx + (tx > W * 0.6 ? -20 : 20), ty + 10); ctx.textAlign = 'left'; ctx.globalAlpha = 1;
+    }
+    // the stops: white where it starts, gold where it goes; each drops in when it is reached
+    for (const [n, s] of path.stops.entries()) {
+      const [x, y] = toScreen(v, [s.d.lon, s.d.lat]), start = s.d === ST().from;
+      const when = start ? PH.fly + 0.05 : PH.go + (PH.land - PH.go) * Math.max(0, s.u - 0.02);
+      const k = pop((T - when) / 0.05);
+      pin(x, y, start ? '#e2e8f0' : '#f59e0b', k, T * 14);
+      if (k > 0.6) {
+        ctx.globalAlpha = clamp((k - 0.6) * 3);
+        // where it starts, above its pin; where it goes, below (so the road and the towns stay clear)
+        const below = ST().multi ? n % 2 === 1 : !start;
+        glassPill(tr(s.d.bn), x, below ? y + 24 : y - 160, { size: 30, align: 'center', strong: !start });
+        ctx.globalAlpha = 1;
+      }
+    }
+    // the traveller: a white disc with a bus (or a plane turned to its heading), a halo and a ring
+    if (T > PH.go - 0.02 && T < PH.land + 0.02) {
+      const a = clamp((T - PH.go + 0.02) * 30) * clamp((PH.land + 0.02 - T) * 30);
+      ctx.save(); ctx.globalAlpha = a;
+      const halo = ctx.createRadialGradient(hx, hy, 0, hx, hy, 110);
+      halo.addColorStop(0, 'rgba(94,234,212,.5)'); halo.addColorStop(1, 'rgba(94,234,212,0)');
+      ctx.fillStyle = halo; ctx.beginPath(); ctx.arc(hx, hy, 110, 0, Math.PI * 2); ctx.fill();
+      const ring = (T * 9) % 1;
+      ctx.strokeStyle = `rgba(255,255,255,${0.5 * (1 - ring)})`; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(hx, hy, 40 + ring * 46, 0, Math.PI * 2); ctx.stroke();
+      ctx.shadowColor = 'rgba(0,0,0,.5)'; ctx.shadowBlur = 20; ctx.shadowOffsetY = 6;
+      ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(hx, hy, 38, 0, Math.PI * 2); ctx.fill();
+      ctx.shadowColor = 'transparent';
+      ctx.translate(hx, hy); if (air) ctx.rotate(head.ang + 0.35); glyph(air ? 'plane' : 'bus');
+      ctx.restore();
+    }
+
+    // the words: shaded top and bottom so they always read
+    const top = ctx.createLinearGradient(0, 0, 0, 420); top.addColorStop(0, 'rgba(3,8,15,.85)'); top.addColorStop(1, 'rgba(3,8,15,0)');
+    ctx.fillStyle = top; ctx.fillRect(0, 0, W, 420);
+    const foot = ctx.createLinearGradient(0, H - 420, 0, H); foot.addColorStop(0, 'rgba(3,8,15,0)'); foot.addColorStop(1, 'rgba(3,8,15,.9)');
+    ctx.fillStyle = foot; ctx.fillRect(0, H - 420, W, 420);
+    brandPill(smooth(T / 0.05));
+    const st = ST(), route = st.multi ? chainText() : `${tr(st.from.bn)}  →  ${tr(st.to.bn)}`;
+    rise(`${tr(air ? 'বিমানে' : 'সড়কপথে')} · ${tr(`${num(st.days)} দিন`)}${tripDate() ? ' · ' + tripDate() : ''}`, 72, 196, 32, (T - 0.02) * 12, { weight: 600, color: '#5eead4', tracking: 2 });
+    setFont(800, 88, -2);
+    const title = wrap(tripTitle(), W - 144).slice(0, 2);
+    title.forEach((l, i) => rise(l, 72, 290 + i * 96, 88, (T - 0.03 - i * 0.01) * 10, { tracking: -2 }));
+    rise(route, 72, 290 + title.length * 96 - 18, st.multi ? 32 : 38, (T - 0.05) * 10, { weight: 600, color: 'rgba(255,255,255,.82)', max: W - 144 });
+
+    // the panel at the foot: the journey while it runs, the crew once it is done
+    const py = H - 246, ph = 190;
+    const run = clamp((T - PH.go + 0.04) * 14) * (1 - clamp((T - PH.land - 0.04) * 14));
+    const done = clamp((T - PH.back + 0.02) * 12);
+    if (run > 0) {
+      ctx.save(); ctx.globalAlpha = run;
+      glass(48, py, W - 96, ph, 40, { tint: 'rgba(8,14,24,.45)' });
+      const km = num(Math.round(tripKm() * p));
+      setFont(800, 84, -2); ctx.fillStyle = '#ffffff'; ctx.fillText(km, 92, py + 104);
+      const kw = ctx.measureText(km).width;
+      setFont(600, 34); ctx.fillStyle = 'rgba(255,255,255,.7)'; ctx.fillText(tr('কিমি'), 92 + kw + 14, py + 104);
+      ctx.textAlign = 'right'; setFont(700, 38); ctx.fillStyle = '#ffffff';
+      ctx.fillText(p > 0.985 ? tr('পৌঁছে গেছি') : tr(`আর ${fmtMin(tripHours() * (1 - p) * 60)}`), W - 92, py + 82);
+      setFont(500, 26); ctx.fillStyle = 'rgba(255,255,255,.6)';
+      ctx.fillText(tr(`মোট প্রায় ${fmtMin(tripHours() * 60)}`), W - 92, py + 120);
+      ctx.textAlign = 'left';
+      // progress, with its two ends
+      const bx = 92, bw = W - 184, by = py + 148;
+      ctx.fillStyle = 'rgba(255,255,255,.14)'; ctx.beginPath(); ctx.roundRect(bx, by, bw, 10, 5); ctx.fill();
+      const pg = ctx.createLinearGradient(bx, 0, bx + bw, 0); pg.addColorStop(0, '#2dd4bf'); pg.addColorStop(1, '#fbbf24');
+      ctx.fillStyle = pg; ctx.beginPath(); ctx.roundRect(bx, by, Math.max(10, bw * p), 10, 5); ctx.fill();
+      ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(bx + Math.max(5, bw * p), by + 5, 10, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+    if (done > 0) {
+      ctx.save(); ctx.globalAlpha = done;
+      glass(48, py, W - 96, ph, 40, { tint: 'rgba(8,14,24,.45)' });
+      const n = groupSize(), nm = names(), r = 50, step = Math.min(84, 300 / Math.max(1, n - 1));
+      for (let i = 0; i < n; i++) {
+        const s = pop((T - PH.back - 0.01 - i * 0.012) / 0.04);
+        if (s <= 0) continue;
+        ctx.save(); ctx.translate(92 + r + i * step, py + ph / 2); ctx.scale(s, s); face(i, 0, 0, r); ctx.restore();
+      }
+      const tx = 92 + r * 2 + (n - 1) * step + 28, tw = W - 92 - tx;
+      setFont(700, 34); ctx.fillStyle = '#ffffff';
+      ctx.fillText(nm.length ? joined(nm.slice(0, n)) : tr(`${num(st.people)} জনের দল`), tx, py + 84, tw);
+      setFont(500, 27); ctx.fillStyle = 'rgba(255,255,255,.7)';
+      const facts = [tr(`${num(st.days)} দিন`), tr(`${num(Math.round(tripKm()))} কিমি`), st.multi ? tr(`${num(st.stops.filter(d => d !== st.from).length)} জেলা`) : (st.nights ? tr(`${num(st.nights)} রাত`) : tr('দিনে দিনে'))];
+      ctx.fillText(facts.join(' · '), tx, py + 128, tw);
+      ctx.restore();
+    }
+    // arrival: a gold pill over the destination
+    const arr = pop((T - PH.land) / 0.05) * (1 - clamp((T - PH.back) * 10));
+    if (arr > 0) {
+      const dest = path.stops.at(-1), [x, y] = toScreen(v, [dest.d.lon, dest.d.lat]);
+      ctx.save(); ctx.globalAlpha = Math.min(1, arr); ctx.translate(x, y - 158); ctx.scale(arr, arr);
+      glassPill(tr(st.multi ? 'সব ঘুরে এলাম' : 'পৌঁছে গেছি'), 0, 0, { size: 32, align: 'center', strong: true });
+      ctx.restore();
+    }
   }
 
   // ---- the poster (1080 × 1350): a photo mosaic of the trip, the title, the route, the crew, a small map ----
@@ -714,27 +761,10 @@
     if (mosaic.length) { ctx.textAlign = 'right'; ctx.fillText(tr('ছবি: উইকিমিডিয়া কমন্স'), W - 72, H - 30); ctx.textAlign = 'left'; }
   }
 
-  // The whole piece, T from 0 to 1. Each beat hands over to the next with a short dissolve.
-  const CUTS = [0, 0.14, 0.29, 0.63, 0.82, 1];
-  const buffer = document.createElement('canvas');
-  const BEATS = [beatTitle, beatCrew, beatJourney, beatArrive, drawCard];
+  // The whole piece, T from 0 to 1: the map story; its last frame stays.
   function drawScene(T) {
-    if (T >= 1) { drawCard(1); return; }
     ctx.globalAlpha = 1; ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left';
-    const i = Math.max(0, CUTS.findIndex((c, k) => T >= c && T < CUTS[k + 1]));
-    const k = (T - CUTS[i]) / (CUTS[i + 1] - CUTS[i]);
-    BEATS[i](k);
-    // the next beat dissolves in over the last 10 % of this one: this frame is kept aside, the next beat drawn,
-    // and this frame laid back over it, fading out
-    const fade = 0.1;
-    if (i < BEATS.length - 1 && k > 1 - fade) {
-      buffer.width = W; buffer.height = H;
-      buffer.getContext('2d').drawImage(canvas, 0, 0);
-      BEATS[i + 1](0.0001);
-      ctx.globalAlpha = 1 - smooth((k - (1 - fade)) / fade);
-      ctx.drawImage(buffer, 0, 0);
-      ctx.globalAlpha = 1;
-    }
+    beatMap(Math.min(1, T));
   }
 
   function play(duration = 15000) {
@@ -750,39 +780,13 @@
     });
   }
 
-  // Backdrop: the lead picture of the destination's Wikipedia article — the one image editors chose to
-  // stand for the place. It must load with CORS, or the browser would refuse to save the card.
-  const backdrops = new Map();
-  async function loadBackdrop() {
-    const d = ST().to;
-    if (!backdrops.has(d.id)) {
-      const name = d.id === 'coxsbazar' ? "Cox's Bazar" : d.en.split(' ')[0];
-      let found = null;
-      for (const title of [name, name + ' District']) {
-        try {
-          const page = await (await fetch('https://en.wikipedia.org/api/rest_v1/page/summary/' + encodeURIComponent(title))).json();
-          const src = page.thumbnail && page.thumbnail.source;
-          if (!src) continue;
-          const img = new Image();
-          img.crossOrigin = 'anonymous';
-          img.src = src.replace(/\/\d+px-/, '/960px-');
-          await img.decode();
-          found = img;
-          break;
-        } catch { /* try the next title, or go without a photo */ }
-      }
-      backdrops.set(d.id, found);
-    }
-    backdrop = backdrops.get(d.id);
-  }
-
   async function makeCard() {
     custom = null;
     $('tour-card').hidden = false;
     $('tour-card').scrollIntoView({ behavior: 'smooth', block: 'center' });
     await document.fonts.ready;
     drawScene(0);
-    await Promise.all([loadBackdrop(), loadMosaic()]);
+    await loadMosaic();
     await play();
   }
 
@@ -815,7 +819,7 @@
       requestAnimationFrame(() => player.classList.add('in'));
       await document.fonts.ready;
       drawScene(0);
-      await Promise.all([loadBackdrop(), loadMosaic()]);
+      await loadMosaic();
       await play();
     },
     close() {
