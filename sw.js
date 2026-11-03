@@ -2,14 +2,29 @@
 // `no-cache` makes the browser revalidate each file, so an updated app shows up on a normal refresh.
 // Only good answers are kept: an error page (a 503 while the server restarts) must never become the offline copy.
 const CACHE = 'bdmap-v7';
+// Photos from Wikimedia and the web fonts: they never change at the same address, so the copy on the device is used
+// first and the network only once. Kept apart from the app's own files and trimmed to the newest 300.
+const MEDIA = 'bdmap-media-v1';
 
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', event => event.waitUntil(
-  caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())));
+  caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE && k !== MEDIA).map(k => caches.delete(k)))).then(() => self.clients.claim())));
 
 self.addEventListener('fetch', event => {
   const req = event.request;
   const url = new URL(req.url);
+  if (req.method === 'GET' && /^(upload\.wikimedia\.org|thumb\.wikimedia\.org|fonts\.gstatic\.com|fonts\.googleapis\.com)$/.test(url.hostname)) {
+    event.respondWith(caches.open(MEDIA).then(c => c.match(req.url).then(hit => hit || fetch(req).then(res => {
+      // only answers the page may read (CORS); an opaque one would take far more room than it is worth
+      if (res.ok && (res.type === 'cors' || res.type === 'basic')) {
+        // a clean copy: Wikimedia's own headers (Vary) can stop the cache from keeping the answer as it came
+        res.clone().blob().then(body => c.put(req.url, new Response(body, { headers: { 'Content-Type': res.headers.get('Content-Type') || '', 'Access-Control-Allow-Origin': '*' } })))
+          .then(() => c.keys()).then(k => Promise.all(k.slice(0, Math.max(0, k.length - 300)).map(x => c.delete(x)))).catch(() => {});
+      }
+      return res;
+    }))));
+    return;
+  }
   if (req.method !== 'GET' || url.origin !== location.origin) return;
   // Live data stays out of the cache: the message stream never ends, and private answers do not belong on disk.
   if (url.pathname.includes('/api/') || url.pathname.includes('/media/')) return;

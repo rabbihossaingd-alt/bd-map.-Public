@@ -383,7 +383,8 @@
     return { s, cx: (b.x0 + b.x1) / 2, cy: (b.y0 + b.y1) / 2, ox: W / 2, oy: (top + bottom) / 2 };
   }
   const blend = (a, b, k) => ({ s: Math.exp(lerp(Math.log(a.s), Math.log(b.s), k)), cx: lerp(a.cx, b.cx, k), cy: lerp(a.cy, b.cy, k), ox: a.ox, oy: a.oy });
-  const toScreen = (v, p) => { const [x, y] = proj(p); return [v.ox + (x - v.cx) * v.s, v.oy + (y - v.cy) * v.s]; };
+  const turn = (v, x, y) => { if (!v.rot) return [x, y]; const c = Math.cos(v.rot), n = Math.sin(v.rot), dx = x - v.ox, dy = y - v.oy; return [v.ox + dx * c - dy * n, v.oy + dx * n + dy * c]; };
+  const toScreen = (v, p) => { const [x, y] = proj(p); return turn(v, v.ox + (x - v.cx) * v.s, v.oy + (y - v.cy) * v.s); };
 
   // Districts the road passes, in order, with how far along the road each one is (0..1).
   function along(line) {
@@ -401,8 +402,8 @@
   // The country rises out of the dark, the camera flies down to where the trip starts, follows the bus (or the
   // plane) along the real road while the kilometres count up and towns on the way light up, a pin drops at the
   // destination, and the camera pulls back over the whole route with the trip's name and its people.
-  const toScreenP = (v, [x, y]) => [v.ox + (x - v.cx) * v.s, v.oy + (y - v.cy) * v.s];
-  const mix = (a, b, k) => ({ s: Math.exp(lerp(Math.log(a.s), Math.log(b.s), k)), cx: lerp(a.cx, b.cx, k), cy: lerp(a.cy, b.cy, k), ox: lerp(a.ox, b.ox, k), oy: lerp(a.oy, b.oy, k) });
+  const toScreenP = (v, [x, y]) => turn(v, v.ox + (x - v.cx) * v.s, v.oy + (y - v.cy) * v.s);
+  const mix = (a, b, k) => ({ s: Math.exp(lerp(Math.log(a.s), Math.log(b.s), k)), cx: lerp(a.cx, b.cx, k), cy: lerp(a.cy, b.cy, k), ox: lerp(a.ox, b.ox, k), oy: lerp(a.oy, b.oy, k), rot: lerp(a.rot || 0, b.rot || 0, k) });
   let pathCache = null;
   // the route in map units, with its length so far at each point, where each stop sits on it, and the towns it passes
   function routePath() {
@@ -435,7 +436,8 @@
     const { whole, all } = path;
     const near = Math.min(Math.max(all.s * 2.2, whole.s * 3.2), whole.s * 4.5);
     const at = u => { const h = pointAt(path, u); return { s: near, cx: h.x, cy: h.y, ox: W / 2, oy: H * 0.5 }; };
-    const wide = { ...whole, s: whole.s * (0.94 + 0.06 * smooth(T / PH.fly)) };
+    // it opens turned a little and high up, and straightens as it comes down
+    const wide = { ...whole, s: whole.s * (0.86 + 0.14 * smooth(T / PH.fly)), rot: -0.13 + 0.05 * smooth(T / PH.fly) };
     if (T < PH.fly) return wide;
     if (T < PH.go) return mix(wide, at(0), smooth((T - PH.fly) / (PH.go - PH.fly)));
     if (T < PH.land) return at(travel(T));
@@ -510,6 +512,32 @@
     ctx.restore();
   }
 
+  // soft clouds that open around the camera as it comes down
+  function clouds(T) {
+    const k = clamp((T - 0.02) / 0.2);
+    if (k <= 0 || k >= 1) return;
+    const a = Math.sin(Math.PI * Math.min(1, k * 1.3)) * (1 - k * 0.4);
+    for (let i = 0; i < 10; i++) {
+      const grow = 1 + k * (2.4 + rand(i + 60) * 2.2);
+      const x = W / 2 + (rand(i + 40) * W - W / 2) * grow, y = H / 2 + (rand(i + 50) * H - H / 2) * grow, r = (200 + rand(i + 70) * 240) * grow;
+      const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+      g.addColorStop(0, `rgba(236,244,248,${0.6 * a})`); g.addColorStop(0.55, `rgba(214,230,240,${0.28 * a})`); g.addColorStop(1, 'rgba(214,230,240,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+  // sparks left behind the traveller
+  function sparks(v, path, p, T) {
+    if (p <= 0.002 || p >= 0.998) return;
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    for (let i = 1; i <= 18; i++) {
+      const q = pointAt(path, p - i * 0.0035);
+      const [x, y] = toScreenP(v, [q.x, q.y]), f = 1 - i / 19;
+      const jx = Math.sin(T * 90 + i * 1.7) * 7 * (1 - f), jy = Math.cos(T * 80 + i * 2.3) * 7 * (1 - f);
+      ctx.fillStyle = i % 3 ? `rgba(94,234,212,${0.55 * f})` : `rgba(251,191,36,${0.6 * f})`;
+      ctx.beginPath(); ctx.arc(x + jx, y + jy, 3 + 6 * f, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+  }
   function beatMap(T) {
     const path = routePath(), v = camera(T, path), air = ST().air, p = travel(T);
     mapBase(v, T, path);
@@ -555,6 +583,7 @@
         ctx.globalAlpha = 1;
       }
     }
+    sparks(v, path, p, T);
     // the traveller: a white disc with a bus (or a plane turned to its heading), a halo and a ring
     if (T > PH.go - 0.02 && T < PH.land + 0.02) {
       const a = clamp((T - PH.go + 0.02) * 30) * clamp((PH.land + 0.02 - T) * 30);
@@ -571,6 +600,7 @@
       ctx.restore();
     }
 
+    clouds(T);
     // the words: shaded top and bottom so they always read
     const top = ctx.createLinearGradient(0, 0, 0, 420); top.addColorStop(0, 'rgba(3,8,15,.85)'); top.addColorStop(1, 'rgba(3,8,15,0)');
     ctx.fillStyle = top; ctx.fillRect(0, 0, W, 420);
@@ -862,6 +892,23 @@
       if (s <= 0) return;
       ctx.save(); ctx.globalAlpha = Math.min(1, s); ctx.translate(x0 + i * gap, 1194); ctx.scale(s, s); feature(icon, label, 0, 0); ctx.restore();
     });
+    // gold motes rising slowly, and once it is all there, a sheen of light across it
+    if (t > 0.3 && t < 1) {
+      ctx.save(); ctx.globalCompositeOperation = 'lighter';
+      for (let i = 0; i < 16; i++) {
+        const x = rand(i + 90) * W, y = H * (0.15 + rand(i + 91) * 0.6) - t * (40 + rand(i + 92) * 90), tw = 0.5 + 0.5 * Math.sin(t * 30 + i * 2);
+        ctx.fillStyle = `rgba(253,224,140,${0.35 * tw * clamp((t - 0.3) * 4) * (1 - clamp((t - 0.92) * 12))})`;
+        ctx.beginPath(); ctx.arc(x, y, 2 + rand(i + 93) * 3, 0, Math.PI * 2); ctx.fill();
+      }
+      const sk = (t - 0.8) / 0.16;
+      if (sk > 0 && sk < 1) {
+        const sx = lerp(-W * 0.6, W * 1.6, smooth(sk));
+        const sh = ctx.createLinearGradient(sx - 260, 0, sx + 260, H * 0.35);
+        sh.addColorStop(0, 'rgba(255,255,255,0)'); sh.addColorStop(0.5, 'rgba(255,255,255,.22)'); sh.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = sh; ctx.fillRect(0, 0, W, H);
+      }
+      ctx.restore();
+    }
     // the foot
     ctx.globalAlpha = e((t - 0.7) * 4);
     setFont(600, 22); ctx.fillStyle = 'rgba(255,255,255,.6)';
@@ -889,6 +936,9 @@
       const path = routePath(), v = camera(1, path), dest = path.stops.at(-1), [dx, dy] = toScreen(v, [dest.d.lon, dest.d.lat]);
       const r = smooth(iris) * Math.hypot(W, H);
       keep.save(); keep.beginPath(); keep.arc(dx, dy - 40, Math.max(1, r), 0, Math.PI * 2); keep.clip(); keep.drawImage(buffer, 0, 0); keep.restore();
+      const fl = keep.createRadialGradient(dx, dy - 40, 0, dx, dy - 40, Math.max(2, r * 1.15));
+      fl.addColorStop(0.75, 'rgba(255,255,255,0)'); fl.addColorStop(0.97, `rgba(255,255,255,${0.55 * (1 - iris)})`); fl.addColorStop(1, 'rgba(255,255,255,0)');
+      keep.fillStyle = fl; keep.fillRect(0, 0, W, H);
       keep.strokeStyle = `rgba(255,255,255,${0.6 * (1 - iris)})`; keep.lineWidth = 6; keep.beginPath(); keep.arc(dx, dy - 40, Math.max(1, r), 0, Math.PI * 2); keep.stroke();
     }
   }
@@ -906,6 +956,28 @@
     });
   }
 
+  // the clip of this exact story, if one was recorded: kept until something about the trip changes
+  let clip = null;
+  const clipKey = () => JSON.stringify([ST().stops.map(d => d.id), ST().people, ST().nights, ST().air, ST().title, names(), photos.map(p => p.src),
+    $('tour-name').value, $('tour-date').value, LANG, Math.round(tripKm())]);
+  const canRecord = () => !!(canvas.captureStream && window.MediaRecorder);
+  // play the story, recording it on the way; the finished poster is held a moment at the end
+  async function playAndKeep() {
+    const key = clipKey();
+    if (!canRecord() || (clip && clip.key === key)) return play();
+    let rec = null; const chunks = [];
+    try { rec = new MediaRecorder(canvas.captureStream(30), { videoBitsPerSecond: 6e6 }); } catch { return play(); }
+    rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+    const done = new Promise(r => { rec.onstop = r; });
+    rec.start();
+    const whole = await play(18000);
+    if (whole) for (let i = 0; i < 16; i++) { await new Promise(r => setTimeout(r, 100)); drawScene(1); }
+    rec.stop();
+    await done;
+    if (whole && chunks.length) clip = { key, blob: new Blob(chunks, { type: rec.mimeType }), type: rec.mimeType };
+    return whole;
+  }
+
   async function makeCard() {
     custom = null;
     $('tour-card').hidden = false;
@@ -913,7 +985,7 @@
     await document.fonts.ready;
     drawScene(0);
     posterIcons(); await Promise.all([loadMosaic(), loadScript()]);
-    await play();
+    await playAndKeep();
   }
 
   // ---- the same story for a trip across several districts (trip.js), shown in a full-screen player ----
@@ -946,7 +1018,7 @@
       await document.fonts.ready;
       drawScene(0);
       posterIcons(); await Promise.all([loadMosaic(), loadScript()]);
-      await play();
+      await playAndKeep();
     },
     close() {
       if (!player) return;
@@ -978,7 +1050,7 @@
 
   if (location.hostname === 'localhost') window.__tourScene = drawScene;   // for checking frames while developing
   $('tour-make').addEventListener('click', makeCard);
-  $('tour-replay').addEventListener('click', () => play());
+  $('tour-replay').addEventListener('click', () => playAndKeep());
   $('tour-save').addEventListener('click', async () => save(await cardBlob(), fileName('png')));
   $('tour-share').addEventListener('click', async () => {
     const file = new File([await cardBlob()], fileName('png'), { type: 'image/png' });
@@ -990,17 +1062,12 @@
   $('tour-video').addEventListener('click', async () => {
     if (!canvas.captureStream || !window.MediaRecorder) { $('tour-video-note').textContent = 'এই ব্রাউজারে ভিডিও বানানো যায় না — ছবি ডাউনলোড করুন।'; return; }
     if ($('tour-video').disabled) return;
+    const give = () => save(clip.blob, fileName(clip.type.includes('mp4') ? 'mp4' : 'webm'));
+    if (clip && clip.key === clipKey()) { give(); return; }   // already recorded while it played
     $('tour-video').disabled = true;             // one recording at a time
-    $('tour-video-note').textContent = 'ভিডিও তৈরি হচ্ছে…';
-    const chunks = [], rec = new MediaRecorder(canvas.captureStream(30), { videoBitsPerSecond: 6e6 });
-    rec.ondataavailable = e => chunks.push(e.data);
-    const done = new Promise(r => { rec.onstop = r; });
-    rec.start();
-    await play(18000);
-    await new Promise(r => setTimeout(r, 1600));     // hold the finished card
-    rec.stop();
-    await done;
-    save(new Blob(chunks, { type: rec.mimeType }), fileName(rec.mimeType.includes('mp4') ? 'mp4' : 'webm'));
+    $('tour-video-note').textContent = tr('ভিডিও তৈরি হচ্ছে…');
+    await playAndKeep();
+    if (clip && clip.key === clipKey()) give();
     $('tour-video-note').textContent = '';
     $('tour-video').disabled = false;
   });
