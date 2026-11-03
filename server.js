@@ -697,7 +697,7 @@ db.exec('CREATE INDEX IF NOT EXISTS group_members_user ON group_members (user)')
 db.exec(`CREATE TABLE IF NOT EXISTS chat_prefs (user INTEGER NOT NULL, thread TEXT NOT NULL, muted INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (user, thread))`);
 db.exec(`CREATE TABLE IF NOT EXISTS chat_theme (thread TEXT PRIMARY KEY, theme TEXT NOT NULL)`);
 db.exec(`CREATE TABLE IF NOT EXISTS notes (user INTEGER PRIMARY KEY, body TEXT NOT NULL, created INTEGER NOT NULL)`);
-const GROUP_MAX = 32, NOTE_HOURS = 24, THEMES = ['default', 'green', 'ocean', 'sunset', 'berry', 'forest', 'grape', 'mono'];
+const GROUP_MAX = 32, NOTE_HOURS = 24, THEMES = ['default', 'green', 'ocean', 'sunset', 'berry', 'forest', 'grape', 'mono', 'lava', 'cats', 'mist'];   // js/chat.js THEMES
 const gq = {
   group:   db.prepare('SELECT * FROM chat_groups WHERE id = ?'),
   member:  db.prepare('SELECT * FROM group_members WHERE grp = ? AND user = ?'),

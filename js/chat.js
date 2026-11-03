@@ -19,8 +19,11 @@ async function chatApi(path, body) {
 // Sentences that carry a person's name are written in both languages here, so the translator leaves them alone.
 const tx = (bn, en) => LANG === 'en' ? en : bn;
 const REACTIONS = ['❤️', '😂', '😮', '😢', '😡', '👍'];
-const THEMES = [['default', 'ক্লাসিক', 'Classic'], ['green', 'সবুজ', 'Green'], ['ocean', 'সমুদ্র', 'Ocean'], ['sunset', 'সূর্যাস্ত', 'Sunset'], ['berry', 'বেরি', 'Berry'],
-                ['forest', 'বন', 'Forest'], ['grape', 'আঙুর', 'Grape'], ['mono', 'সাদা-কালো', 'Mono']];
+// A conversation's look, the same for everyone in it: art behind the messages and bubbles to match (css/chat-themes.css,
+// drawn by tools/chat-walls.py). The older ids keep their place: green is now the waves, ocean the sky, and so on.
+const THEMES = [['default', 'ক্লাসিক', 'Classic'], ['lava', 'কমলা লাভা', 'Orange lava'], ['cats', 'কালো বিড়াল', 'Black cats'], ['ocean', 'নীল আকাশ', 'Blue sky'],
+                ['green', 'সবুজ ঢেউ', 'Green waves'], ['forest', 'সবুজ লাভা', 'Green lava'], ['mist', 'সবুজ কুয়াশা', 'Green mist'], ['berry', 'ভালোবাসা', 'Love'],
+                ['grape', 'রাতের তারা', 'Night sky'], ['sunset', 'সূর্যাস্ত', 'Sunset'], ['mono', 'সাদা-কালো', 'Mono']];
 
 // ---- small pieces ----
 // "রাত ৯:০৫" — the way the time of day is said in Bangla; plain 9:05 PM in English.
@@ -924,12 +927,15 @@ async function openInfo(view = 'main') {
   };
 
   // Theme: the bubble colours, the same for everyone in the conversation.
-  const swatches = el('div', 'swatches');
+  const swatches = el('div', 'theme-grid');
   for (const [id, bn, en] of THEMES) {
-    const s = el('button', 'swatch' + ((t.theme || 'default') === id ? ' on' : ''));
+    const s = el('button', 'theme-tile' + ((t.theme || 'default') === id ? ' on' : ''));
     s.dataset.theme = id;
     s.title = tx(bn, en);
     s.setAttribute('aria-label', tx(bn, en));
+    const wall = el('span', 'tt-wall');
+    wall.append(el('i', 'tt-b t'), el('i', 'tt-b m'), el('i', 'tt-b m2'));
+    s.append(wall, el('span', 'no-tr', tx(bn, en)));
     s.addEventListener('click', () => chatApi('theme', t.members ? { group: t.id, theme: id } : { with: t.id, theme: id }).then(() => { t.theme = id; renderHead(); openInfo('main'); }).catch(() => chatToast(ME, 'রিকোয়েস্ট গ্রহণের পরে থিম বদলানো যাবে।')));
     swatches.appendChild(s);
   }
