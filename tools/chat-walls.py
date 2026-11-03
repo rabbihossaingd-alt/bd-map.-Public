@@ -1,14 +1,27 @@
-# Draws the chat wallpapers as SVG and writes the CSS for every theme (and the preview tiles).
-import math, random
+# Draws the chat wallpapers and writes css/chat-themes.css: every theme's art, its bubble colours, and the
+# preview tiles of the picker. Calm and minimal, as Apple's wallpapers: soft blurred light, few shapes, room.
+#   python tools/chat-walls.py
+import math, os, random
 from urllib.parse import quote
 
 def uri(svg):
     svg = ' '.join(svg.split())
-    svg = svg.replace('%23', '#')            # colours are written %23 above; quoted once, here
     return 'url("data:image/svg+xml,' + quote(svg, safe=" =:/,.'()-;") + '")'
 
+def svg(body, defs=''):
+    return ("<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 600 900' preserveAspectRatio='xMidYMid slice'>"
+            f"<defs><filter id='b' x='-50%' y='-50%' width='200%' height='200%'><feGaussianBlur stdDeviation='60'/></filter>{defs}</defs>{body}</svg>")
+
+def grad(stops):
+    s = ''.join(f"<stop offset='{o}' stop-color='{c}'/>" for o, c in stops)
+    return f"<linearGradient id='g' x1='0' y1='0' x2='0' y2='1'>{s}</linearGradient>"
+
+BG = "<rect width='600' height='900' fill='url(#g)'/>"
+
+def glow(cx, cy, r, c, o=1):
+    return f"<circle cx='{cx}' cy='{cy}' r='{r}' fill='{c}' opacity='{o}' filter='url(#b)'/>"
+
 def smooth_closed(pts):
-    # Catmull-Rom through the points, as cubic Béziers
     n = len(pts); d = f'M{pts[0][0]:.0f},{pts[0][1]:.0f}'
     for i in range(n):
         p0, p1, p2, p3 = pts[(i - 1) % n], pts[i], pts[(i + 1) % n], pts[(i + 2) % n]
@@ -17,124 +30,118 @@ def smooth_closed(pts):
         d += f'C{c1[0]:.0f},{c1[1]:.0f} {c2[0]:.0f},{c2[1]:.0f} {p2[0]:.0f},{p2[1]:.0f}'
     return d + 'Z'
 
-def blob(cx, cy, r, rnd, stretch=1.0, rot=0.0, k=8):
-    pts = []
+def blob(cx, cy, r, seed, stretch=1.0, rot=0.0, k=7):
+    rnd = random.Random(seed); pts = []
     for i in range(k):
-        a = i / k * math.tau
-        rr = r * (0.55 + rnd.random() * 0.75)
+        a = i / k * math.tau; rr = r * (0.75 + rnd.random() * 0.45)
         x, y = math.cos(a) * rr * stretch, math.sin(a) * rr
-        x, y = x * math.cos(rot) - y * math.sin(rot), x * math.sin(rot) + y * math.cos(rot)
-        pts.append((cx + x, cy + y))
+        pts.append((cx + x * math.cos(rot) - y * math.sin(rot), cy + x * math.sin(rot) + y * math.cos(rot)))
     return smooth_closed(pts)
 
-def lava(seed, bg, fg, w=600, h=900, n=22):
-    rnd = random.Random(seed); paths = []
-    for _ in range(n):
-        paths.append(blob(rnd.uniform(-40, w + 40), rnd.uniform(-40, h + 40), rnd.uniform(55, 120), rnd, rnd.uniform(1.0, 2.2), rnd.uniform(0, math.pi)))
-    return f"<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 {w} {h}' preserveAspectRatio='xMidYMid slice'><rect width='{w}' height='{h}' fill='{bg}'/><path fill='{fg}' d='{' '.join(paths)}'/></svg>"
+# peach: three big soft shapes of warm light on cream
+peach = svg(BG + f"<path d='{blob(120, 160, 190, 1, 1.4, .5)}' fill='#ffc59e' opacity='.55' filter='url(#b)'/>"
+            f"<path d='{blob(520, 520, 210, 2, 1.2, 2.1)}' fill='#ffb08a' opacity='.45' filter='url(#b)'/>"
+            f"<path d='{blob(200, 860, 220, 3, 1.5, 1.0)}' fill='#ffd2b0' opacity='.6' filter='url(#b)'/>",
+            grad([(0, '#fff6ee'), (1, '#ffe7d6')]))
 
-def cats():
-    def cat(x, y, s, rot):
-        # a black cat's head peeking in: round head, two ears, big cream eyes, whiskers
-        return (f"<g transform='translate({x},{y}) rotate({rot}) scale({s})'>"
-                "<path fill='%23111' d='M-60,10 C-62,-40 -30,-62 0,-62 C30,-62 62,-40 60,10 C58,52 30,70 0,70 C-30,70 -58,52 -60,10Z'/>"
-                "<path fill='%23111' d='M-52,-30 L-58,-104 L-12,-58Z M52,-30 L58,-104 L12,-58Z'/>"
-                "<path fill='%23111' d='M-40,60 C-60,120 -70,200 -64,260 L64,260 C70,200 60,120 40,60Z'/>"
-                "<ellipse cx='-22' cy='0' rx='17' ry='19' fill='%23fff6c8'/><ellipse cx='22' cy='4' rx='17' ry='19' fill='%23fff6c8'/>"
-                "<circle cx='-18' cy='4' r='6' fill='%23111'/><circle cx='26' cy='8' r='6' fill='%23111'/>"
-                "<rect x='-6' y='30' width='12' height='5' rx='2.5' fill='%23fff6c8'/>"
-                "<path stroke='%23111' stroke-width='2' fill='none' stroke-linecap='round' d='M-56,22 L-100,14 M-56,30 L-98,36 M56,22 L100,14 M56,30 L98,36'/></g>")
-    body = cat(110, 160, 1.15, 150) + cat(520, 120, 0.8, 200) + cat(560, 560, 0.62, -60) + cat(250, 830, 1.2, 0)
-    return f"<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 600 900' preserveAspectRatio='xMidYMid slice'><rect width='600' height='900' fill='%230e8a5c'/>{body}</svg>"
+# a black cat, minimal: one peeking in at the foot, a small one at the top corner, on a calm sage
+def cat(x, y, s, rot):
+    return (f"<g transform='translate({x},{y}) rotate({rot}) scale({s})'>"
+            "<path fill='#1c1c1e' d='M-60,10 C-62,-40 -30,-62 0,-62 C30,-62 62,-40 60,10 C58,52 30,70 0,70 C-30,70 -58,52 -60,10Z M-52,-30 L-58,-104 L-12,-58Z M52,-30 L58,-104 L12,-58Z M-40,60 C-60,120 -70,200 -64,300 L64,300 C70,200 60,120 40,60Z'/>"
+            "<ellipse cx='-22' cy='0' rx='15' ry='17' fill='#f5f1e3'/><ellipse cx='22' cy='4' rx='15' ry='17' fill='#f5f1e3'/>"
+            "<circle cx='-18' cy='4' r='5.5' fill='#1c1c1e'/><circle cx='26' cy='8' r='5.5' fill='#1c1c1e'/>"
+            "<path stroke='#1c1c1e' stroke-width='2' fill='none' stroke-linecap='round' d='M-56,24 L-96,18 M-56,32 L-94,38 M56,24 L96,18 M56,32 L94,38'/></g>")
+cats = svg(BG + glow(460, 200, 220, '#ffffff', .35) + cat(470, 820, 1.05, 0) + cat(70, 70, .55, 160), grad([(0, '#a9cdb6'), (1, '#86b598')]))
 
-def waves():
-    rnd = random.Random(7); w, h = 600, 1100
-    cols = ['%23f3f8f2', '%23dcece0', '%23bcdac5', '%2398c6a6', '%23e9f3ea', '%23cfe5d5', '%23a9cfb4', '%237fb391', '%23e6f1e8']
-    out = []
-    for i, c in enumerate(cols):
-        base = -260 + i * 175
-        def y(x, o=0): return base + o + 46 * math.sin(x / 140 + i * 1.3) + 22 * math.sin(x / 55 + i * 2.1)
-        pts = ' '.join(f'L{x},{y(x):.0f}' for x in range(-320, w + 361, 40))
-        out.append(f"<path fill='{c}' d='M-320,{h + 400} L-320,{y(-320):.0f} {pts} L{w + 360},{h + 400}Z'/>")
-        for k in range(1, 5):   # the fine contour lines on each band
-            pl = ' '.join(f'{"M" if x == -320 else "L"}{x},{y(x, k * 22):.0f}' for x in range(-320, w + 361, 40))
-            out.append(f"<path fill='none' stroke='%23000' stroke-opacity='.06' stroke-width='1' d='{pl}'/>")
-    return f"<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 {w} {h}' preserveAspectRatio='xMidYMid slice'><g transform='rotate(-14 300 550)'>{''.join(out)}</g></svg>"
+# blue sky: Apple's light blue, one soft ring of light
+sky = svg(BG + glow(300, 330, 230, '#ffffff', .85) + glow(520, 860, 260, '#7fb6ff', .5)
+          + "<circle cx='300' cy='330' r='260' fill='none' stroke='#ffffff' stroke-opacity='.35' stroke-width='2'/>"
+          + "<circle cx='300' cy='330' r='360' fill='none' stroke='#ffffff' stroke-opacity='.2' stroke-width='2'/>",
+          grad([(0, '#e9f3ff'), (.55, '#c7e0ff'), (1, '#9cc7ff')]))
 
-def hearts():
-    rnd = random.Random(3); out = []
-    for _ in range(26):
-        x, y, s, r = rnd.uniform(0, 300), rnd.uniform(0, 300), rnd.uniform(0.5, 1.4), rnd.uniform(-30, 30)
-        c = rnd.choice(['%23ff3b47', '%23ff8a95', '%23ff6b77'])
-        out.append(f"<path transform='translate({x:.0f},{y:.0f}) rotate({r:.0f}) scale({s:.2f})' fill='{c}' d='M0,-4 C-6,-13 -18,-5 0,10 C18,-5 6,-13 0,-4Z'/>")
-    return f"<svg xmlns='http://www.w3.org/2000/svg' width='300' height='300' viewBox='0 0 300 300'>{''.join(out)}</svg>"
+# green waves: broad soft hills of mint
+waves = svg(BG + "<path d='M-50,420 C120,340 300,470 650,360 L650,900 L-50,900Z' fill='#cfe8d7' opacity='.8'/>"
+            "<path d='M-50,620 C160,540 340,700 650,580 L650,900 L-50,900Z' fill='#b3dbc1' opacity='.75'/>"
+            "<path d='M-50,800 C180,740 380,860 650,780 L650,900 L-50,900Z' fill='#9acfae' opacity='.7'/>",
+            grad([(0, '#f4faf5'), (1, '#e3f2e7')]))
 
-def night():
-    rnd = random.Random(11); out = []
-    for _ in range(70):
-        out.append(f"<circle cx='{rnd.uniform(0, 600):.0f}' cy='{rnd.uniform(0, 900):.0f}' r='{rnd.choice([0.8, 1, 1.2, 1.6, 2.2])}' fill='%23fff' opacity='{rnd.uniform(.25, .9):.2f}'/>")
-    moon = "<circle cx='470' cy='130' r='46' fill='%23fff3c4'/><circle cx='490' cy='116' r='42' fill='%23171a45'/>"
-    return (f"<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 600 900' preserveAspectRatio='xMidYMid slice'><defs><linearGradient id='g' x1='0' y1='0' x2='0' y2='1'>"
-            f"<stop offset='0' stop-color='%230b1030'/><stop offset='1' stop-color='%23232a66'/></linearGradient></defs><rect width='600' height='900' fill='url(%23g)'/>{''.join(out)}{moon}</svg>")
+# deep green: the light of a forest at night
+forest = svg(BG + glow(120, 180, 220, '#2e7d52', .7) + glow(520, 640, 240, '#1f6b45', .6) + glow(260, 900, 200, '#3a8f5f', .4), grad([(0, '#0d2a1f'), (1, '#0a1f17')]))
 
-def sunset():
-    return ("<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 600 900' preserveAspectRatio='xMidYMid slice'><defs><linearGradient id='s' x1='0' y1='0' x2='0' y2='1'>"
-            "<stop offset='0' stop-color='%23ffd7a8'/><stop offset='.45' stop-color='%23ff9e8a'/><stop offset='1' stop-color='%23b06ab3'/></linearGradient></defs>"
-            "<rect width='600' height='900' fill='url(%23s)'/><circle cx='300' cy='520' r='120' fill='%23fff1c9' opacity='.85'/>"
-            "<path fill='%23e27aa0' opacity='.75' d='M0,640 C120,580 220,600 320,640 C420,680 520,620 600,600 L600,900 L0,900Z'/>"
-            "<path fill='%23a65aa8' opacity='.85' d='M0,720 C140,670 260,700 360,740 C460,780 540,730 600,720 L600,900 L0,900Z'/>"
-            "<path fill='%23744a95' d='M0,800 C160,760 300,800 420,820 C500,834 560,812 600,806 L600,900 L0,900Z'/></svg>")
+# green mist: a soft green, light from above
+mist = svg(BG + glow(220, 80, 240, '#cfeedd', .8) + glow(560, 560, 220, '#5fae84', .5) + glow(40, 700, 220, '#3f8f68', .45), grad([(0, '#7cc29b'), (1, '#4f9c76')]))
 
-W = {
-    'lava': uri(lava(5, '%23f7ece1', '%23ffa166')),
-    'forest': uri(lava(9, '%2303301f', '%23356f37')),
-    'cats': uri(cats()),
-    'green': uri(waves()),
-    'berry': uri(hearts()),
-    'grape': uri(night()),
-    'sunset': uri(sunset()),
-}
-GRID = "repeating-linear-gradient(0deg, rgb(255 255 255 / .16) 0 1px, transparent 1px 44px), repeating-linear-gradient(90deg, rgb(255 255 255 / .16) 0 1px, transparent 1px 44px)"
+# love: a soft blush and five quiet hearts
+def heart(x, y, s, r, c, o):
+    return f"<path transform='translate({x},{y}) rotate({r}) scale({s})' fill='{c}' opacity='{o}' d='M0,-4 C-6,-13 -18,-5 0,10 C18,-5 6,-13 0,-4Z'/>"
+love = svg(BG + glow(480, 160, 220, '#ffd1da', .7) + glow(100, 760, 240, '#ffdfe5', .8)
+           + heart(470, 150, 3.2, 12, '#ff375f', .22) + heart(110, 330, 1.8, -14, '#ff6b86', .2) + heart(520, 560, 2.2, 8, '#ff375f', .16)
+           + heart(160, 760, 3.0, -8, '#ff6b86', .18) + heart(360, 880, 1.6, 10, '#ff375f', .15),
+           grad([(0, '#fff7f8'), (1, '#ffeef1')]))
+
+# night: indigo, a few stars, a thin moon
+rnd = random.Random(11)
+stars = ''.join(f"<circle cx='{rnd.uniform(0, 600):.0f}' cy='{rnd.uniform(0, 620):.0f}' r='{rnd.choice([1, 1.3, 1.8])}' fill='#ffffff' opacity='{rnd.uniform(.25, .7):.2f}'/>" for _ in range(28))
+night = svg(BG + glow(300, 980, 320, '#5e5ce6', .55) + stars
+            + "<circle cx='470' cy='140' r='34' fill='#f5f0ff' opacity='.9'/><circle cx='486' cy='128' r='31' fill='#1a1c44'/>",
+            grad([(0, '#0f1033'), (1, '#1d1f52')]))
+
+# sunset: a soft gradient, the sun as a glow, one hill
+sunset = svg(BG + glow(300, 560, 160, '#fff3d6', .9) + "<path d='M-50,720 C140,650 340,700 650,640 L650,900 L-50,900Z' fill='#c98bb9' opacity='.55'/>",
+             grad([(0, '#ffe2c4'), (.5, '#ffbfae'), (1, '#d9a3c9')]))
+
+W = {k: uri(v) for k, v in dict(lava=peach, cats=cats, ocean=sky, green=waves, forest=forest, mist=mist, berry=love, grape=night, sunset=sunset).items()}
 THEMES = {
-    # id: (wallpaper, my bubble, my text, their bubble, their text, accent, chip bg, chip text)
-    'lava':   (W['lava'] + ' center / cover', 'linear-gradient(160deg, #ff8a3d, #ff5a1f)', '#fff', '#ffffff', '#2b1a10', '#ff6a1a', 'rgb(255 255 255 / .78)', '#6b3a1c'),
-    'forest': (W['forest'] + ' center / cover', 'linear-gradient(160deg, #a6dc62, #7cc043)', '#062a18', '#0c3d2a', '#eafbe9', '#8bc34a', 'rgb(0 0 0 / .45)', '#d8f5c8'),
-    'cats':   (W['cats'] + ' center / cover', '#111111', '#ffffff', '#fff8dc', '#1c1a12', '#111111', 'rgb(0 0 0 / .38)', '#fff8dc'),
-    'ocean':  ('radial-gradient(circle at 50% 42%, #ffffff 0%, #d7efff 22%, #8fd0ff 52%, #2b8cff 100%) center / cover, ' + GRID, 'linear-gradient(160deg, #2e95ff, #0066ff)', '#fff', '#ffffff', '#0b2440', '#007bff', 'rgb(255 255 255 / .7)', '#0b4a8f'),
-    'green':  (W['green'] + ' center / cover', 'linear-gradient(160deg, #3f9a68, #2b7a52)', '#fff', '#ffffff', '#12291c', '#2f8a5b', 'rgb(255 255 255 / .75)', '#2b5a40'),
-    'mist':   ('radial-gradient(60% 40% at 40% 10%, #9ed3a4 0%, transparent 70%), radial-gradient(70% 45% at 30% 52%, #256a4e 0%, transparent 72%), radial-gradient(60% 40% at 90% 70%, #67ad7d 0%, transparent 70%), linear-gradient(180deg, #5aa877, #3c8f68) center / cover, ' + GRID, '#ffffff', '#16462f', 'rgb(8 40 26 / .55)', '#ffffff', '#ffffff', 'rgb(8 40 26 / .4)', '#e9fff1'),
-    'berry':  (W['berry'] + ' 0 0 / 300px 300px, #fff6f7', 'linear-gradient(160deg, #ff5c6c, #e8235a)', '#fff', '#ffffff', '#3a1018', '#ff3b5c', 'rgb(255 255 255 / .85)', '#a3243c'),
-    'grape':  (W['grape'] + ' center / cover', 'linear-gradient(160deg, #8a7dff, #5a5cf0)', '#fff', '#2a3070', '#eef0ff', '#8a7dff', 'rgb(255 255 255 / .14)', '#dfe2ff'),
-    'sunset': (W['sunset'] + ' center / cover', 'linear-gradient(160deg, #ff7a59, #e8457c)', '#fff', '#ffffff', '#3a1a2a', '#ff6a5a', 'rgb(255 255 255 / .7)', '#7a2a4a'),
-    'mono':   ('#f2f2f2', '#111111', '#ffffff', '#ffffff', '#111111', '#111111', 'rgb(0 0 0 / .06)', '#444444'),
+    # id: (wall, my bubble, my text, their bubble, their text, accent, chip bg, chip text)
+    'lava':   (W['lava'], 'linear-gradient(180deg, #ff9f6e, #ff7a45)', '#fff', '#ffffff', '#1c1c1e', '#ff7a45', 'rgb(255 255 255 / .6)', '#8a4a2a'),
+    'cats':   (W['cats'], '#1c1c1e', '#ffffff', '#ffffff', '#1c1c1e', '#1c1c1e', 'rgb(255 255 255 / .5)', '#2b4a37'),
+    'ocean':  (W['ocean'], 'linear-gradient(180deg, #3d9bff, #0a84ff)', '#fff', '#ffffff', '#1c1c1e', '#0a84ff', 'rgb(255 255 255 / .6)', '#2a5a8f'),
+    'green':  (W['green'], 'linear-gradient(180deg, #43b27a, #2f9e6a)', '#fff', '#ffffff', '#1c1c1e', '#2f9e6a', 'rgb(255 255 255 / .65)', '#3a6a50'),
+    'forest': (W['forest'], 'linear-gradient(180deg, #4cd97b, #30d158)', '#04210f', '#1e3a2d', '#effff4', '#30d158', 'rgb(255 255 255 / .1)', '#bfe8cf'),
+    'mist':   (W['mist'], '#ffffff', '#14432c', 'rgb(10 50 32 / .42)', '#ffffff', '#1f7a52', 'rgb(10 50 32 / .3)', '#effff5'),
+    'berry':  (W['berry'], 'linear-gradient(180deg, #ff5a7a, #ff375f)', '#fff', '#ffffff', '#1c1c1e', '#ff375f', 'rgb(255 255 255 / .7)', '#a33a52'),
+    'grape':  (W['grape'], 'linear-gradient(180deg, #7d7bff, #5e5ce6)', '#fff', '#2c2c54', '#f2f2ff', '#7d7bff', 'rgb(255 255 255 / .1)', '#d6d6ff'),
+    'sunset': (W['sunset'], 'linear-gradient(180deg, #ff8a70, #ff5f6d)', '#fff', '#ffffff', '#1c1c1e', '#ff6a6a', 'rgb(255 255 255 / .55)', '#7a3a4a'),
+    'mono':   ('#f2f2f7', '#1c1c1e', '#ffffff', '#ffffff', '#1c1c1e', '#1c1c1e', 'rgb(0 0 0 / .05)', '#6e6e73'),
 }
-css = ["\n/* ---- chat themes, as Messenger's: art behind the messages, solid bubbles in the theme's colours, and the day\n   and notice lines on a soft pill so every word reads on the art (drawn by tools/chat-walls.py: python tools/chat-walls.py) ---- */"]
+css = ["/* ---- chat themes (drawn by tools/chat-walls.py: python tools/chat-walls.py) ----\n"
+       "   Calm art behind the whole conversation, the bars over it as glass, solid bubbles in the theme's colours,\n"
+       "   and the day and notice lines on soft pills so every word reads. */"]
 for k, (wall, mb, mfg, tb, tfg, acc, chip, chipfg) in THEMES.items():
-    css.append(f":is(.chat-thread, .theme-tile)[data-theme={k}] {{ --wall: {wall}; --mb: {mb}; --mfg: {mfg}; --tb: {tb}; --tfg: {tfg}; --mt: {acc}; --chip: {chip}; --chipfg: {chipfg}; }}")
+    css.append(f":is(.chat-thread, .theme-tile)[data-theme={k}] {{ --wall: {wall} center / cover no-repeat; --mb: {mb}; --mfg: {mfg}; --tb: {tb}; --tfg: {tfg}; --mt: {acc}; --chip: {chip}; --chipfg: {chipfg}; }}")
 art = ':is(' + ', '.join(f'[data-theme={k}]' for k in THEMES) + ')'
-css.append(f".chat-thread{art} .chat-msgs {{ background: var(--wall); }}")
-css.append(f".chat-thread{art} .me .bubble:not(.emoji):not(.media):not(.gone) {{ background: var(--mb); background-size: auto; color: var(--mfg); box-shadow: 0 1px 2px rgb(0 0 0 / .12); }}")
-css.append(f".chat-thread{art} .them .bubble:not(.emoji):not(.media):not(.gone) {{ background: var(--tb); color: var(--tfg); box-shadow: 0 1px 2px rgb(0 0 0 / .12); }}")
-css.append(f".chat-thread{art} .me .bubble a, .chat-thread{art} .me .bubble.file {{ color: var(--mfg); }}")
-css.append(f".chat-thread{art} .them .bubble a, .chat-thread{art} .them .bubble.file {{ color: var(--tfg); }}")
-css.append(f".chat-thread{art} :is(.day, .sys, .seen-by) {{ align-self: center; padding: 4px 12px; border-radius: 999px; background: var(--chip); color: var(--chipfg); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }}")
-css.append(f".chat-thread{art} .seen-by {{ align-self: flex-end; }}")
-css.append(f".chat-thread{art} .msg .who, .chat-thread{art} .msg .meta {{ color: var(--chipfg); }}")
-# the picker: small phones with the wall and two bubbles
-css.append(""".theme-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; padding: 0 var(--space-2) var(--space-4); }
-.theme-tile { position: relative; display: grid; gap: 6px; padding: 0; border: 0; background: none; color: var(--ink); font: inherit; cursor: pointer; text-align: center; }
-.theme-tile .tt-wall { position: relative; aspect-ratio: 3 / 4; border-radius: 16px; overflow: hidden; background: var(--wall, var(--surface-2)); box-shadow: inset 0 0 0 1px rgb(var(--black-rgb) / 0.08); transition: transform .2s var(--ease), box-shadow .2s; }
+T = f'.chat-thread{art}'
+css += [
+    f"{T} {{ background: var(--wall); }}",
+    f"{T} .chat-msgs {{ background: none; }}",
+    f"{T} .chat-head {{ background: rgb(var(--white-rgb) / 0.62); border-bottom-color: rgb(var(--black-rgb) / 0.06); -webkit-backdrop-filter: saturate(1.8) blur(20px); backdrop-filter: saturate(1.8) blur(20px); }}",
+    f":root[data-theme=dark] {T} .chat-head {{ background: rgb(28 28 30 / .62); border-bottom-color: rgb(255 255 255 / .06); }}",
+    f"{T} .chat-compose {{ background: rgb(var(--white-rgb) / 0.72); border-color: rgb(var(--black-rgb) / 0.06); -webkit-backdrop-filter: saturate(1.8) blur(20px); backdrop-filter: saturate(1.8) blur(20px); }}",
+    f":root[data-theme=dark] {T} .chat-compose {{ background: rgb(28 28 30 / .72); border-color: rgb(255 255 255 / .08); }}",
+    f"{T} .me .bubble:not(.emoji):not(.media):not(.gone) {{ background: var(--mb); background-size: auto; color: var(--mfg); }}",
+    f"{T} .them .bubble:not(.emoji):not(.media):not(.gone) {{ background: var(--tb); color: var(--tfg); }}",
+    f"{T} .me .bubble a, {T} .me .bubble.file {{ color: var(--mfg); }}",
+    f"{T} .them .bubble a, {T} .them .bubble.file {{ color: var(--tfg); }}",
+    f"{T} :is(.day, .sys, .seen-by) {{ align-self: center; padding: 3px 11px; border-radius: 999px; background: var(--chip); color: var(--chipfg); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }}",
+    f"{T} .seen-by {{ align-self: flex-end; }}",
+    # the dark art: dark glass bars with light words, in either mode of the app
+    ".chat-thread:is([data-theme=forest], [data-theme=grape]) :is(.chat-head, .chat-compose) { background: rgb(18 20 28 / .55); border-color: rgb(255 255 255 / .08); color: #fff; }",
+    ".chat-thread:is([data-theme=forest], [data-theme=grape]) .chat-head :is(b, span, small, em, .icon-btn#chat-back) { color: #fff; }",
+    ".chat-thread:is([data-theme=forest], [data-theme=grape]) .chat-compose :is(textarea, .icon-btn) { color: rgb(255 255 255 / .85); }",
+    ".chat-thread:is([data-theme=forest], [data-theme=grape]) .chat-compose textarea::placeholder { color: rgb(255 255 255 / .5); }",
+    """.theme-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding: 0 var(--space-2) var(--space-4); }
+.theme-tile { position: relative; display: grid; gap: 7px; padding: 0; border: 0; background: none; color: var(--ink); font: inherit; cursor: pointer; text-align: center; }
+.theme-tile .tt-wall { position: relative; aspect-ratio: 3 / 4; border-radius: 18px; overflow: hidden; background: var(--wall, var(--surface-2)); box-shadow: inset 0 0 0 1px rgb(var(--black-rgb) / 0.07); transition: transform .25s var(--ease), box-shadow .2s; }
 .theme-tile:hover .tt-wall { transform: translateY(-2px); }
-.theme-tile.on .tt-wall { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--ink); }
-.theme-tile .tt-b { position: absolute; height: 14px; border-radius: 8px; }
-.theme-tile .tt-b.t { left: 9px; top: 32%; width: 52%; background: var(--tb, var(--surface)); box-shadow: 0 1px 2px rgb(0 0 0 / .12); }
-.theme-tile .tt-b.m { right: 9px; top: 52%; width: 46%; background: var(--mb, var(--brand)); }
-.theme-tile .tt-b.m2 { right: 9px; top: 66%; width: 30%; background: var(--mb, var(--brand)); }
-.theme-tile > span { font-size: var(--fs-xs); font-weight: 700; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.theme-tile.on > span { color: var(--ink); }
-.theme-tile[data-theme=default] .tt-wall { background: var(--bg); }""")
-import os
+.theme-tile.on .tt-wall { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--mt, var(--brand)); }
+.theme-tile .tt-b { position: absolute; height: 13px; border-radius: 7px; }
+.theme-tile .tt-b.t { left: 10px; top: 34%; width: 50%; background: var(--tb, #e9e9eb); }
+.theme-tile .tt-b.m { right: 10px; top: 52%; width: 44%; background: var(--mb, var(--brand)); }
+.theme-tile .tt-b.m2 { right: 10px; top: 65%; width: 28%; background: var(--mb, var(--brand)); }
+.theme-tile > span { font-size: var(--fs-xs); font-weight: 600; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.theme-tile.on > span { color: var(--ink); font-weight: 700; }
+.theme-tile[data-theme=default] .tt-wall { background: var(--bg); }"""]
 NL = chr(10)
 out = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'css', 'chat-themes.css')
 open(out, 'w', encoding='utf-8', newline=NL).write(NL.join(css) + NL)
-print('wrote', out)
+print('wrote', out, len(NL.join(css)))

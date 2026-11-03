@@ -5333,3 +5333,24 @@ input.upper::placeholder { text-transform: none; }
 .chat-top .cm-add { width: 40px; height: 40px; border-radius: 50%; background: color-mix(in srgb, var(--ink) 7%, transparent); color: var(--ink); }
 .chat-top .cm-add:hover { background: color-mix(in srgb, var(--ink) 12%, transparent); }
 .chat-top .cm-add svg { width: 21px; height: 21px; }
+
+/* ---- the conversation, refined as iMessage: a glass bar on top, softer rounder bubbles in Apple's greys,
+   quieter icons, and a clean field that lifts a little off the page ---- */
+.chat-thread { --bubble-them: #e9e9eb; background: var(--bg); }
+:root[data-theme="dark"] .chat-thread { --bubble-them: #2c2c2e; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .chat-thread { --bubble-them: #2c2c2e; } }
+.chat-head { position: relative; z-index: 2; background: color-mix(in srgb, var(--bg) 78%, transparent); border-bottom: 1px solid color-mix(in srgb, var(--ink) 7%, transparent);
+  -webkit-backdrop-filter: saturate(1.8) blur(20px); backdrop-filter: saturate(1.8) blur(20px); }
+.chat-head .icon-btn { color: var(--mt, var(--brand-text)); }
+.chat-head .icon-btn#chat-back { color: var(--ink); }
+.bubble { border-radius: 20px; padding: 8px 14px; font-size: 16px; line-height: 1.38; }
+.me.joined .bubble { border-bottom-right-radius: 6px; } .me.follows .bubble { border-top-right-radius: 6px; }
+.them.joined .bubble { border-bottom-left-radius: 6px; } .them.follows .bubble { border-top-left-radius: 6px; }
+.chat-thread .day { font-size: 12px; font-weight: 600; color: var(--muted); letter-spacing: .01em; }
+.chat-compose { border-radius: 24px; border: 1px solid color-mix(in srgb, var(--ink) 9%, transparent); background: var(--bg); box-shadow: 0 8px 24px -16px rgb(var(--black-rgb) / 0.35); }
+.chat-compose:focus-within { border-color: color-mix(in srgb, var(--mt, var(--brand)) 45%, transparent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--mt, var(--brand)) 12%, transparent), 0 8px 24px -16px rgb(var(--black-rgb) / 0.35); }
+.chat-compose .icon-btn { color: color-mix(in srgb, var(--ink) 58%, transparent); }
+.chat-compose .icon-btn:hover { color: var(--ink); }
+.chat-compose textarea { font-size: 16px; }
+.chat-compose .cam-btn { box-shadow: inset 0 1px 0 rgb(var(--white-rgb) / 0.25); }
+.chat-compose .send:not(.like) { width: 36px; height: 36px; background: var(--mt, var(--brand)); color: var(--white); box-shadow: 0 4px 12px -6px var(--mt, var(--brand)); }
