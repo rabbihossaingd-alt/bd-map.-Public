@@ -3041,6 +3041,17 @@ const server = http.createServer((req, res) => {
     return res.end();
   }
   if (pathname === '/robots.txt') { res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'public, max-age=86400' }); return res.end(req.method === 'HEAD' ? '' : ROBOTS); }
+  // The Play Store app (a Trusted Web Activity, package com.manzeela.twa) shows manzeela.com without a browser bar
+  // only when this file names the app and its signing keys: the upload key here, and Google's app-signing key
+  // (Play Console → Setup → App signing) in ANDROID_SHA256 on the host, comma-separated. Fingerprints are public.
+  if (pathname === '/.well-known/assetlinks.json') {
+    const keys = ['C4:33:08:A0:CC:11:E7:40:91:F7:05:C2:5B:DC:2E:B8:8D:1B:1E:FB:F7:68:A1:8D:3F:6A:64:4F:32:AB:E9:96',
+      ...(process.env.ANDROID_SHA256 || '').split(',').map(k => k.trim().toUpperCase()).filter(k => /^([0-9A-F]{2}:){31}[0-9A-F]{2}$/.test(k))];
+    const body = JSON.stringify([{ relation: ['delegate_permission/common.handle_all_urls'],
+      target: { namespace: 'android_app', package_name: 'com.manzeela.twa', sha256_cert_fingerprints: [...new Set(keys)] } }]);
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=3600', 'Access-Control-Allow-Origin': '*' });
+    return res.end(req.method === 'HEAD' ? '' : body);
+  }
   if (pathname === '/sitemap.xml') { res.writeHead(200, { 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': 'public, max-age=86400' }); return res.end(req.method === 'HEAD' ? '' : sitemap()); }
   // the read-only switch (admin panel): before any route that writes
   { const ro = SYS.blocked(req, pathname); if (ro) return json(res, 503, { error: 'readonly', message: ro }); }
