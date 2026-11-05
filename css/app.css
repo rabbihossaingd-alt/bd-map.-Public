@@ -5445,3 +5445,102 @@ input.upper::placeholder { text-transform: none; }
 /* a bus row's tile: the filled bus in the brand's tint */
 .item > .ic.mode { display: grid; place-items: center; background: rgb(var(--brand-rgb) / .12); color: var(--brand); }
 .item > .ic.mode svg.mg { width: 24px; height: 24px; fill: currentColor; stroke: none; }
+
+/* ---- js/mapplus.js and the other roads ---- */
+/* a road's time on the map, as Google's bubbles: the chosen one blue, the others white */
+.rt-bubble { display: grid; justify-items: center; gap: 0; padding: 5px 10px 6px; border: 0; border-radius: 12px; background: var(--bg); color: var(--ink); font: inherit; cursor: pointer;
+  box-shadow: 0 2px 8px rgb(0 0 0 / .25); position: relative; transform: translateY(-6px); transition: transform .15s; }
+.rt-bubble::after { content: ""; position: absolute; left: 50%; bottom: -5px; width: 10px; height: 10px; background: inherit; transform: translateX(-50%) rotate(45deg); border-radius: 2px; }
+.rt-bubble b { font-family: var(--font-head); font-size: 14px; font-weight: 700; line-height: 1.2; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.rt-bubble span { font-size: 11px; color: var(--muted); line-height: 1.2; white-space: nowrap; }
+.rt-bubble.on { background: #1a73e8; color: #fff; z-index: 2; }
+.rt-bubble.on span { color: rgb(255 255 255 / .8); }
+.rt-bubble:active { transform: translateY(-6px) scale(.96); }
+/* saved places on the map */
+.sv-mark { width: 26px; height: 26px; padding: 0; border-radius: 50%; border: 2px solid #fff; display: grid; place-items: center; color: #fff; cursor: pointer; box-shadow: 0 2px 6px rgb(0 0 0 / .35); }
+.sv-mark svg { width: 14px; height: 14px; }
+.sv-mark.home, .sv-ic.home { background: #1a73e8; }
+.sv-mark.work, .sv-ic.work { background: #a1683a; }
+.sv-mark.saved, .sv-ic.saved { background: #f2a600; }
+.sv-ic.recent { background: var(--surface-2); color: var(--ink-2) !important; }
+.sug .ic.sv-ic { color: #fff; border-radius: 50%; display: grid; place-items: center; }
+.sug .ic.sv-ic svg { width: 18px; height: 18px; }
+.sv-row .t { flex: 1; }
+.sv-edit { flex: none; width: 34px; height: 34px; border: 0; border-radius: 50%; background: none; color: var(--muted); display: grid; place-items: center; cursor: pointer; }
+.sv-edit:hover { background: var(--surface-2); color: var(--ink); }
+.sv-edit svg { width: 17px; height: 17px; }
+.sv-opt { display: flex; align-items: center; gap: var(--space-3); width: 100%; padding: 12px var(--space-2); border: 0; border-bottom: 1px solid var(--line); background: none; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+.sv-opt:last-child { border-bottom: 0; }
+.sv-opt b { flex: 1; font-weight: 600; }
+.sv-opt .sv-ic { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; color: #fff; flex: none; }
+.sv-opt .sv-ic svg { width: 18px; height: 18px; }
+.sv-tick { width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--line); display: grid; place-items: center; color: transparent; transition: background .2s, border-color .2s; }
+.sv-tick svg { width: 14px; height: 14px; }
+.sv-opt.on .sv-tick { background: var(--brand); border-color: var(--brand); color: var(--on-brand); }
+/* the place card: round icon buttons after the main one; the details as quiet rows */
+.pc-acts { overflow-x: auto; scrollbar-width: none; }
+.pc-acts::-webkit-scrollbar { display: none; }
+.pc-acts .pc-icon { flex: none; width: 48px; padding: 0; justify-content: center; }
+.pc-acts .pc-icon svg { width: 20px; height: 20px; }
+.pc-acts .pc-save.on { color: var(--brand); }
+.pc-info:empty { display: none; }
+.pc-info { display: grid; gap: 2px; margin: -4px 0 var(--space-3); }
+.pd-row { display: flex; align-items: center; gap: var(--space-3); min-height: 34px; color: var(--ink-2); font-size: 14px; text-decoration: none; }
+.pd-row > svg { width: 18px; height: 18px; flex: none; color: var(--muted); }
+.pd-row > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+a.pd-row > span { color: #1a73e8; }
+.pd-open { color: #188038; font-weight: 600; }
+.pd-shut { color: #d93025; font-weight: 600; }
+.pd-copy { flex: none; width: 32px; height: 32px; border: 0; border-radius: 50%; background: none; color: var(--muted); display: grid; place-items: center; cursor: pointer; }
+.pd-copy:hover { background: var(--surface-2); }
+.pd-copy svg { width: 16px; height: 16px; }
+/* measuring: the total in a pill */
+.ms2-pill { position: absolute; z-index: 40; left: 50%; transform: translateX(-50%); bottom: calc(var(--tab-h) + 22px + env(safe-area-inset-bottom)); display: flex; align-items: center; gap: var(--space-2);
+  padding: 6px; border-radius: 999px; background: var(--bg); color: var(--ink); box-shadow: var(--shadow-2); }
+.ms2-pill[hidden] { display: none; }
+.ms2-pill .t { display: grid; padding: 0 var(--space-3); text-align: center; min-width: 120px; }
+.ms2-pill .t span { font-size: 11px; color: var(--muted); }
+.ms2-pill .t b { font-family: var(--font-head); font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.ms2-pill button { width: 40px; height: 40px; border: 0; border-radius: 50%; background: var(--surface-2); color: var(--ink); display: grid; place-items: center; cursor: pointer; }
+.ms2-pill button:disabled { opacity: .35; cursor: default; }
+.ms2-pill button svg { width: 18px; height: 18px; }
+@media (min-width: 761px) { .ms2-pill { bottom: 24px; } }
+/* offline areas */
+.mm-off { width: 100%; border: 0; border-top: 1px solid var(--line); background: none; color: var(--ink); font: inherit; font-size: var(--fs-sm); font-weight: 600; cursor: pointer; }
+.mm-off i svg { width: 16px; height: 16px; color: var(--muted); transform: rotate(-90deg); }
+.off-here { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3); border-radius: 16px; background: color-mix(in srgb, var(--ink) 5%, transparent); }
+.off-here .t { flex: 1; display: grid; gap: 2px; min-width: 0; }
+.off-here .t b { font-weight: 700; }
+.off-here .t span { font-size: 13px; color: var(--muted); }
+.off-go { flex: none; height: 40px; padding: 0 14px; }
+.off-go svg { transform: rotate(90deg); }
+.off-track { height: 4px; margin: var(--space-3) 2px 0; border-radius: 4px; background: var(--surface-2); overflow: hidden; }
+.off-track i { display: block; width: 0; height: 100%; background: var(--brand); transition: width .2s; }
+.off-note { margin: var(--space-2) 2px 0; font-size: 13px; color: var(--muted); }
+.off-head { margin: var(--space-4) 2px var(--space-1); font-size: 12px; font-weight: 700; color: var(--muted); }
+.off-area { display: flex; align-items: center; gap: var(--space-2); border-top: 1px solid var(--line); }
+.off-area .t { flex: 1; min-width: 0; display: grid; gap: 1px; padding: 10px 2px; border: 0; background: none; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+.off-area .t b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.off-area .t span { font-size: 12px; color: var(--muted); }
+.off-del { flex: none; width: 36px; height: 36px; border: 0; border-radius: 50%; background: none; color: var(--muted); display: grid; place-items: center; cursor: pointer; }
+.off-del:hover { background: var(--surface-2); color: #d93025; }
+.off-del svg { width: 17px; height: 17px; }
+/* a short note that fades by itself */
+.mp-toast { position: fixed; z-index: 2000; left: 50%; bottom: calc(var(--tab-h) + 80px + env(safe-area-inset-bottom)); transform: translate(-50%, 10px); padding: 10px 16px; border-radius: 999px;
+  background: var(--ink); color: var(--bg); font-size: 14px; font-weight: 600; opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; }
+.mp-toast.in { opacity: 1; transform: translate(-50%, 0); }
+@media (min-width: 761px) { .mp-toast { bottom: 40px; } }
+/* the line icons of js/mapplus.js, drawn as the rest of the app's */
+.pd-row > svg, .pd-copy svg, .sv-edit svg, .off-del svg, .ms2-pill button svg, .mm-off i svg, .sv-mark svg, .sv-tick svg, .sv-ic svg, .off-go svg {
+  fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.sv-mark svg, .sv-ic svg { stroke-width: 2.2; }
+/* the card's buttons stay on one line; the row scrolls sideways with a soft edge when they do not all fit */
+.pc-acts .btn { flex: none; white-space: nowrap; padding-inline: 16px; }
+.pc-acts .pc-go { flex: 1 0 auto; }
+.pc-acts { padding-right: 4px; -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 18px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 18px), transparent); }
+/* on a phone "from here" is its pin alone (its name is in its tooltip), so every button fits on the card */
+@media (max-width: 760px) {
+  .pc-acts .btn.quiet:not(.pc-icon) { width: 48px; padding: 0; justify-content: center; }
+  .pc-acts .btn.quiet:not(.pc-icon) span { display: none; }
+  .pc-acts .btn.quiet:not(.pc-icon) svg { width: 20px; height: 20px; }
+}

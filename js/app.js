@@ -917,7 +917,7 @@ async function esriTile(url, signal, depth = 0) {
   return (await c.convertToBlob({ type: 'image/jpeg', quality: 0.9 })).arrayBuffer();
 }
 let mapMode = (() => { try { return localStorage.getItem('bdmap.mapmode') || 'hybrid'; } catch { return 'standard'; } })();
-const OUR_LAYERS = /^(route|bus|stops|places2|sat|walk)/;
+const OUR_LAYERS = /^(route|bus|stops|places2|sat|walk|alt|measure)/;
 async function setMapMode(mode) {
   if (mode !== 'standard') { await satKey; if (!SAT_TILES) mode = 'standard'; }     // no working key: no satellite view
   mapMode = mode;
@@ -979,7 +979,8 @@ async function setMapMode(mode) {
   card.append(head, cards, row);
   sheet.appendChild(card);
   document.getElementById('page-trip').appendChild(sheet);
-  const open = () => { cb.checked = is3D; for (const b of cards.children) b.classList.toggle('on', b.dataset.mode === mapMode); sheet.hidden = false; requestAnimationFrame(() => sheet.classList.add('in')); };
+  const open = () => { if (typeof offRow === 'function' && !card.querySelector('.mm-off')) card.appendChild(offRow(() => close()));   // js/mapplus.js loads after this file
+    cb.checked = is3D; for (const b of cards.children) b.classList.toggle('on', b.dataset.mode === mapMode); sheet.hidden = false; requestAnimationFrame(() => sheet.classList.add('in')); };
   const close = () => { sheet.classList.remove('in'); setTimeout(() => { sheet.hidden = true; }, 220); };
   btn.addEventListener('click', () => (sheet.hidden ? open() : close()));
   x.addEventListener('click', close);
@@ -1169,7 +1170,13 @@ async function createMap() {
   // Our own layers. Lines go under the map's labels so place names stay readable on top of a route.
   const firstLabel = (map.getStyle().layers.find(l => l.type === 'symbol') || {}).id;
   const round = { 'line-cap': 'round', 'line-join': 'round' };
-  for (const id of ['route', 'bus', 'stops', 'walk']) map.addSource(id, { type: 'geojson', data: EMPTY });
+  for (const id of ['route', 'bus', 'stops', 'walk', 'alt', 'measure']) map.addSource(id, { type: 'geojson', data: EMPTY });
+  // the other roads: grey, under the chosen one; a tap on one chooses it
+  map.addLayer({ id: 'alt-casing', type: 'line', source: 'alt', layout: round, paint: { 'line-color': dark ? '#0b0f14' : '#ffffff', 'line-width': 9 } }, firstLabel);
+  map.addLayer({ id: 'alt-line', type: 'line', source: 'alt', layout: round, paint: { 'line-color': dark ? '#7d8794' : '#9aa6b2', 'line-width': 5.5 } }, firstLabel);
+  map.on('click', 'alt-line', e => { const f = e.features[0]; if (f) useRoute(f.properties.i); });
+  map.on('mouseenter', 'alt-line', () => { map.getCanvas().style.cursor = 'pointer'; });
+  map.on('mouseleave', 'alt-line', () => { map.getCanvas().style.cursor = ''; });
   map.addLayer({ id: 'walk-line', type: 'line', source: 'walk', layout: round, paint: { 'line-color': dark ? '#6ea8ff' : '#2563eb', 'line-width': 7, 'line-dasharray': [0.1, 1.8] } }, firstLabel);
   map.addLayer({ id: 'route-casing', type: 'line', source: 'route', layout: round, paint: { 'line-color': dark ? '#0b0f14' : '#ffffff', 'line-width': 10 } }, firstLabel);
   map.addLayer({ id: 'route-line', type: 'line', source: 'route', layout: round, paint: { 'line-color': dark ? '#6ea8ff' : '#2563eb', 'line-width': 6 } }, firstLabel);
@@ -1247,6 +1254,8 @@ async function createMap() {
 
   // A tap on the map fills whichever end of the trip is still empty.
   map.on('click', async e => {
+    if (typeof msClick === 'function' && msClick(e)) return;         // measuring a distance (js/mapplus.js)
+    if (typeof lpGuard === 'function' && lpGuard()) return;          // the finger lifting after a long press
     if (map.queryRenderedFeatures(e.point, { layers: ['stops'] }).length) return;
     if (!dirOpen()) {
       const box = [[e.point.x - 10, e.point.y - 10], [e.point.x + 10, e.point.y + 10]];
@@ -1267,6 +1276,7 @@ async function createMap() {
     const name = await reverseName(lat, lng);
     if (name && trip[which] === place) { place.label = name; for (const s of searches) s.sync(); }
   });
+  if (typeof mapPlusReady === 'function') mapPlusReady();          // long press, measuring, saved places (js/mapplus.js)
 }
 
 function ensureMap() {
@@ -1605,8 +1615,8 @@ function showPane(name) {
   for (const x of document.querySelectorAll('#trip-time .way')) x.classList.toggle('on', x.dataset.pane === name);
   if (driveKm) $('trip-km').textContent = name === 'walk' && walkKm ? walkKm : driveKm;   // the length of the way shown
   if (!map) return;
-  if (name === 'walk' && walkLine) { drawLines('route', []); drawLines('walk', [{ coords: walkLine }]); }
-  else if (driveLine) { drawLines('walk', []); if (map.getSource('route')) map.getSource('route').setData({ type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: driveLine } }] }); }
+  if (name === 'walk' && walkLine) { drawLines('route', []); drawLines('walk', [{ coords: walkLine }]); showAlts(false); }
+  else if (driveLine) { drawLines('walk', []); if (map.getSource('route')) map.getSource('route').setData({ type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: driveLine } }] }); showAlts(true); }
 }
 // the way on foot: how long, how far, free; from the walking route when it came, else from the road's length
 function renderWalkPane(km, w) {
@@ -1619,6 +1629,8 @@ function renderWalkPane(km, w) {
   return wmin;
 }
 
+// The roads OSRM offered between the two ends (the best first) and the one the sheet is showing.
+let routeChoices = [], routeAt = 0, walkMin = 0, altMarkers = [];
 async function calculate() {
   const key = [trip.from.lat, trip.from.lon, trip.to.lat, trip.to.lon].join();
   if (key === lastKey) return;
@@ -1629,19 +1641,30 @@ async function calculate() {
   catch { lastKey = ''; setStatus('রুট পাওয়া যায়নি। অন্য জায়গা দিয়ে চেষ্টা করুন।'); return; }
   if (key !== lastKey) return;
   setStatus('');
-
-  const km = r.distance / 1000, min = r.duration / 60;
   saveRecent(trip.from, trip.to);
+  routeChoices = [r, ...(r.alts || [])];
+  walkLine = null; walkMin = 0;
+  useRoute(0, true);
+}
+// A car's time on a road: inside Dhaka from a clear road to the city's average with traffic (7 km/h, World Bank).
+function carTime(r) {
+  const km = r.distance / 1000, min = r.duration / 60;
+  return inDhakaCity(trip.from, trip.to) ? [min, Math.max(min, km / FARES.cityKmh.dhakaMetro * 60)] : [min, min];
+}
+// One of the roads: the sheet, its chips and its panes follow it; the others stay grey on the map, each with its time.
+function useRoute(i, first = false) {
+  const key = lastKey, r = routeChoices[i];
+  if (!r) return;
+  routeAt = i;
+  const km = r.distance / 1000, min = r.duration / 60, open = ['walk', 'bus', 'ride', 'train'].find(p => !$('pane-' + p).hidden);
   $('trip-km').textContent = km < 1 ? distText(km) : `${num(km, 1)} কিমি`;   // under a kilometre in metres ("৫০ মিটার", not "০ কিমি")
-  // How long by each way of going, as Google lists them above a route. The road's length is the route's; walking,
-  // and bus speeds are the usual ones in Bangladesh, and the times are said to be rough.
-  // Inside Dhaka a car and a bus go at the city's pace: from a clear road (the route's own time; a bus at its top speed)
-  // to the average with traffic (7 km/h, World Bank). The bus chip uses the same speeds as each bus below, so the two agree.
-  const city = inDhakaCity(trip.from, trip.to), [busSlow, busFast] = FARES.bus.localSpeedKmh;
-  const jam = km / FARES.cityKmh.dhakaMetro * 60;
-  const ways = [['car', 'গাড়িতে', city ? [min, Math.max(min, jam)] : min],
+  // How long by each way of going, as Google lists them above a route. The road's length is the route's; walking
+  // and bus speeds are the usual ones in Bangladesh, and the times are said to be rough. The bus chip uses the same
+  // speeds as each bus below, so the two agree.
+  const city = inDhakaCity(trip.from, trip.to), [busSlow, busFast] = FARES.bus.localSpeedKmh, [carLo, carHi] = carTime(r);
+  const ways = [['car', 'গাড়িতে', city ? [carLo, carHi] : min],
     ['bus', 'বাসে', city ? [km / busFast * 60, km / busSlow * 60] : km / (km < 40 ? 14 : 40) * 60],
-    ...(km <= 8 ? [['walk', 'হেঁটে', km / 4.5 * 60]] : [])];
+    ...(km <= 8 ? [['walk', 'হেঁটে', walkMin || km / 4.5 * 60]] : [])];
   // close: by road, or a short walk across even where the cars go round a one-way loop
   const near = km <= 1.5 || haversineKm(trip.from, trip.to) <= 1;
   const PANE_OF = { walk: 'walk', bus: 'bus', car: 'ride' };
@@ -1653,11 +1676,11 @@ async function calculate() {
   }
   $('trip-time').replaceChildren(row);                    // the ways of going are the choice; no note under them
   $('sheet').hidden = false;
-  if (phoneSheet) phoneSheet.snap(1, false);
-  $('trip-photo').replaceChildren(photoStrip(trip.to));
+  if (first && phoneSheet) phoneSheet.snap(1, false);
+  if (first) $('trip-photo').replaceChildren(photoStrip(trip.to));
   clearBus();
   renderBusPane(km);
-  renderRidePane(km, min, city ? Math.max(min, jam) : min);
+  renderRidePane(km, min, carHi);
   renderTrainPane();
   if (typeof showCommunityFares === 'function') showCommunityFares();
   // on foot: its own tab when it is a walk at all (8 km), filled in from the walking route when that comes
@@ -1665,21 +1688,46 @@ async function calculate() {
   walkTab.hidden = km > 8;
   if (walkTab.hidden) $('seg').hidden = $('seg').querySelectorAll('button:not([hidden])').length < 2;
   else $('seg').hidden = false;
-  driveLine = r.geometry.coordinates; walkLine = null; driveKm = $('trip-km').textContent; walkKm = '';
-  drawLines('walk', []);
-  if (km <= 8) renderWalkPane(km, null);
-  showPane(near ? 'walk' : 'bus');
-
-  fit(r.geometry.coordinates);
-  drawLines('route', [{ coords: r.geometry.coordinates }]);              // the road until the way on foot comes
-  if (km <= 8) getWalk(trip.from, trip.to).then(w => {
+  driveLine = r.geometry.coordinates; driveKm = $('trip-km').textContent;
+  if (first) { walkKm = ''; drawLines('walk', []); if (km <= 8) renderWalkPane(km, null); }
+  if (first) drawLines('route', [{ coords: r.geometry.coordinates }]);              // the road until the way on foot comes
+  showPane(first ? (near ? 'walk' : 'bus') : open === 'walk' && km > 8 ? 'bus' : open || 'bus');
+  if (first) fit(routeChoices.flatMap(c => c.geometry.coordinates));
+  if (first && km <= 8) getWalk(trip.from, trip.to).then(w => {
     if (key !== lastKey) return;
     walkLine = w.geometry.coordinates;
-    const wmin = renderWalkPane(km, w);
-    const chip = row.querySelector('.way[data-pane=walk] span');
-    if (chip) chip.textContent = fmtMin(wmin);
-    if (!$('pane-walk').hidden) { $('trip-km').textContent = walkKm; fit(walkLine); drawLines('route', []); drawLines('walk', [{ coords: walkLine }]); }
+    walkMin = renderWalkPane(km, w);
+    const chip = $('trip-time').querySelector('.way[data-pane=walk] span');
+    if (chip) chip.textContent = fmtMin(walkMin);
+    if (!$('pane-walk').hidden) { $('trip-km').textContent = walkKm; fit(walkLine); drawLines('route', []); drawLines('walk', [{ coords: walkLine }]); showAlts(false); }
   }).catch(() => { if (key === lastKey && !$('pane-walk').hidden) drawLines('route', [{ coords: driveLine }]); });
+}
+// The other roads, grey under the chosen one, and a bubble with each road's time where it runs apart from the rest
+// (as Google Maps shows them); a tap on either chooses that road.
+function showAlts(on) {
+  for (const m of altMarkers) m.remove();
+  altMarkers = [];
+  const src = map && map.getSource('alt');
+  if (!src) return;
+  const others = on ? routeChoices.map((c, i) => [c, i]).filter(([, i]) => i !== routeAt) : [];
+  src.setData({ type: 'FeatureCollection', features: others.map(([c, i]) => ({ type: 'Feature', properties: { i }, geometry: c.geometry })) });
+  if (!on || routeChoices.length < 2) return;
+  const sample = c => { const g = c.geometry.coordinates, n = Math.max(1, Math.floor(g.length / 60)); return g.filter((_, k) => k % n === 0); };
+  const pts = routeChoices.map(sample);
+  routeChoices.forEach((c, i) => {
+    // the point of this road farthest from every other road
+    let best = pts[i][Math.floor(pts[i].length / 2)], far = -1;
+    for (const p of pts[i].slice(2, -2)) {
+      const d = Math.min(...pts.filter((_, j) => j !== i).map(o => Math.min(...o.map(q => Math.hypot(q[0] - p[0], q[1] - p[1])))));
+      if (d > far) { far = d; best = p; }
+    }
+    // in Dhaka every road gets the same traffic range, so the length is what tells them apart there
+    const [lo, hi] = carTime(c), len = `${num(c.distance / 1000, 1)} কিমি`, b = el('button', 'rt-bubble' + (i === routeAt ? ' on' : ''));
+    if (inDhakaCity(trip.from, trip.to)) b.append(el('b', null, len), el('span', null, `${fmtMin(c.duration / 60)} জ্যাম ছাড়া`));
+    else b.append(el('b', null, fmtSpan(lo, hi)), el('span', null, len));
+    b.addEventListener('click', e => { e.stopPropagation(); if (i !== routeAt) useRoute(i); });
+    altMarkers.push(new maplibregl.Marker({ element: b, anchor: 'bottom' }).setLngLat(best).addTo(map));
+  });
 }
 
 // On a phone the results sheet can be pulled up to read everything, or down to see the map.
@@ -1700,6 +1748,7 @@ function clearTrip() {
   drawLines('route', []);
   drawLines('walk', []);
   driveLine = walkLine = null; driveKm = walkKm = '';
+  routeChoices = []; showAlts(false);
   clearBus();
   drawMarkers();
   fit(BD_LNGLAT);
@@ -1767,13 +1816,14 @@ function showPlace(pl) {
     if (myLoc) { trip.from = { lat: myLoc.lat, lon: myLoc.lon, label: 'আমার লোকেশন' }; }
     setPlace('to', to);
   });
-  const from = el('button', 'btn quiet'); from.append(ic('pin'), el('span', null, 'এখান থেকে'));
+  const from = el('button', 'btn quiet'); from.title = from.ariaLabel = 'এখান থেকে'; from.append(ic('pin'), el('span', null, 'এখান থেকে'));
   from.addEventListener('click', () => { hidePlace(); openDirections(true); setPlace('from', { lat: pl.lat, lon: pl.lon, label: pl.name || 'বাছাই করা জায়গা' }); });
   // the place as a link, for WhatsApp or Messenger (js/locshare.js)
   const sh = el('button', 'btn quiet pc-share'); sh.innerHTML = svg('share'); sh.setAttribute('aria-label', 'শেয়ার'); sh.title = 'শেয়ার';
   sh.addEventListener('click', () => lsSharePlace({ lat: pl.lat, lon: pl.lon, label: pl.name || 'বাছাই করা জায়গা' }));
   acts.append(go, from, sh);
   card.replaceChildren(head, dist, acts);
+  if (typeof placeExtras === 'function') placeExtras(pl, card, acts);     // save; hours, phone, website; a pin's coordinates (js/mapplus.js)
   card.hidden = false;
   map.easeTo({ center: [pl.lon, pl.lat], zoom: Math.max(map.getZoom(), 16.2), duration: 700, padding: mapPadding() });
 }
@@ -1789,13 +1839,13 @@ function showPlace(pl) {
     const t = el('div', 't'); t.append(el('b', 'no-tr', pl.name), el('span', null, [pl.km != null ? kmText(pl.km) : '', KIND_BN[pl.kind] || pl.sub || ''].filter(Boolean).join(' · ')));
     const i = ic(icon || 'pin'); if (k) i.style.color = k[1];
     row.append(i, t);
-    row.addEventListener('mousedown', e => { e.preventDefault(); sug.hidden = true; input.value = pl.name; clear.hidden = false; input.blur(); showPlace(pl); });
+    row.addEventListener('mousedown', e => { e.preventDefault(); sug.hidden = true; if (typeof svPick === 'function' && svPick(pl)) { input.blur(); return; } input.value = pl.name; clear.hidden = false; input.blur(); showPlace(pl); });
     sug.appendChild(row);
   };
   async function run() {
     const q = input.value.trim(), mine = ++seq;
     clear.hidden = !q;
-    if (q.length < 2) { sug.hidden = true; return; }
+    if (q.length < 2) { if (!q && document.activeElement === input && typeof svSuggest === 'function') svSuggest(sug); else sug.hidden = true; return; }
     const h = here();
     const [ours, local] = await Promise.all([
       fetch(`api/pois/search?q=${encodeURIComponent(q)}&lat=${h.lat}&lon=${h.lon}`).then(r => r.json()).then(j => j.results).catch(() => []),
@@ -1822,7 +1872,7 @@ function showPlace(pl) {
   }
   let typing = null;
   input.addEventListener('input', () => { clearTimeout(typing); typing = setTimeout(run, 220); });
-  input.addEventListener('focus', () => { if (input.value.trim().length >= 2) run(); });
+  input.addEventListener('focus', () => { const q = input.value.trim(); if (q.length >= 2 || !q) run(); });
   input.addEventListener('blur', () => setTimeout(() => { sug.hidden = true; }, 150));
   input.addEventListener('keydown', e => { if (e.key === 'Enter') { const f = sug.querySelector('.sug'); if (f) f.dispatchEvent(new MouseEvent('mousedown', { cancelable: true })); } });
   clear.addEventListener('click', () => { input.value = ''; clear.hidden = true; sug.hidden = true; hidePlace(); input.focus(); });

@@ -2821,6 +2821,34 @@ try {
   }
   console.log(`Map places: ${[...poiCells.values()].reduce((n, c) => n + c.length, 0)} in ${poiCells.size} cells`);
 } catch { /* no file: the map shows OpenStreetMap's places only */ }
+// A place's details for its card (data/place-details.tsv.gz, from tools/osm-details.mjs: OpenStreetMap, ODbL):
+// opening hours, phone, website and address, in cells of 0.01°. ?lat&lon&name: the place of that name within 120 m.
+const detailCells = new Map();
+const detailNorm = s => String(s || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
+try {
+  const rows = require('node:zlib').gunzipSync(fs.readFileSync(path.join(ROOT, 'data', 'place-details.tsv.gz'))).toString('utf8').split('\n');
+  rows.shift();
+  for (const r of rows) {
+    if (!r) continue;
+    const [la, lo, name, bn, en, hours, phone, web, addr] = r.split('\t');
+    const key = Math.floor(+la * 100) + ':' + Math.floor(+lo * 100);
+    if (!detailCells.has(key)) detailCells.set(key, []);
+    detailCells.get(key).push({ lat: +la, lon: +lo, names: [name, bn, en].map(detailNorm).filter(Boolean), hours, phone, web, addr });
+  }
+} catch { /* no file: cards show no details */ }
+function poisDetail(res, lat, lon, name) {
+  const want = detailNorm(name);
+  if (!want || !Number.isFinite(lat) || !Number.isFinite(lon)) return json(res, 400, { error: 'bad request' });
+  let best = null, bestKm = 0.12;
+  for (let y = Math.floor(lat * 100) - 1; y <= Math.floor(lat * 100) + 1; y++) for (let x = Math.floor(lon * 100) - 1; x <= Math.floor(lon * 100) + 1; x++)
+    for (const p of detailCells.get(y + ':' + x) || []) {
+      const km = poiKm(lat, lon, p.lat, p.lon);
+      // the same name, or one holding the other (a branch's longer name)
+      if (km < bestKm && p.names.some(k => k === want || (k.length > 4 && want.length > 4 && (k.includes(want) || want.includes(k))))) { best = p; bestKm = km; }
+    }
+  res.setHeader('Cache-Control', 'public, max-age=86400');
+  json(res, 200, best ? { hours: best.hours, phone: best.phone, web: best.web, addr: best.addr } : {});
+}
 // The same places for search: every name in lower case, Bangla and English, with its cell's place in the list.
 const poiAll = [...poiCells.values()].flat();
 const poiNames = poiAll.map(p => (p[3] + ' ' + p[4]).toLowerCase());
@@ -2932,7 +2960,8 @@ function geoUpstream(kind, sp) {
   if (kind === 'route') {
     const pts = String(sp.get('c') || '').split(';').map(p => p.split(',').map(Number));
     if (pts.length >= 2 && pts.length <= 6 && pts.every(([lon, lat]) => inBd(lat, lon)))
-      return 'https://router.project-osrm.org/route/v1/driving/' + pts.map(([lon, lat]) => lon.toFixed(5) + ',' + lat.toFixed(5)).join(';') + '?overview=full&geometries=geojson';
+      // between two points OSRM also offers up to two other ways (shown grey, as Google does); with stops it cannot
+      return 'https://router.project-osrm.org/route/v1/driving/' + pts.map(([lon, lat]) => lon.toFixed(5) + ',' + lat.toFixed(5)).join(';') + '?overview=full&geometries=geojson' + (pts.length === 2 ? '&alternatives=2' : '');
   }
   // on foot: footpaths and lanes, either way down a one-way street (FOSSGIS's OSRM, OpenStreetMap data)
   if (kind === 'walk') {
@@ -3096,6 +3125,7 @@ const server = http.createServer((req, res) => {
   if (pathname.startsWith('/api/geo/') && req.method === 'GET') return geoApi(req, res, pathname.slice(9), searchParams).catch(() => json(res, 500, { error: 'server error' }));
   if (pathname === '/api/pois') return poisApi(req, res, searchParams);
   if (pathname === '/api/pois/search') return poisSearch(res, (searchParams.get('q') || '').slice(0, 80), parseFloat(searchParams.get('lat')), parseFloat(searchParams.get('lon')));
+  if (pathname === '/api/pois/detail') return poisDetail(res, parseFloat(searchParams.get('lat')), parseFloat(searchParams.get('lon')), (searchParams.get('name') || '').slice(0, 120));
   if (pathname === '/api/pois/near') return poisNear(res, (searchParams.get('kind') || '').slice(0, 12), parseFloat(searchParams.get('lat')), parseFloat(searchParams.get('lon')));
   // The map's imagery key (ArcGIS Location Platform, Basemaps only). It travels to every browser anyway — tiles are
   // fetched there — so it is limited to basemaps; it lives in the environment (ESRI_KEY), not in the code.

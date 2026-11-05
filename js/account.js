@@ -98,7 +98,7 @@ function renderAccount() {
 
 // Recent trips: on login the device's list and the account's are merged; after that every change is sent up.
 function syncAccount() {
-  if (ME) acctApi('data', { data: { recent: loadRecent() } }).catch(() => {});
+  if (ME) acctApi('data', { data: { recent: loadRecent(), ...(typeof svLoad === 'function' ? { saved: svLoad() } : {}) } }).catch(() => {});
 }
 function signedIn(reply) {
   ME = reply.user;
@@ -110,6 +110,7 @@ function signedIn(reply) {
     if (!seen.has(key) && merged.length < 4) { seen.add(key); merged.push(r); }
   }
   try { localStorage.setItem(RECENT_KEY, JSON.stringify(merged)); } catch { /* storage unavailable */ }
+  if (typeof svMerge === 'function') svMerge(reply.data && reply.data.saved);     // home, work and saved places (js/mapplus.js)
   syncAccount();
   renderRecent();
   authChanged();

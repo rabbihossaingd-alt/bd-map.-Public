@@ -686,10 +686,13 @@ function getWalk(from, to) {
 }
 async function fetchRoute(pts) {
   const coords = pts.map(p => `${p.lon},${p.lat}`).join(';');
-  const url = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson`;
+  const url = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson${pts.length === 2 ? '&alternatives=2' : ''}`;
   const data = await geoJson('api/geo/route?c=' + encodeURIComponent(coords), url).catch(() => ({}));
   if (data.code !== 'Ok' || !data.routes.length) throw new Error('no route');
-  return data.routes[0];
+  // the best road, with the other ways OSRM found (up to two) beside it
+  const best = data.routes[0];
+  best.alts = data.routes.slice(1, 3);
+  return best;
 }
 
 // ---- Dhaka local buses ----

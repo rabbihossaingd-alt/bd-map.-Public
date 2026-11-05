@@ -9,10 +9,14 @@ const MEDIA = 'bdmap-media-v1';
 // goes stale), its letters and sprites, and the terrain tiles. Kept apart, the newest 2,500, so opening the
 // map again draws it from the phone. Satellite photos are not kept (Esri's terms).
 const MAPS = 'bdmap-maps-v1';
+// Areas kept for use without internet (js/mapplus.js): street tiles stored under their place, z/x/y, so they are
+// found whatever build of the map is asked for; never trimmed, removed only when the person deletes the area.
+const OFFLINE = 'bdmap-offline-v1';
+const offlineTile = url => { const m = url.pathname.match(/^\/planet\/[^/]+\/(\d+)\/(\d+)\/(\d+)\.pbf$/); return m ? caches.open(OFFLINE).then(c => c.match(`https://offline.manzeela.com/t/${m[1]}/${m[2]}/${m[3]}.pbf`)) : Promise.resolve(undefined); };
 
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', event => event.waitUntil(
-  caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE && k !== MEDIA && k !== MAPS).map(k => caches.delete(k)))).then(() => self.clients.claim())));
+  caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE && k !== MEDIA && k !== MAPS && k !== OFFLINE).map(k => caches.delete(k)))).then(() => self.clients.claim())));
 
 self.addEventListener('fetch', event => {
   const req = event.request;
@@ -20,13 +24,13 @@ self.addEventListener('fetch', event => {
   // the tile list (/planet) and the style name no date, so they always come fresh; tiles, letters and sprites do
   const ofm = url.hostname === 'tiles.openfreemap.org' && /^\/(planet\/\d|fonts\/|sprites\/)/.test(url.pathname);
   if (req.method === 'GET' && (ofm || (url.hostname === 's3.amazonaws.com' && url.pathname.startsWith('/elevation-tiles-prod/')))) {
-    event.respondWith(caches.open(MAPS).then(c => c.match(req.url).then(hit => hit || fetch(req).then(res => {
+    event.respondWith(caches.open(MAPS).then(c => caches.match(req.url).then(hit => hit || fetch(req).then(res => {
       if (res.ok && (res.type === 'cors' || res.type === 'basic')) {
         res.clone().blob().then(body => c.put(req.url, new Response(body, { headers: { 'Content-Type': res.headers.get('Content-Type') || '', 'Access-Control-Allow-Origin': '*' } })))
           .then(() => Math.random() < 0.05 ? c.keys().then(k => Promise.all(k.slice(0, Math.max(0, k.length - 2500)).map(x => c.delete(x)))) : null).catch(() => {});
       }
       return res;
-    }))));
+    }).catch(() => offlineTile(url).then(hit => hit || Response.error())))));
     return;
   }
   if (req.method === 'GET' && /^(upload\.wikimedia\.org|thumb\.wikimedia\.org|fonts\.gstatic\.com|fonts\.googleapis\.com)$/.test(url.hostname)) {
