@@ -1441,8 +1441,8 @@ function renderBusPane(km) {
     for (const t of trips.slice(0, 6)) {
       const first = t.legs[0], last = t.legs[t.legs.length - 1];
       const off = STOPS[last.seg[last.seg.length - 1]], walk = trip.to ? haversineKm(off, trip.to) * FARES.bus.roadFactor : 0;
-      const getOff = `${off.bn}-এ নামুন` + (walk >= 0.15 ? ` · নেমে ${kmText(walk)} হাঁটা` : '');
-      const card = item('bus', t.legs.map(l => l.r.bn).join(' → '), `${STOPS[first.seg[0]].bn} থেকে উঠুন · ${getOff} · ${fmtSpan(t.minLo, t.minHi)}`, taka(t.fare), node => {
+      // where to get on and off, and how long: one short line (the stops and the walk are in the detail)
+      const card = item('bus', t.legs.map(l => l.r.bn).join(' → '), `${STOPS[first.seg[0]].bn} → ${off.bn} · ${fmtSpan(t.minLo, t.minHi)}` + (walk >= 0.15 ? ` · ${kmText(walk)} হাঁটা` : ''), taka(t.fare), node => {
         selectOnly(node);
         openBusDetail(node, t);
       });
@@ -1457,7 +1457,7 @@ function renderBusPane(km) {
       const seg = direct.legs[0].seg;
       const fix = el('button', 'text-btn');
       fix.innerHTML = svg('edit');
-      fix.appendChild(document.createTextNode('ভাড়া ঠিক নয়? আসল ভাড়া জানান'));
+      fix.appendChild(document.createTextNode('সঠিক ভাড়া জানান'));
       fix.addEventListener('click', () => askFare(seg[0], seg[seg.length - 1], km));
       pane.appendChild(fix);
     }
@@ -1466,13 +1466,13 @@ function renderBusPane(km) {
 
   const a = nearestDistrict(trip.from), b = nearestDistrict(trip.to);
   if (rule !== FARES.bus.intercity || a === b) {
-    pane.appendChild(item('bus', 'বাস ভাড়া · আনুমানিক', perKmText(rule.perKm), taka(busFare(rule, km))));
+    pane.appendChild(item('bus', 'বাস', `আনুমানিক · ${perKmText(rule.perKm)}`, taka(busFare(rule, km))));
     if (rule !== FARES.bus.intercity) pane.appendChild(el('div', 'empty', 'এই পথের বাসের নাম এখনো আমাদের কাছে নেই।'));
     return;
   }
   pane.append(...intercityRows(a, b, rule, km));
   const ops = operatorsBetween(a, b);
-  if (ops.length) pane.append(el('div', 'label', 'যে কোম্পানির বাস চলে'), operatorChips(a, b));
+  if (ops.length) pane.append(el('div', 'label', 'বাস কোম্পানি'), operatorChips(a, b));
 }
 // Long-distance bus fares, one line each as Google lists ways of going: non-AC at BRTA's fare (or the per-km rate), AC
 // as the range the companies charge; what the counters usually ask, when we know it, under each. Where they leave from
@@ -1481,11 +1481,11 @@ function intercityRows(a, b, rule, km) {
   const official = officialFare(a, b), other = a.id === 'dhaka' ? b : b.id === 'dhaka' ? a : null, f = other && MARKET_FARES[other.id];
   const base = official ? official.f51 : busFare(rule, km), [lo, hi] = FARES.bus.acRange;
   const out = [];
-  if (official && official.terminal) out.push(el('div', 'label', `${official.terminal} থেকে ছাড়ে`));
+  if (official && official.terminal) out.push(el('div', 'label', `${official.terminal} বাস টার্মিনাল থেকে`));
   // the price people pay at the counter large, when we know it; BRTA's set fare under it
   const brta = official ? fareRange(official.f51, official.f40) : taka(base), acEst = `${taka(base * lo)}–${num(Math.ceil(base * hi))}`;
-  out.push(f ? item('bus', 'নন-এসি', `বিআরটিএ-র ভাড়া ${brta}`, fareRange(f[0], f[1])) : item('bus', 'নন-এসি', official ? 'বিআরটিএ-র ভাড়া' : 'সরকারি হারে', brta));
-  out.push(f && f.length > 2 ? item('bus', 'এসি', 'কাউন্টারে সাধারণত', fareRange(f[2], f[3])) : item('bus', 'এসি', 'কোম্পানি ভেদে', acEst));
+  out.push(f ? item('bus', 'নন-এসি বাস', `বিআরটিএ নির্ধারিত ${brta}`, fareRange(f[0], f[1])) : item('bus', 'নন-এসি বাস', official ? 'বিআরটিএ নির্ধারিত' : 'সরকারি হারে', brta));
+  out.push(f && f.length > 2 ? item('bus', 'এসি বাস', 'কাউন্টার ভাড়া', fareRange(f[2], f[3])) : item('bus', 'এসি বাস', 'আনুমানিক', acEst));
   return out;
 }
 
@@ -1522,7 +1522,7 @@ function renderRidePane(km, min, jamMin = min) {
   const add = (icon, name, sub, price) => {
     pane.appendChild(item(icon, name, sub, Array.isArray(price) ? fareRange(Math.round(price[0] / 5) * 5, Math.round(price[1] / 5) * 5) : taka(price), node => { selectOnly(node); requestRide(name, Array.isArray(price) ? price[1] : price); }));
   };
-  if (km <= FARES.cng.maxKm) add('cng', 'সিএনজি', 'মিটারে, সরকারি হার', cngFare(km));
+  if (km <= FARES.cng.maxKm) add('cng', 'সিএনজি', 'মিটারে · সরকারি হার', cngFare(km));
   for (const r of FARES.rides) if (km <= r.maxKm) {
     const lo = rideFare(r, km, min, trip.from), hi = rideFare(r, km, jamMin, trip.from);
     add(r.id, r.name, r.sub, Math.round(hi) - Math.round(lo) >= 5 ? [lo, hi] : lo);
@@ -1588,10 +1588,8 @@ function renderWalkPane(km, w) {
   walkKm = wkm < 1 ? distText(wkm) : `${num(wkm, 1)} কিমি`;
   const wmin = Math.max(1, Math.round(w ? Math.max(w.duration / 60, wkm / 4.8 * 60) : km / 4.5 * 60));
   const big = el('div', 'walk-big');
-  big.append(el('b', null, `হেঁটে ${fmtMin(wmin)}`), el('span', null, `${wkm < 1 ? distText(wkm) : num(wkm, 1) + ' কিমি'} · ভাড়া লাগে না`));
-  const tip = el('p', 'walk-note', wkm <= 1.5 ? 'এত কাছে হেঁটে যাওয়াই সবচেয়ে সহজ।' : wkm <= 4 ? 'হাঁটার পথ ধরে — ফুটপাত আর গলিসহ।' : 'হাঁটা যায়, তবে লম্বা পথ — রিকশা বা বাসও দেখুন।');
-  const src = el('p', 'walk-src', w ? 'হাঁটার পথ: OpenStreetMap (FOSSGIS)' : 'সময় আনুমানিক — ঘণ্টায় প্রায় সাড়ে ৪ কিমি হাঁটা ধরে');
-  $('pane-walk').replaceChildren(big, tip, src);
+  big.append(el('b', null, fmtMin(wmin)), el('span', null, `হেঁটে · ${wkm < 1 ? distText(wkm) : num(wkm, 1) + ' কিমি'}`));
+  $('pane-walk').replaceChildren(big, el('p', 'walk-src', w ? 'হাঁটার পথ: OpenStreetMap' : 'আনুমানিক সময়'));
   return wmin;
 }
 
@@ -1610,10 +1608,9 @@ async function calculate() {
   saveRecent(trip.from, trip.to);
   $('trip-km').textContent = km < 1 ? distText(km) : `${num(km, 1)} কিমি`;   // under a kilometre in metres ("৫০ মিটার", not "০ কিমি")
   // How long by each way of going, as Google lists them above a route. The road's length is the route's; walking,
-  // rickshaw and bus speeds are the usual ones in Bangladesh, and the times are said to be rough.
+  // and bus speeds are the usual ones in Bangladesh, and the times are said to be rough.
   const WAY_ICONS = {
     walk: '<circle cx="13" cy="4" r="2"/><path d="M10 21l2-6 3 3v3M9 12l2-4 4 2 2 4M11 8l-3 3"/>',
-    rick: '<circle cx="6" cy="17" r="3"/><circle cx="18" cy="17" r="3"/><path d="M6 17l4-8h5l3 8M13 9V5h3"/>',
     bus: '<rect x="4" y="3" width="16" height="14" rx="3"/><path d="M4 10h16M7 21v-4M17 21v-4"/>',
     car: '<path d="M4 16l2-6a2 2 0 012-1.4h8a2 2 0 012 1.4l2 6v3H4z"/><circle cx="8" cy="16" r="1.4"/><circle cx="16" cy="16" r="1.4"/>'
   };
@@ -1623,17 +1620,19 @@ async function calculate() {
   const jam = km / FARES.cityKmh.dhakaMetro * 60;
   const ways = [['car', 'গাড়িতে', city ? [min, Math.max(min, jam)] : min],
     ['bus', 'বাসে', city ? [km / busFast * 60, km / busSlow * 60] : km / (km < 40 ? 14 : 40) * 60],
-    ...(km <= 10 ? [['rick', 'রিকশা', km / 10 * 60]] : []), ...(km <= 8 ? [['walk', 'হেঁটে', km / 4.5 * 60]] : [])];
+    ...(km <= 8 ? [['walk', 'হেঁটে', km / 4.5 * 60]] : [])];
   // close: by road, or a short walk across even where the cars go round a one-way loop
   const near = km <= 1.5 || haversineKm(trip.from, trip.to) <= 1;
   if (near) ways.unshift(ways.pop());                       // close by: on foot comes first, as Google puts it
-  const PANE_OF = { walk: 'walk', bus: 'bus', car: 'ride', rick: 'ride' };
+  const PANE_OF = { walk: 'walk', bus: 'bus', car: 'ride' };
   const row = el('div', 'ways');
   for (const [k, label, m] of ways) {
     const b = el('button', 'way');
     b.dataset.pane = PANE_OF[k];
     b.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${WAY_ICONS[k]}</svg>`;
-    b.appendChild(el('span', null, `${label} ${Array.isArray(m) ? fmtSpan(m[0], m[1]) : fmtMin(Math.max(1, Math.round(m)))}`));
+    const time = Array.isArray(m) ? fmtSpan(m[0], m[1]) : fmtMin(Math.max(1, Math.round(m)));
+    b.title = b.ariaLabel = `${label} ${time}`;
+    b.appendChild(el('span', null, time));
     b.addEventListener('click', () => { showPane(PANE_OF[k]); for (const x of row.children) x.classList.toggle('on', x === b); });
     row.appendChild(b);
   }
@@ -1663,7 +1662,7 @@ async function calculate() {
     walkLine = w.geometry.coordinates;
     const wmin = renderWalkPane(km, w);
     const chip = row.querySelector('.way[data-pane=walk] span');
-    if (chip) chip.textContent = `হেঁটে ${fmtMin(wmin)}`;
+    if (chip) chip.textContent = fmtMin(wmin);
     if (!$('pane-walk').hidden) { $('trip-km').textContent = walkKm; fit(walkLine); drawLines('route', []); drawLines('walk', [{ coords: walkLine }]); }
   }).catch(() => { if (key === lastKey && !$('pane-walk').hidden) drawLines('route', [{ coords: driveLine }]); });
 }

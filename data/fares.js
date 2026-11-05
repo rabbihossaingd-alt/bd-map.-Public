@@ -31,9 +31,9 @@ const FARES = {
   cityKmh: { dhakaMetro: 7, source: 'ঢাকার গড় গতি ঘণ্টায় ৭ কিমি (বিশ্বব্যাংক, ২০১৭)' },
   cng: { base: 40, baseKm: 2, perKm: 12, waitPerMin: 2, maxKm: 40 },
   rides: [
-    { id: 'bike', name: 'বাইক', sub: '১ জন',      base: 25, perKm: 15, perMin: 0.5, min: 50, maxKm: 60,
+    { id: 'bike', name: 'বাইক', sub: '১ জন যাত্রী',      base: 25, perKm: 15, perMin: 0.5, min: 50, maxKm: 60,
       cities: { ctgMetro: { perKm: 12.5, min: 40 }, sylhet: { perKm: 8.5, min: 30 } } },
-    { id: 'car',  name: 'কার',  sub: '৪ জন, এসি', base: 50, perKm: 21, perMin: 3,   min: 50, maxKm: 150 }
+    { id: 'car',  name: 'কার',  sub: '৪ জন যাত্রী · এসি', base: 50, perKm: 21, perMin: 3,   min: 50, maxKm: 150 }
   ],
   rideSource: 'বাইক: পাঠাও-র প্রকাশিত হার (আগস্ট ২০২২)। কার: উবারের প্রকাশিত হার (২০১৭)। অ্যাপে চাহিদা বাড়লে ভাড়াও বাড়ে।'
 };
