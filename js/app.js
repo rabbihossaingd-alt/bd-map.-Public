@@ -1172,8 +1172,10 @@ async function createMap() {
   const round = { 'line-cap': 'round', 'line-join': 'round' };
   for (const id of ['route', 'bus', 'stops', 'walk', 'alt', 'measure']) map.addSource(id, { type: 'geojson', data: EMPTY });
   // the other roads: grey, under the chosen one; a tap on one chooses it
-  map.addLayer({ id: 'alt-casing', type: 'line', source: 'alt', layout: round, paint: { 'line-color': dark ? '#0b0f14' : '#ffffff', 'line-width': 9 } }, firstLabel);
-  map.addLayer({ id: 'alt-line', type: 'line', source: 'alt', layout: round, paint: { 'line-color': dark ? '#7d8794' : '#9aa6b2', 'line-width': 5.5 } }, firstLabel);
+  map.addLayer({ id: 'alt-casing', type: 'line', source: 'alt', filter: ['!', ['get', 'walk']], layout: round, paint: { 'line-color': dark ? '#0b0f14' : '#ffffff', 'line-width': 9 } }, firstLabel);
+  map.addLayer({ id: 'alt-line', type: 'line', source: 'alt', filter: ['!', ['get', 'walk']], layout: round, paint: { 'line-color': dark ? '#7d8794' : '#9aa6b2', 'line-width': 5.5 } }, firstLabel);
+  map.addLayer({ id: 'alt-walk', type: 'line', source: 'alt', filter: ['get', 'walk'], layout: round, paint: { 'line-color': dark ? '#7d8794' : '#8a96a3', 'line-width': 6, 'line-dasharray': [0.1, 1.8] } }, firstLabel);
+  map.on('click', 'alt-walk', e => { const f = e.features[0]; if (f) useWalk(f.properties.i); });
   map.on('click', 'alt-line', e => { const f = e.features[0]; if (f) useRoute(f.properties.i); });
   map.on('mouseenter', 'alt-line', () => { map.getCanvas().style.cursor = 'pointer'; });
   map.on('mouseleave', 'alt-line', () => { map.getCanvas().style.cursor = ''; });
@@ -1441,25 +1443,41 @@ function openBusDetail(node, t) {
   requestAnimationFrame(() => box.classList.add('in'));
 }
 
+// The Dhaka bus ways of the trip shown (the best first) and the one drawn on the map.
+let busWays = [], busAt = 0, busToken = 0;
 function renderBusPane(km) {
   const pane = $('pane-bus');
   pane.replaceChildren();
+  busWays = [];
   const trips = localTrips(trip.from, trip.to);
   const rule = busRule(trip.from, trip.to);
   if (trips.length) {
     const list = el('div');
-    for (const t of trips.slice(0, 6)) {
+    // companies that run between the same two stops are one way of going: one row, the others named in it
+    const ways = [];
+    for (const t of trips) {
+      const k = t.legs.map(l => l.seg[0] + '>' + l.seg[l.seg.length - 1]).join('|'), w = ways.find(x => x.k === k);
+      if (w) w.also.push(t); else ways.push({ k, t, also: [] });
+    }
+    busWays = ways.slice(0, 5).map(w => w.t);
+    ways.slice(0, 5).forEach(({ t, also }, n) => {
       const first = t.legs[0], last = t.legs[t.legs.length - 1];
-      const off = STOPS[last.seg[last.seg.length - 1]], walk = trip.to ? haversineKm(off, trip.to) * FARES.bus.roadFactor : 0;
-      // where to get on and off, and how long: one short line (the stops and the walk are in the detail)
-      const card = item('busF', t.legs.map(l => l.r.bn).join(' → '), `${STOPS[first.seg[0]].bn} → ${off.bn} · ${fmtSpan(t.minLo, t.minHi)}` + (walk >= 0.15 ? ` · ${kmText(walk)} হাঁটা` : ''), taka(t.fare), node => {
+      const off = STOPS[last.seg[last.seg.length - 1]], walk = t.walkIn + t.walkOut;
+      const names = t.legs.map(l => l.r.bn).join(' → ') + (also.length ? ` +${num(also.length)}` : '');
+      // where to get on and off, door to door, and the walking in all (the stops are in the detail)
+      const card = item('busF', names, `${STOPS[first.seg[0]].bn} → ${off.bn} · ${fmtSpan(t.doorLo, t.doorHi)}` + (walk >= 0.15 ? ` · ${kmText(walk)} হাঁটা` : ''), taka(t.fare), node => {
         selectOnly(node);
         openBusDetail(node, t);
+        busAt = n;
+        drawBusWay(t);
       });
+      if (also.length) card.title = [t, ...also].map(x => x.legs.map(l => l.r.bn).join(' → ')).join(', ');
+      if (n === busAt) card.classList.add('on');
+      if (n === 0 && ways.length > 1) card.querySelector('.t').appendChild(el('span', 'badge g', 'সবচেয়ে ভালো'));
       if (t.legs.length > 1) card.querySelector('.t').appendChild(el('span', 'badge v', `${STOPS[last.seg[0]].bn}-এ বাস বদল`));
       else if (fareIsConfirmed(first.seg[0], first.seg[first.seg.length - 1])) card.querySelector('.t').appendChild(el('span', 'badge g', 'যাচাই করা ভাড়া'));
       list.appendChild(card);
-    }
+    });
     stagger(list);
     pane.appendChild(list);
     const direct = trips.find(t => t.legs.length === 1);
@@ -1615,8 +1633,9 @@ function showPane(name) {
   for (const x of document.querySelectorAll('#trip-time .way')) x.classList.toggle('on', x.dataset.pane === name);
   if (driveKm) $('trip-km').textContent = name === 'walk' && walkKm ? walkKm : driveKm;   // the length of the way shown
   if (!map) return;
-  if (name === 'walk' && walkLine) { drawLines('route', []); drawLines('walk', [{ coords: walkLine }]); showAlts(false); }
-  else if (driveLine) { drawLines('walk', []); if (map.getSource('route')) map.getSource('route').setData({ type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: driveLine } }] }); showAlts(true); }
+  if (name === 'walk' && walkLine) { clearBus(); drawLines('route', []); drawLines('walk', [{ coords: walkLine }]); showAlts(true); }
+  else if (name === 'bus' && busWays.length) { drawLines('route', []); showAlts(false); drawBusWay(busWays[busAt] || busWays[0]); }
+  else if (driveLine) { busToken++; clearBus(); drawLines('walk', []); if (map.getSource('route')) map.getSource('route').setData({ type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: driveLine } }] }); showAlts(true); }
 }
 // the way on foot: how long, how far, free; from the walking route when it came, else from the road's length
 function renderWalkPane(km, w) {
@@ -1630,7 +1649,53 @@ function renderWalkPane(km, w) {
 }
 
 // The roads OSRM offered between the two ends (the best first) and the one the sheet is showing.
-let routeChoices = [], routeAt = 0, walkMin = 0, altMarkers = [];
+let routeChoices = [], routeAt = 0, walkMin = 0, altMarkers = [], walkChoices = [], walkAt = 0;
+// minutes on foot: the walking route's own time, never quicker than 4.8 km/h
+const walkTime = w => Math.max(1, Math.round(Math.max(w.duration / 60, w.distance / 1000 / 4.8 * 60)));
+// One of the ways on foot: the sheet's walk pane, its chip and the dotted line follow it.
+function useWalk(i, km = driveLine ? routeChoices[routeAt].distance / 1000 : 0) {
+  const w = walkChoices[i];
+  if (!w) return;
+  walkAt = i;
+  walkLine = w.geometry.coordinates;
+  walkMin = renderWalkPane(km, w);
+  const chip = $('trip-time').querySelector('.way[data-pane=walk] span');
+  if (chip) chip.textContent = fmtMin(walkMin);
+  if (!$('pane-walk').hidden) { $('trip-km').textContent = walkKm; drawLines('route', []); drawLines('walk', [{ coords: walkLine }]); showAlts(true); }
+}
+// A Dhaka bus way on the map, as Google draws a bus trip: dotted walks to the first stop and from the last, each bus
+// in its colour along the road (OSRM through some of its stops), the stops where you get on, change and get off.
+async function drawBusWay(t) {
+  const token = ++busToken, colors = ['#00875a', '#0e7c86'];
+  const at = id => ({ lat: STOPS[id].lat, lon: STOPS[id].lon }), ends = t.legs.map(l => [at(l.seg[0]), at(l.seg[l.seg.length - 1])]);
+  const straight = l => l.seg.map(id => [STOPS[id].lon, STOPS[id].lat]);
+  // first the stop-to-stop lines at once, then the roads when they come
+  const paint = (legs, walks) => {
+    if (token !== busToken || $('pane-bus').hidden) return;
+    drawLines('bus', legs.map((coords, n) => ({ coords, color: colors[n % 2] })));
+    drawLines('walk', walks.filter(Boolean).map(coords => ({ coords })));
+  };
+  const walkIn = t.walkIn >= 0.05 ? [[trip.from.lon, trip.from.lat], [ends[0][0].lon, ends[0][0].lat]] : null;
+  const walkOut = t.walkOut >= 0.05 ? [[ends[ends.length - 1][1].lon, ends[ends.length - 1][1].lat], [trip.to.lon, trip.to.lat]] : null;
+  paint(t.legs.map(straight), [walkIn, walkOut]);
+  const stops = t.legs.flatMap((l, n) => [l.seg[0], l.seg[l.seg.length - 1]].map((id, k) => ({ type: 'Feature', properties: { name: STOPS[id].bn, color: colors[n % 2] }, geometry: { type: 'Point', coordinates: [STOPS[id].lon, STOPS[id].lat] } })));
+  if (map.getSource('stops')) map.getSource('stops').setData({ type: 'FeatureCollection', features: stops });
+  fit([[trip.from.lon, trip.from.lat], [trip.to.lon, trip.to.lat], ...t.legs.flatMap(straight)]);
+  // the road a bus takes: OSRM from stop to stop. A stop just off a main road can send it round side streets, so a
+  // road much longer than the stops' own line is not used: fewer stops are tried, and else the stops are joined straight.
+  const chain = l => l.seg.slice(1).reduce((k, id, n) => k + haversineKm(at(l.seg[n]), at(id)), 0);
+  const road = async l => {
+    const pick = m => l.seg.length <= m ? l.seg : [...Array(m)].map((_, k) => l.seg[Math.round(k * (l.seg.length - 1) / (m - 1))]);
+    const want = chain(l) * 1.3 + 0.3;
+    for (const m of [6, 3, 2]) {
+      try { const r = await getRoute(pick(m).map(at)); if (r.distance / 1000 <= want) return r.geometry.coordinates; } catch { /* the next try */ }
+    }
+    return straight(l);
+  };
+  const foot = (a, b) => getWalk(a, b).then(w => w.geometry.coordinates, () => [[a.lon, a.lat], [b.lon, b.lat]]);
+  const [legs, wIn, wOut] = await Promise.all([Promise.all(t.legs.map(road)), walkIn ? foot(trip.from, ends[0][0]) : null, walkOut ? foot(ends[ends.length - 1][1], trip.to) : null]);
+  paint(legs, [wIn, wOut]);
+}
 async function calculate() {
   const key = [trip.from.lat, trip.from.lon, trip.to.lat, trip.to.lon].join();
   if (key === lastKey) return;
@@ -1643,7 +1708,7 @@ async function calculate() {
   setStatus('');
   saveRecent(trip.from, trip.to);
   routeChoices = [r, ...(r.alts || [])];
-  walkLine = null; walkMin = 0;
+  walkLine = null; walkMin = 0; busAt = 0;
   useRoute(0, true);
 }
 // A car's time on a road: inside Dhaka from a clear road to the city's average with traffic (7 km/h, World Bank).
@@ -1662,8 +1727,9 @@ function useRoute(i, first = false) {
   // and bus speeds are the usual ones in Bangladesh, and the times are said to be rough. The bus chip uses the same
   // speeds as each bus below, so the two agree.
   const city = inDhakaCity(trip.from, trip.to), [busSlow, busFast] = FARES.bus.localSpeedKmh, [carLo, carHi] = carTime(r);
+  const best = localTrips(trip.from, trip.to)[0];          // a Dhaka bus: its time door to door, walks and wait included
   const ways = [['car', 'গাড়িতে', city ? [carLo, carHi] : min],
-    ['bus', 'বাসে', city ? [km / busFast * 60, km / busSlow * 60] : km / (km < 40 ? 14 : 40) * 60],
+    ['bus', 'বাসে', best ? [best.doorLo, best.doorHi] : city ? [km / busFast * 60, km / busSlow * 60] : km / (km < 40 ? 14 : 40) * 60],
     ...(km <= 8 ? [['walk', 'হেঁটে', walkMin || km / 4.5 * 60]] : [])];
   // close: by road, or a short walk across even where the cars go round a one-way loop
   const near = km <= 1.5 || haversineKm(trip.from, trip.to) <= 1;
@@ -1689,17 +1755,15 @@ function useRoute(i, first = false) {
   if (walkTab.hidden) $('seg').hidden = $('seg').querySelectorAll('button:not([hidden])').length < 2;
   else $('seg').hidden = false;
   driveLine = r.geometry.coordinates; driveKm = $('trip-km').textContent;
-  if (first) { walkKm = ''; drawLines('walk', []); if (km <= 8) renderWalkPane(km, null); }
+  if (first) { walkKm = ''; walkChoices = []; walkAt = 0; drawLines('walk', []); if (km <= 8) renderWalkPane(km, null); }
   if (first) drawLines('route', [{ coords: r.geometry.coordinates }]);              // the road until the way on foot comes
   showPane(first ? (near ? 'walk' : 'bus') : open === 'walk' && km > 8 ? 'bus' : open || 'bus');
   if (first) fit(routeChoices.flatMap(c => c.geometry.coordinates));
   if (first && km <= 8) getWalk(trip.from, trip.to).then(w => {
     if (key !== lastKey) return;
-    walkLine = w.geometry.coordinates;
-    walkMin = renderWalkPane(km, w);
-    const chip = $('trip-time').querySelector('.way[data-pane=walk] span');
-    if (chip) chip.textContent = fmtMin(walkMin);
-    if (!$('pane-walk').hidden) { $('trip-km').textContent = walkKm; fit(walkLine); drawLines('route', []); drawLines('walk', [{ coords: walkLine }]); showAlts(false); }
+    walkChoices = [w, ...(w.alts || [])];
+    useWalk(0, km);
+    if (!$('pane-walk').hidden) fit(walkChoices.flatMap(c => c.geometry.coordinates));
   }).catch(() => { if (key === lastKey && !$('pane-walk').hidden) drawLines('route', [{ coords: driveLine }]); });
 }
 // The other roads, grey under the chosen one, and a bubble with each road's time where it runs apart from the rest
@@ -1709,12 +1773,14 @@ function showAlts(on) {
   altMarkers = [];
   const src = map && map.getSource('alt');
   if (!src) return;
-  const others = on ? routeChoices.map((c, i) => [c, i]).filter(([, i]) => i !== routeAt) : [];
-  src.setData({ type: 'FeatureCollection', features: others.map(([c, i]) => ({ type: 'Feature', properties: { i }, geometry: c.geometry })) });
-  if (!on || routeChoices.length < 2) return;
+  // on foot: the other ways on foot (dotted); otherwise the other roads
+  const walking = !$('pane-walk').hidden, list = walking ? walkChoices : routeChoices, at = walking ? walkAt : routeAt;
+  const others = on ? list.map((c, i) => [c, i]).filter(([, i]) => i !== at) : [];
+  src.setData({ type: 'FeatureCollection', features: others.map(([c, i]) => ({ type: 'Feature', properties: { i, walk: walking }, geometry: c.geometry })) });
+  if (!on || list.length < 2) return;
   const sample = c => { const g = c.geometry.coordinates, n = Math.max(1, Math.floor(g.length / 60)); return g.filter((_, k) => k % n === 0); };
-  const pts = routeChoices.map(sample);
-  routeChoices.forEach((c, i) => {
+  const pts = list.map(sample);
+  list.forEach((c, i) => {
     // the point of this road farthest from every other road
     let best = pts[i][Math.floor(pts[i].length / 2)], far = -1;
     for (const p of pts[i].slice(2, -2)) {
@@ -1722,10 +1788,11 @@ function showAlts(on) {
       if (d > far) { far = d; best = p; }
     }
     // in Dhaka every road gets the same traffic range, so the length is what tells them apart there
-    const [lo, hi] = carTime(c), len = `${num(c.distance / 1000, 1)} কিমি`, b = el('button', 'rt-bubble' + (i === routeAt ? ' on' : ''));
-    if (inDhakaCity(trip.from, trip.to)) b.append(el('b', null, len), el('span', null, `${fmtMin(c.duration / 60)} জ্যাম ছাড়া`));
+    const [lo, hi] = carTime(c), len = c.distance < 1000 ? distText(c.distance / 1000) : `${num(c.distance / 1000, 1)} কিমি`, b = el('button', 'rt-bubble' + (i === at ? ' on' : '') + (walking ? ' walk' : ''));
+    if (walking) b.append(el('b', null, fmtMin(walkTime(c))), el('span', null, len));
+    else if (inDhakaCity(trip.from, trip.to)) b.append(el('b', null, len), el('span', null, `${fmtMin(c.duration / 60)} জ্যাম ছাড়া`));
     else b.append(el('b', null, fmtSpan(lo, hi)), el('span', null, len));
-    b.addEventListener('click', e => { e.stopPropagation(); if (i !== routeAt) useRoute(i); });
+    b.addEventListener('click', e => { e.stopPropagation(); if (i !== at) (walking ? useWalk(i) : useRoute(i)); });
     altMarkers.push(new maplibregl.Marker({ element: b, anchor: 'bottom' }).setLngLat(best).addTo(map));
   });
 }
@@ -1748,7 +1815,7 @@ function clearTrip() {
   drawLines('route', []);
   drawLines('walk', []);
   driveLine = walkLine = null; driveKm = walkKm = '';
-  routeChoices = []; showAlts(false);
+  routeChoices = []; walkChoices = []; busWays = []; busToken++; showAlts(false);
   clearBus();
   drawMarkers();
   fit(BD_LNGLAT);

@@ -2967,7 +2967,7 @@ function geoUpstream(kind, sp) {
   if (kind === 'walk') {
     const pts = String(sp.get('c') || '').split(';').map(p => p.split(',').map(Number));
     if (pts.length === 2 && pts.every(([lon, lat]) => inBd(lat, lon)))
-      return 'https://routing.openstreetmap.de/routed-foot/route/v1/driving/' + pts.map(([lon, lat]) => lon.toFixed(5) + ',' + lat.toFixed(5)).join(';') + '?overview=full&geometries=geojson';
+      return 'https://routing.openstreetmap.de/routed-foot/route/v1/driving/' + pts.map(([lon, lat]) => lon.toFixed(5) + ',' + lat.toFixed(5)).join(';') + '?overview=full&geometries=geojson&alternatives=2';
   }
   // the road distance from one point (the first) to many (the nearby list): one request instead of forty.
   // Points are rounded to about 10 m so the same corner of town asks the same question (and hits the cache).

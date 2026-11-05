@@ -678,8 +678,8 @@ function getWalk(from, to) {
   const key = 'walk:' + [from, to].map(p => `${(+p.lon).toFixed(5)},${(+p.lat).toFixed(5)}`).join(';'), hit = routeMemo.get(key);
   if (hit && Date.now() - hit.at < 10 * 60_000) return hit.p;
   const coords = `${from.lon},${from.lat};${to.lon},${to.lat}`;
-  const p = geoJson('api/geo/walk?c=' + encodeURIComponent(coords), `https://routing.openstreetmap.de/routed-foot/route/v1/driving/${coords}?overview=full&geometries=geojson`)
-    .then(d => { if (d.code !== 'Ok' || !d.routes.length) throw new Error('no walk'); return d.routes[0]; })
+  const p = geoJson('api/geo/walk?c=' + encodeURIComponent(coords), `https://routing.openstreetmap.de/routed-foot/route/v1/driving/${coords}?overview=full&geometries=geojson&alternatives=2`)
+    .then(d => { if (d.code !== 'Ok' || !d.routes.length) throw new Error('no walk'); const w = d.routes[0]; w.alts = d.routes.slice(1, 3); return w; })
     .catch(e => { routeMemo.delete(key); throw e; });
   routeMemo.set(key, { at: Date.now(), p });
   return p;
@@ -800,14 +800,23 @@ function localTrips(from, to) {
   let trips = findDirect(nf, nt);
   if (!trips.length) trips = findTransfer(nf, nt);
   const total = (t, key) => t.legs.reduce((sum, l) => sum + l[key], 0);
+  const stop = id => STOPS[id], walkKm = (a, b) => haversineKm(a, b) * FARES.bus.roadFactor;
   for (const t of trips) {
     t.km = total(t, 'km');
     t.fare = total(t, 'fare');
     // One typical time: midpoint of the clear-road and jam estimates, to the nearest 5 minutes.
     t.min = Math.round((total(t, 'minFast') + total(t, 'minSlow')) / 10) * 5;
-    t.minLo = total(t, 'minFast'); t.minHi = total(t, 'minSlow');     // shown as a span, like the bus chip above
+    t.minLo = total(t, 'minFast'); t.minHi = total(t, 'minSlow');
+    // door to door, as Google counts it: the walk to the first stop and from the last (4.5 km/h), and the wait for
+    // each bus (about 5 minutes, up to 10 when they are few)
+    const first = t.legs[0], last = t.legs[t.legs.length - 1];
+    t.walkIn = walkKm(from, stop(first.seg[0])); t.walkOut = walkKm(stop(last.seg[last.seg.length - 1]), to);
+    const walkMin = (t.walkIn + t.walkOut) / 4.5 * 60;
+    t.doorLo = t.minLo + walkMin + 5 * t.legs.length; t.doorHi = t.minHi + walkMin + 10 * t.legs.length;
+    // the easiest first: the quickest door to door, a change of bus counted as ten minutes more
+    t.score = (t.doorLo + t.doorHi) / 2 + 10 * (t.legs.length - 1);
   }
-  return trips.sort((a, b) => a.km - b.km);
+  return trips.sort((a, b) => a.score - b.score);
 }
 
 // ---- Sheets you can drag, as on a phone app ----

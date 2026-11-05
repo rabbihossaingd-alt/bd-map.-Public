@@ -435,6 +435,7 @@ const EXACT = {
   'কোম্পানি ভেদে': "Varies by company", 'সরকারি হারে': "At the government rate", 'যে কোম্পানির বাস চলে': "Bus companies on this route", 'ভাড়া আনুমানিক': "Fares are estimates", 'বিআরটিএ-র ভাড়া': "BRTA's fare",
   'সঠিক ভাড়া জানান': "Suggest the right fare", 'নন-এসি বাস': "Non-AC bus", 'এসি বাস': "AC bus", 'কাউন্টার ভাড়া': "Counter fare", 'বিআরটিএ নির্ধারিত': "Set by BRTA", 'মিটারে · সরকারি হার': "Metered · government rate", '১ জন যাত্রী': "1 passenger", '৪ জন যাত্রী · এসি': "4 passengers · AC", 'হাঁটার পথ: OpenStreetMap': "Walking route: OpenStreetMap", 'আনুমানিক সময়': "Approximate time", 'ভাড়া ও সময় আনুমানিক': "Fares and times are estimates", 'হিসাবের পদ্ধতি': "How we calculate",
   'বাসা': "Home", 'অফিস': "Work", 'সেভ করা জায়গা': "Saved places", 'ঠিকানা যোগ করুন': "Add an address", 'বদলান': "Change", 'সাম্প্রতিক': "Recent", 'বাসার ঠিকানা': "Home address", 'অফিসের ঠিকানা': "Work address", 'বাসার ঠিকানা খুঁজুন': "Search for your home address", 'অফিসের ঠিকানা খুঁজুন': "Search for your work address", 'বাসা সেভ হয়েছে': "Home saved", 'অফিস সেভ হয়েছে': "Work saved", 'হয়েছে': "Done", 'কপি হয়েছে': "Copied", 'দূরত্ব মাপুন': "Measure distance", 'বাছাই করা জায়গা': "Dropped pin", 'মোট দূরত্ব': "Total distance", 'পরের জায়গায় চাপ দিন': "Tap the next point", 'শেষেরটা মুছুন': "Undo last point", 'শেষ': "Done", 'অফলাইন ম্যাপ': "Offline maps", 'ম্যাপে যে এলাকা দেখছেন': "The area on screen", 'অনেক বড় — একটু কাছে যান': "Too big — zoom in a little", 'ডাউনলোড': "Download", 'ইন্টারনেট না থাকলেও এই এলাকার রাস্তা আর নাম দেখা যাবে।': "Its streets and names will show even without internet.", 'এখন ডাউনলোড করা যাচ্ছে না।': "Downloading is not possible right now.", 'ফোনে রাখা এলাকা': "Areas on this phone", 'এলাকাটা অনেক বড় — ম্যাপে একটু কাছে গিয়ে আবার চেষ্টা করুন।': "The area is too big — zoom in a little and try again.", 'ডাউনলোড শেষ হয়নি — ইন্টারনেট সংযোগ দেখে আবার চেষ্টা করুন।': "The download did not finish — check the connection and try again.", 'ম্যাপের এলাকা': "Map area", 'কল করুন': "Call",
+  'সবচেয়ে ভালো': "Best",
   // the tour poster
   'ছবি': 'Photo',
   'দলের ছবি': 'Group photos', 'ছবি আপনার ফোনেই থাকে, কোথাও আপলোড হয় না।': 'Photos stay on your phone and are never uploaded.', 'ম্যাপে যাত্রার ভিডিও আর শেয়ার করার পোস্টার': 'A video of the journey on the map, and a poster to share', 'কার্ড আর ভিডিও বানান': 'Make the card and video', 'সদস্যদের নাম (কমা দিয়ে)': 'Names (separated by commas)',
@@ -627,6 +628,7 @@ const EXACT = {
 const N = '([\\d.,]+)';
 const P = (source, fn) => [new RegExp('^' + source + '$'), fn];
 const PATTERNS = [
+  P('(.+) \+(\d+)$', (a, n) => `${tr(a)} +${n}`),
   P('(.+) জ্যাম ছাড়া', a => `${tr(a)} without traffic`),
   P('সেভ হয়েছে · (.+)', a => `Saved · ${a}`),
   P('কল করুন · (.+)', a => `Call · ${a}`),
