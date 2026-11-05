@@ -264,6 +264,8 @@ function route() {
   let deep = null;
   { const [base, query] = name.split('?');
     if (base.startsWith('district/')) { deep = { district: base.slice(9) }; name = 'districts'; }
+    else if (base.startsWith('live/')) { deep = { live: base.slice(5) }; name = 'trip'; }               // a live location link (js/locshare.js)
+    else if (base.startsWith('at/')) { deep = { at: placeParam(base.slice(3)) }; name = 'trip'; }        // a shared place
     else if (base === 'trip' && query) { const q = new URLSearchParams(query); deep = { from: placeParam(q.get('from')), to: placeParam(q.get('to')) }; name = 'trip'; }
     else name = base; }
   if (name === 'intercity') name = 'districts';   // old link
@@ -285,6 +287,8 @@ function route() {
   if (enter[current]) enter[current]();
   requestAnimationFrame(() => revealOnScroll($('page-' + current)));
   if (deep && deep.from && deep.to) { trip.from = deep.from; setTimeout(() => setPlace('to', deep.to), 0); }
+  if (deep && deep.live && typeof lsOpenLive === 'function') lsOpenLive(deep.live);
+  if (deep && deep.at && typeof lsOpenAt === 'function') lsOpenAt(deep.at);
   if (deep && deep.district) { const d = districtById(deep.district); if (d) setTimeout(() => { if (window.openDistrictGuide) window.openDistrictGuide(d); }, 300); }
   if (scrollToSel) setTimeout(() => { const t = document.querySelector('#page-' + current + ' ' + scrollToSel); if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 250);
 }
@@ -1413,8 +1417,6 @@ function renderBusPane(km) {
   const trips = localTrips(trip.from, trip.to);
   const rule = busRule(trip.from, trip.to);
   if (trips.length) {
-    pane.appendChild(el('div', 'label', `যে বাসে যেতে পারেন · ${perKmText(rule.perKm)}`));
-    pane.appendChild(el('div', 'bus-hint', 'বাসে চাপ দিলে দেখবেন কোথায় উঠবেন, কোথায় নামবেন।'));
     const list = el('div');
     for (const t of trips.slice(0, 6)) {
       const first = t.legs[0], last = t.legs[t.legs.length - 1];
@@ -1487,10 +1489,10 @@ function renderRidePane(km, min, jamMin = min) {
   const add = (icon, name, sub, price) => {
     pane.appendChild(item(icon, name, sub, Array.isArray(price) ? fareRange(Math.round(price[0] / 5) * 5, Math.round(price[1] / 5) * 5) : taka(price), node => { selectOnly(node); requestRide(name, Array.isArray(price) ? price[1] : price); }));
   };
-  if (km <= FARES.cng.maxKm) add('cng', 'সিএনজি', 'মিটারে, সরকারি হার · চালকরা সাধারণত বেশি চান', cngFare(km));
+  if (km <= FARES.cng.maxKm) add('cng', 'সিএনজি', 'মিটারে, সরকারি হার', cngFare(km));
   for (const r of FARES.rides) if (km <= r.maxKm) {
     const lo = rideFare(r, km, min, trip.from), hi = rideFare(r, km, jamMin, trip.from);
-    add(r.id, r.name, `${r.sub} · ${r.id === 'bike' ? 'পাঠাও-র' : 'উবারের'} প্রকাশিত হারে`, Math.round(hi) - Math.round(lo) >= 5 ? [lo, hi] : lo);
+    add(r.id, r.name, r.sub, Math.round(hi) - Math.round(lo) >= 5 ? [lo, hi] : lo);
   }
   const any = pane.children.length > 0;
   $('seg').hidden = !any;
@@ -1525,6 +1527,17 @@ function requestRide(name, price) {
   }, 2000);
 }
 
+// A train between the two towns: a chip of its own beside the others (the list comes later, from js/train.js).
+function addTrainChip() {
+  const row = document.querySelector('#trip-time .ways');
+  if (!row || row.querySelector('[data-pane=train]')) return;
+  const b = el('button', 'way');
+  b.dataset.pane = 'train';
+  b.innerHTML = svg('train');
+  b.appendChild(el('span', null, 'ট্রেন'));
+  b.addEventListener('click', () => { showPane('train'); for (const x of row.children) x.classList.toggle('on', x === b); });
+  row.appendChild(b);
+}
 // on foot the map shows the dotted way on foot; every other choice shows the road
 let driveLine = null, walkLine = null, driveKm = '', walkKm = '';
 function showPane(name) {
@@ -1591,7 +1604,7 @@ async function calculate() {
     b.addEventListener('click', () => { showPane(PANE_OF[k]); for (const x of row.children) x.classList.toggle('on', x === b); });
     row.appendChild(b);
   }
-  $('trip-time').replaceChildren(row, el('p', 'ways-note', city ? `সময় আনুমানিক · কম সংখ্যাটি ফাঁকা রাস্তায়, বেশিটি জ্যামে — ${FARES.cityKmh.source}` : 'সময় আনুমানিক · গাড়ির সময় ফাঁকা রাস্তায় — শহর থেকে বের হতে ও জ্যামে আরও লাগে'));
+  $('trip-time').replaceChildren(row);                    // the ways of going are the choice; no note under them
   $('sheet').hidden = false;
   if (phoneSheet) phoneSheet.snap(1, false);
   $('trip-photo').replaceChildren(photoStrip(trip.to));
@@ -1709,7 +1722,10 @@ function showPlace(pl) {
   });
   const from = el('button', 'btn quiet'); from.append(ic('pin'), el('span', null, 'এখান থেকে'));
   from.addEventListener('click', () => { hidePlace(); openDirections(true); setPlace('from', { lat: pl.lat, lon: pl.lon, label: pl.name || 'বাছাই করা জায়গা' }); });
-  acts.append(go, from);
+  // the place as a link, for WhatsApp or Messenger (js/locshare.js)
+  const sh = el('button', 'btn quiet pc-share'); sh.innerHTML = svg('share'); sh.setAttribute('aria-label', 'শেয়ার'); sh.title = 'শেয়ার';
+  sh.addEventListener('click', () => lsSharePlace({ lat: pl.lat, lon: pl.lon, label: pl.name || 'বাছাই করা জায়গা' }));
+  acts.append(go, from, sh);
   card.replaceChildren(head, dist, acts);
   card.hidden = false;
   map.easeTo({ center: [pl.lon, pl.lat], zoom: Math.max(map.getZoom(), 16.2), duration: 700, padding: mapPadding() });

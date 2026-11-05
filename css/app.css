@@ -5363,3 +5363,47 @@ input.upper::placeholder { text-transform: none; }
 .walk-big span { color: var(--muted); font-weight: 600; }
 .walk-note { margin: var(--space-2) 2px 0; font-size: var(--fs-sm); color: var(--ink-2); }
 .walk-src { margin: var(--space-2) 2px var(--space-3); font-size: var(--fs-xs); color: var(--muted); }
+
+/* the route sheet, as Google's: the ways of going are the only choice (the tabs below are not shown) */
+#seg { display: none !important; }
+#trip-time { margin-bottom: var(--space-3); }
+#trip-time .ways { padding-bottom: 2px; }
+#pane-bus > div:first-child > .item:first-child, #pane-bus > .item:first-child { margin-top: 0; }
+
+/* ---- location sharing (js/locshare.js) ---- */
+.ls-list { margin-bottom: var(--space-3); }
+.ls-times { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-2); }
+.ls-time { height: 52px; border-radius: 16px; border: 0; background: color-mix(in srgb, var(--ink) 6%, transparent); color: var(--ink); font: inherit; font-weight: 700; cursor: pointer; transition: transform .15s, background .2s; }
+.ls-time:hover { background: color-mix(in srgb, var(--brand) 12%, transparent); }
+.ls-time:active { transform: scale(.97); }
+.ls-note { margin-top: var(--space-3); }
+.ls-on { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-4); border-radius: 18px; background: rgb(var(--brand-rgb) / 0.10); margin-bottom: var(--space-3); }
+.ls-on .t { display: grid; gap: 2px; } .ls-on .t span { color: var(--muted); font-size: var(--fs-sm); }
+.ls-acts { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); margin-bottom: var(--space-4); }
+.ls-acts .btn { justify-content: center; }
+.ls-dot { position: relative; flex: none; width: 12px; height: 12px; border-radius: 50%; background: #1a73e8; box-shadow: 0 0 0 4px rgb(26 115 232 / .2); }
+.ls-dot::after { content: ""; position: absolute; inset: -4px; border-radius: 50%; border: 2px solid rgb(26 115 232 / .5); animation: lsping 1.8s ease-out infinite; }
+@keyframes lsping { from { transform: scale(.6); opacity: 1; } to { transform: scale(2.2); opacity: 0; } }
+.ls-pill { position: fixed; z-index: 960; left: 50%; transform: translateX(-50%); bottom: calc(var(--tab-h) + 22px + env(safe-area-inset-bottom)); display: inline-flex; align-items: center; gap: 10px;
+  padding: 10px 16px; border: 0; border-radius: 999px; background: var(--ink); color: var(--bg); font: inherit; font-size: var(--fs-sm); font-weight: 700; box-shadow: var(--shadow-2); cursor: pointer; }
+.ls-pill[hidden] { display: none; }
+@media (min-width: 761px) { .ls-pill { bottom: 24px; } }
+.ls-view { position: absolute; z-index: 30; left: 12px; right: 12px; top: calc(var(--space-3) + env(safe-area-inset-top)); max-width: 480px; margin: 0 auto; padding: 14px 14px 12px; border-radius: 22px; box-shadow: var(--shadow-2); }
+.ls-vh { display: flex; align-items: center; gap: var(--space-3); }
+.ls-vh .t { flex: 1; min-width: 0; display: grid; gap: 2px; } .ls-vh .t b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .ls-vh .t span { color: var(--muted); font-size: var(--fs-sm); }
+.ls-av { width: 40px; height: 40px; flex: none; }
+.ls-vacts:not(:empty) { margin-top: var(--space-3); } .ls-vacts .btn { width: 100%; justify-content: center; }
+.ls-marker { position: relative; width: 46px; height: 46px; display: grid; place-items: center; }
+.ls-marker .ls-mav { width: 40px; height: 40px; box-shadow: 0 0 0 3px #fff, 0 4px 14px rgb(0 0 0 / .35); }
+.ls-ring { position: absolute; inset: -10px; border-radius: 50%; background: rgb(26 115 232 / .18); animation: lsping 2s ease-out infinite; }
+.pc-acts .pc-share { flex: none; width: 48px; padding: 0; justify-content: center; }
+.pc-acts .pc-share svg { width: 20px; height: 20px; }
+.ls-list > button { display: flex; width: 100%; align-items: center; gap: var(--space-3); padding: 12px var(--space-3); border: 0; background: none; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+.ls-list > button > span { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.ls-list > button > span em { font-style: normal; font-size: var(--fs-sm); color: var(--muted); }
+.ls-list .mi { flex: none; width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; color: #fff; background: linear-gradient(165deg, var(--tile-blue-a), var(--tile-blue-b)); }
+.ls-list .mi svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.ls-view { top: auto; bottom: calc(var(--tab-h) + 20px + env(safe-area-inset-bottom)); }
+@media (min-width: 761px) { .ls-view { bottom: 24px; } }
+.ls-pill { white-space: nowrap; }
+.card.menu.ls-list > button > span { flex: 1 1 auto !important; width: auto !important; max-width: none !important; }

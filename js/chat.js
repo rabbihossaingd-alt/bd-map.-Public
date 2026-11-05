@@ -1151,6 +1151,12 @@ function openShare() {
     getLocation({ maxAge: 30_000 }).then(f => { closeModal(); sendMessage('place', { lat: f.lat, lon: f.lon, label: 'আমার লোকেশন' }); },
       e => { closeModal(); chatToast(ME, locationError(e)); });
   });
+  // live: the link is sent as a message, and the position follows while the app is open (js/locshare.js)
+  add('broadcast', 'লাইভ লোকেশন · ১ ঘণ্টা', 'আপনি কোথায় আছেন, চলমান অবস্থায় দেখবে', async () => {
+    closeModal();
+    const s = (typeof LS !== 'undefined' && LS && LS.expires > Date.now()) ? LS : await lsStart(60, false);
+    if (s) sendMessage('text', `📍 আমার লাইভ লোকেশন: ${s.url}`);
+  });
   for (const p of [trip.to, trip.from]) if (p) add('pin', p.label, 'ম্যাপে খোলা জায়গা', () => { closeModal(); sendMessage('place', { lat: p.lat, lon: p.lon, label: p.label }); });
   openModal('জায়গা পাঠান', '', rows);
 }

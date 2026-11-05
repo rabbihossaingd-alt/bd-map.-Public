@@ -3038,6 +3038,8 @@ const ADMIN_TRUST = require('./lib/admin-trust.cjs')(ADMIN2, { db, json, readBod
 require('./lib/admin-money.cjs')(ADMIN2, { db, json, push, sendMail, MAILS, mailReady, followers, balanceOf, creatorRules, creatorStanding });
 // Manzeela Verified: the badge as a subscription, its payments and their approval (lib/verified.cjs)
 const VERIFY = require('./lib/verified.cjs')(ADMIN2, { db, json, readBody, userOf, push, SITE });
+// Live location shared by link, as Google Maps does (lib/live-location.cjs)
+const LIVELOC = require('./lib/live-location.cjs')({ db, json, readBody, userOf, SITE, crypto });
 // phase 5: switches, the read-only switch, announcements and broadcasts, analytics, system health (lib/admin-system.cjs)
 SYS = require('./lib/admin-system.cjs')(ADMIN2, { db, json, readBody, push, pushTo, clientIp, userOf, hasTurn, backupOn, lastBackup: () => lastBackupAt,
   mailInfo: () => ({ ready: mailReady, provider: BREVO ? 'Brevo' : RESEND ? 'Resend' : MAIL.host ? 'SMTP' : '', sent: MAIL_STATS.day === new Date(Date.now() + 6 * 36e5).toISOString().slice(0, 10) ? MAIL_STATS.sent : 0, failed: MAIL_STATS.day === new Date(Date.now() + 6 * 36e5).toISOString().slice(0, 10) ? MAIL_STATS.failed : 0 }),
@@ -3079,6 +3081,7 @@ const server = http.createServer((req, res) => {
   if (pathname.startsWith('/api/push/')) return pushApi(req, res, pathname.slice(10)).catch(e => { console.error(e); if (!res.headersSent) json(res, 500, { error: 'server error' }); });
   if (pathname === '/api/appeal') { const me = userOf(req); if (!me) return json(res, 401, { error: 'login' }); return ADMIN_TRUST.appealApi(req, res, me).catch(e => { console.error(e); if (!res.headersSent) json(res, 500, { error: 'server error' }); }); }
   if (pathname.startsWith('/api/notify/')) return notifyApi(req, res, pathname.slice(12)).catch(e => { console.error(e); if (!res.headersSent) json(res, 500, { error: 'server error' }); });
+  if (pathname.startsWith('/api/liveloc/')) return LIVELOC(req, res, pathname.slice(13), searchParams).catch(e => { console.error(e); if (!res.headersSent) json(res, 500, { error: 'server error' }); });
   if (pathname.startsWith('/api/verify/')) return VERIFY.api(req, res, pathname.slice(12), searchParams).catch(e => { console.error(e); if (!res.headersSent) json(res, 500, { error: 'server error' }); });
   if (pathname.startsWith('/api/creator/')) return creatorApi(req, res, pathname.slice(13)).catch(e => { console.error(e); if (!res.headersSent) json(res, 500, { error: 'server error' }); });
   if (pathname.startsWith('/api/avatar/')) return avatarApi(req, res, pathname.slice(12));
