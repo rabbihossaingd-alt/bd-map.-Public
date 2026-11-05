@@ -2917,7 +2917,7 @@ const SECURITY_HEADERS = {
 //   GET /api/geo/reverse?lat&lon  Nominatim's name for a point
 //   GET /api/geo/route?c=lon,lat;lon,lat[;…]  OSRM driving route, up to 6 points inside Bangladesh
 const GEO_UA = 'Manzeela/1.0 (+https://manzeela.com; help@manzeela.com)';
-const GEO_TTL = { search: 864e5, nominatim: 864e5, reverse: 7 * 864e5, route: 864e5, table: 864e5 };
+const GEO_TTL = { search: 864e5, nominatim: 864e5, reverse: 7 * 864e5, route: 864e5, table: 864e5, walk: 864e5 };
 const geoCache = new Map(), geoWaiting = new Map(), geoAsks = new Map();
 let nominatimNext = 0;
 const inBd = (lat, lon) => lat > 20 && lat < 27 && lon > 88 && lon < 93;
@@ -2933,6 +2933,12 @@ function geoUpstream(kind, sp) {
     const pts = String(sp.get('c') || '').split(';').map(p => p.split(',').map(Number));
     if (pts.length >= 2 && pts.length <= 6 && pts.every(([lon, lat]) => inBd(lat, lon)))
       return 'https://router.project-osrm.org/route/v1/driving/' + pts.map(([lon, lat]) => lon.toFixed(5) + ',' + lat.toFixed(5)).join(';') + '?overview=full&geometries=geojson';
+  }
+  // on foot: footpaths and lanes, either way down a one-way street (FOSSGIS's OSRM, OpenStreetMap data)
+  if (kind === 'walk') {
+    const pts = String(sp.get('c') || '').split(';').map(p => p.split(',').map(Number));
+    if (pts.length === 2 && pts.every(([lon, lat]) => inBd(lat, lon)))
+      return 'https://routing.openstreetmap.de/routed-foot/route/v1/driving/' + pts.map(([lon, lat]) => lon.toFixed(5) + ',' + lat.toFixed(5)).join(';') + '?overview=full&geometries=geojson';
   }
   // the road distance from one point (the first) to many (the nearby list): one request instead of forty.
   // Points are rounded to about 10 m so the same corner of town asks the same question (and hits the cache).

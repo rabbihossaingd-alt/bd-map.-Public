@@ -893,7 +893,7 @@ async function esriTile(url, signal, depth = 0) {
   return (await c.convertToBlob({ type: 'image/jpeg', quality: 0.9 })).arrayBuffer();
 }
 let mapMode = (() => { try { return localStorage.getItem('bdmap.mapmode') || 'hybrid'; } catch { return 'standard'; } })();
-const OUR_LAYERS = /^(route|bus|stops|places2|sat)/;
+const OUR_LAYERS = /^(route|bus|stops|places2|sat|walk)/;
 async function setMapMode(mode) {
   if (mode !== 'standard') { await satKey; if (!SAT_TILES) mode = 'standard'; }     // no working key: no satellite view
   mapMode = mode;
@@ -1145,7 +1145,8 @@ async function createMap() {
   // Our own layers. Lines go under the map's labels so place names stay readable on top of a route.
   const firstLabel = (map.getStyle().layers.find(l => l.type === 'symbol') || {}).id;
   const round = { 'line-cap': 'round', 'line-join': 'round' };
-  for (const id of ['route', 'bus', 'stops']) map.addSource(id, { type: 'geojson', data: EMPTY });
+  for (const id of ['route', 'bus', 'stops', 'walk']) map.addSource(id, { type: 'geojson', data: EMPTY });
+  map.addLayer({ id: 'walk-line', type: 'line', source: 'walk', layout: round, paint: { 'line-color': dark ? '#6ea8ff' : '#2563eb', 'line-width': 7, 'line-dasharray': [0.1, 1.8] } }, firstLabel);
   map.addLayer({ id: 'route-casing', type: 'line', source: 'route', layout: round, paint: { 'line-color': dark ? '#0b0f14' : '#ffffff', 'line-width': 10 } }, firstLabel);
   map.addLayer({ id: 'route-line', type: 'line', source: 'route', layout: round, paint: { 'line-color': dark ? '#6ea8ff' : '#2563eb', 'line-width': 6 } }, firstLabel);
   map.addLayer({ id: 'bus-casing', type: 'line', source: 'bus', layout: round, paint: { 'line-color': dark ? '#0b0f14' : '#ffffff', 'line-width': 10 } }, firstLabel);
@@ -1524,9 +1525,28 @@ function requestRide(name, price) {
   }, 2000);
 }
 
+// on foot the map shows the dotted way on foot; every other choice shows the road
+let driveLine = null, walkLine = null, driveKm = '', walkKm = '';
 function showPane(name) {
   for (const b of $('seg').children) b.classList.toggle('on', b.dataset.pane === name);
-  for (const p of ['bus', 'ride', 'train']) $('pane-' + p).hidden = name !== p;
+  for (const p of ['walk', 'bus', 'ride', 'train']) $('pane-' + p).hidden = name !== p;
+  for (const x of document.querySelectorAll('#trip-time .way')) x.classList.toggle('on', x.dataset.pane === name);
+  if (driveKm) $('trip-km').textContent = name === 'walk' && walkKm ? walkKm : driveKm;   // the length of the way shown
+  if (!map) return;
+  if (name === 'walk' && walkLine) { drawLines('route', []); drawLines('walk', [{ coords: walkLine }]); }
+  else if (driveLine) { drawLines('walk', []); if (map.getSource('route')) map.getSource('route').setData({ type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: driveLine } }] }); }
+}
+// the way on foot: how long, how far, free; from the walking route when it came, else from the road's length
+function renderWalkPane(km, w) {
+  const wkm = w ? w.distance / 1000 : km;
+  walkKm = wkm < 1 ? distText(wkm) : `${num(wkm, 1)} কিমি`;
+  const wmin = Math.max(1, Math.round(w ? Math.max(w.duration / 60, wkm / 4.8 * 60) : km / 4.5 * 60));
+  const big = el('div', 'walk-big');
+  big.append(el('b', null, `হেঁটে ${fmtMin(wmin)}`), el('span', null, `${wkm < 1 ? distText(wkm) : num(wkm, 1) + ' কিমি'} · ভাড়া লাগে না`));
+  const tip = el('p', 'walk-note', wkm <= 1.5 ? 'এত কাছে হেঁটে যাওয়াই সবচেয়ে সহজ।' : wkm <= 4 ? 'হাঁটার পথ ধরে — ফুটপাত আর গলিসহ।' : 'হাঁটা যায়, তবে লম্বা পথ — রিকশা বা বাসও দেখুন।');
+  const src = el('p', 'walk-src', w ? 'হাঁটার পথ: OpenStreetMap (FOSSGIS)' : 'সময় আনুমানিক — ঘণ্টায় প্রায় সাড়ে ৪ কিমি হাঁটা ধরে');
+  $('pane-walk').replaceChildren(big, tip, src);
+  return wmin;
 }
 
 async function calculate() {
@@ -1557,13 +1577,18 @@ async function calculate() {
   const jam = km / FARES.cityKmh.dhakaMetro * 60;
   const ways = [['car', 'গাড়িতে', city ? [min, Math.max(min, jam)] : min],
     ['bus', 'বাসে', city ? [km / busFast * 60, km / busSlow * 60] : km / (km < 40 ? 14 : 40) * 60],
-    ...(km <= 10 ? [['rick', 'রিকশা', km / 10 * 60]] : []), ['walk', 'হেঁটে', km / 4.5 * 60]];
+    ...(km <= 10 ? [['rick', 'রিকশা', km / 10 * 60]] : []), ...(km <= 8 ? [['walk', 'হেঁটে', km / 4.5 * 60]] : [])];
+  // close: by road, or a short walk across even where the cars go round a one-way loop
+  const near = km <= 1.5 || haversineKm(trip.from, trip.to) <= 1;
+  if (near) ways.unshift(ways.pop());                       // close by: on foot comes first, as Google puts it
+  const PANE_OF = { walk: 'walk', bus: 'bus', car: 'ride', rick: 'ride' };
   const row = el('div', 'ways');
   for (const [k, label, m] of ways) {
-    const b = el('button', 'way' + (k === 'bus' ? ' on' : ''));
+    const b = el('button', 'way');
+    b.dataset.pane = PANE_OF[k];
     b.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${WAY_ICONS[k]}</svg>`;
     b.appendChild(el('span', null, `${label} ${Array.isArray(m) ? fmtSpan(m[0], m[1]) : fmtMin(Math.max(1, Math.round(m)))}`));
-    b.addEventListener('click', () => { for (const x of row.children) x.classList.toggle('on', x === b); if (k === 'bus') showPane('bus'); if (k === 'car') showPane('ride'); });
+    b.addEventListener('click', () => { showPane(PANE_OF[k]); for (const x of row.children) x.classList.toggle('on', x === b); });
     row.appendChild(b);
   }
   $('trip-time').replaceChildren(row, el('p', 'ways-note', city ? `সময় আনুমানিক · কম সংখ্যাটি ফাঁকা রাস্তায়, বেশিটি জ্যামে — ${FARES.cityKmh.source}` : 'সময় আনুমানিক · গাড়ির সময় ফাঁকা রাস্তায় — শহর থেকে বের হতে ও জ্যামে আরও লাগে'));
@@ -1575,10 +1600,26 @@ async function calculate() {
   renderRidePane(km, min, city ? Math.max(min, jam) : min);
   renderTrainPane();
   if (typeof showCommunityFares === 'function') showCommunityFares();
-  showPane('bus');
+  // on foot: its own tab when it is a walk at all (8 km), filled in from the walking route when that comes
+  const walkTab = $('seg').querySelector('[data-pane=walk]');
+  walkTab.hidden = km > 8;
+  if (walkTab.hidden) $('seg').hidden = $('seg').querySelectorAll('button:not([hidden])').length < 2;
+  else $('seg').hidden = false;
+  driveLine = r.geometry.coordinates; walkLine = null; driveKm = $('trip-km').textContent; walkKm = '';
+  drawLines('walk', []);
+  if (km <= 8) renderWalkPane(km, null);
+  showPane(near ? 'walk' : 'bus');
 
   fit(r.geometry.coordinates);
-  drawLines('route', [{ coords: r.geometry.coordinates }]);
+  drawLines('route', [{ coords: r.geometry.coordinates }]);              // the road until the way on foot comes
+  if (km <= 8) getWalk(trip.from, trip.to).then(w => {
+    if (key !== lastKey) return;
+    walkLine = w.geometry.coordinates;
+    const wmin = renderWalkPane(km, w);
+    const chip = row.querySelector('.way[data-pane=walk] span');
+    if (chip) chip.textContent = `হেঁটে ${fmtMin(wmin)}`;
+    if (!$('pane-walk').hidden) { $('trip-km').textContent = walkKm; fit(walkLine); drawLines('route', []); drawLines('walk', [{ coords: walkLine }]); }
+  }).catch(() => { if (key === lastKey && !$('pane-walk').hidden) drawLines('route', [{ coords: driveLine }]); });
 }
 
 // On a phone the results sheet can be pulled up to read everything, or down to see the map.
@@ -1597,6 +1638,8 @@ function clearTrip() {
   for (const s of searches) s.sync();
   if (!map) return;
   drawLines('route', []);
+  drawLines('walk', []);
+  driveLine = walkLine = null; driveKm = walkKm = '';
   clearBus();
   drawMarkers();
   fit(BD_LNGLAT);

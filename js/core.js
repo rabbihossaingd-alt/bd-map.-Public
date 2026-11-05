@@ -25,6 +25,7 @@ const ICONS = {
   home: '<path d="M3 11l9-8 9 8"/><path d="M5 10v10h5v-6h4v6h5V10"/>',
   route: '<circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="4.5" r="2.5"/><path d="M8.5 18H15a3.5 3.5 0 000-7H9a3.5 3.5 0 01-.5-6.5h7"/>',
   bus: '<rect x="4" y="3" width="16" height="14" rx="3"/><path d="M4 11h16M8 17v3M16 17v3M8 14h.01M16 14h.01"/>',
+  walk: '<circle cx="13" cy="4" r="2"/><path d="M10 21l2-6 3 3v3M9 12l2-4 4 2 2 4M11 8l-3 3"/>',
   send: '<path d="M3 11l18-8-8 18-2-8-8-2z"/>',
   tag: '<path d="M20 12l-8 8-9-9V3h8l9 9z"/><path d="M7.5 7.5h.01"/>',
   locate: '<circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/>',
@@ -667,6 +668,17 @@ function getRoute(pts) {
   const p = fetchRoute(pts).catch(e => { routeMemo.delete(key); throw e; });
   routeMemo.set(key, { at: Date.now(), p });
   if (routeMemo.size > 40) routeMemo.delete(routeMemo.keys().next().value);
+  return p;
+}
+// The way on foot (footpaths, lanes, both ways down one-way streets), remembered the same way.
+function getWalk(from, to) {
+  const key = 'walk:' + [from, to].map(p => `${(+p.lon).toFixed(5)},${(+p.lat).toFixed(5)}`).join(';'), hit = routeMemo.get(key);
+  if (hit && Date.now() - hit.at < 10 * 60_000) return hit.p;
+  const coords = `${from.lon},${from.lat};${to.lon},${to.lat}`;
+  const p = geoJson('api/geo/walk?c=' + encodeURIComponent(coords), `https://routing.openstreetmap.de/routed-foot/route/v1/driving/${coords}?overview=full&geometries=geojson`)
+    .then(d => { if (d.code !== 'Ok' || !d.routes.length) throw new Error('no walk'); return d.routes[0]; })
+    .catch(e => { routeMemo.delete(key); throw e; });
+  routeMemo.set(key, { at: Date.now(), p });
   return p;
 }
 async function fetchRoute(pts) {

@@ -5356,3 +5356,10 @@ input.upper::placeholder { text-transform: none; }
 .chat-compose .send:not(.like) { width: 36px; height: 36px; background: var(--mt, var(--brand)); color: var(--white); box-shadow: 0 4px 12px -6px var(--mt, var(--brand)); }
 .aud-credit { margin: 4px 0 0; font-size: var(--fs-xs); color: var(--muted); } .aud-credit a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
 .mm-card:disabled { opacity: .4; cursor: not-allowed; }
+
+/* on foot: the time large, the distance and "no fare" under it */
+.walk-big { display: grid; gap: 2px; padding: var(--space-4) 2px var(--space-2); }
+.walk-big b { font-size: 26px; font-weight: 800; letter-spacing: -.02em; }
+.walk-big span { color: var(--muted); font-weight: 600; }
+.walk-note { margin: var(--space-2) 2px 0; font-size: var(--fs-sm); color: var(--ink-2); }
+.walk-src { margin: var(--space-2) 2px var(--space-3); font-size: var(--fs-xs); color: var(--muted); }
