@@ -5427,3 +5427,21 @@ input.upper::placeholder { text-transform: none; }
 #sheet .walk-big b { font-size: 30px; font-weight: 700; letter-spacing: -.03em; }
 #sheet .walk-big span { font-size: 14px; font-weight: 500; }
 #sheet .text-btn { font-weight: 600; }
+
+/* the ways of going, as Apple Maps sets them: one segmented row, the glyph above and the time under it;
+   the chosen one raised and in the brand colour */
+#trip-time .ways { display: grid; grid-template-columns: repeat(var(--n, 3), minmax(0, 1fr)); gap: 4px; margin: var(--space-3) 0 2px; padding: 4px;
+  border-radius: 18px; background: color-mix(in srgb, var(--ink) 6%, transparent); overflow: visible; flex-wrap: nowrap; }
+#sheet #trip-time .way { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; height: 60px; min-width: 0; padding: 0 6px;
+  border: 0; border-radius: 14px; background: transparent; box-shadow: none; color: var(--muted); font-size: 13px; font-weight: 600; cursor: pointer;
+  transition: background .25s, color .25s, transform .15s, box-shadow .25s; }
+#sheet #trip-time .way span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; letter-spacing: -.01em; }
+#sheet #trip-time .way svg.mg { width: 24px; height: 24px; fill: currentColor; stroke: none; }
+#sheet #trip-time .way:hover:not(.on) { color: var(--ink); }
+#sheet #trip-time .way.on { color: var(--brand); background: var(--bg); box-shadow: 0 1px 2px rgb(0 0 0 / .08), 0 4px 12px -4px rgb(0 0 0 / .14); }
+:root[data-theme="dark"] #sheet #trip-time .way.on { background: color-mix(in srgb, var(--ink) 13%, transparent); box-shadow: none; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) #sheet #trip-time .way.on { background: color-mix(in srgb, var(--ink) 13%, transparent); box-shadow: none; } }
+#sheet #trip-time .way.on span { color: var(--ink); }
+/* a bus row's tile: the filled bus in the brand's tint */
+.item > .ic.mode { display: grid; place-items: center; background: rgb(var(--brand-rgb) / .12); color: var(--brand); }
+.item > .ic.mode svg.mg { width: 24px; height: 24px; fill: currentColor; stroke: none; }

@@ -378,7 +378,7 @@ async function renderTrainPane() {
   pane.append(...found.slice(0, 8).map(trainCard));
   tab.hidden = false;
   $('seg').hidden = false;
-  if (typeof addTrainChip === 'function') addTrainChip();
+  if (typeof addTrainChip === 'function') addTrainChip(Math.min(...found.map(r => r.mins)));
 }
 // The districts page's link opens the Transport page on its bus tab.
 for (const a of document.querySelectorAll('.dx-link')) a.addEventListener('click', () => { try { localStorage.setItem('bdmap.tx', 'bus'); } catch { /* storage off */ } });
