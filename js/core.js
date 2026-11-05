@@ -593,6 +593,9 @@ async function placePhotos(place, radius = 500, max = 6) {
                  license: (info.extmetadata.LicenseShortName || {}).value || '',
                  named: words.some(w => matchScore(file, w) > 0) };
       });
+    // the same scene twice ("Mosque 1", "Mosque 2"): one is enough
+    const seen = new Set();
+    photos = photos.filter(p => { const k = latinKey(p.name.replace(/[\d_\-\s().]+$/g, '')); if (seen.has(k)) return false; seen.add(k); return true; });
     const named = photos.filter(p => p.named);
     photos = [...named, ...photos.filter(p => !p.named).slice(0, named.length ? 2 : 3)].slice(0, max);
   } catch { return []; }   // not cached, so a network hiccup does not hide the photos for good

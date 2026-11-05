@@ -138,9 +138,29 @@ function goTo(place) {
 }
 
 // A photo strip for a place. Starts empty and fills in if Wikimedia Commons has pictures taken nearby.
+// A district town's own pictures (the guide's cover and best places, each credited), else Commons photos taken nearby.
+function guidePhotos(place) {
+  if (typeof GUIDE === 'undefined' || !GUIDE) return [];
+  const d = DISTRICTS.find(x => x.bn === place.label || x.en === place.label) || DISTRICTS.find(x => haversineKm(x, place) < 4);
+  const g = d && GUIDE[d.id];
+  if (!g) return [];
+  const list = [];
+  if (g.img) list.push({ src: typeof sized === 'function' ? sized(g.img, 500) : g.img, big: g.img, name: d.bn, named: true, by: g.fileBy || '', license: g.fileLic || '' });
+  for (const s of g.sights || []) if (s.img && list.length < 6) list.push({ src: typeof sized === 'function' ? sized(s.img, 500) : s.img, big: s.img, name: s.name, named: true, by: s.imgBy || '', license: s.imgLic || '' });
+  return list;
+}
 function photoStrip(place, radius) {
   const box = el('div', 'photo-box');
-  placePhotos(place, radius).then(photos => {
+  const guideIn = typeof GUIDE !== 'undefined' && GUIDE ? Promise.resolve() : typeof loadGuide === 'function' ? loadGuide().catch(() => {}) : Promise.resolve();
+  // the district's own pictures first; beside them only nearby photos named after the place (not whatever was
+  // photographed near by); with no pictures of its own, the nearby ones as before
+  guideIn.then(async () => {
+    const own = guidePhotos(place);
+    if (own.length >= 3) return own;
+    const near = await placePhotos(place, radius);
+    const seen = new Set(own.map(p => p.big));
+    return own.length ? [...own, ...near.filter(p => p.named && !seen.has(p.big))].slice(0, 6) : near;
+  }).then(photos => {
     if (!photos.length) return;
     const strip = el('div', 'photos');
     photos.forEach((p, i) => {
@@ -157,7 +177,7 @@ function photoStrip(place, radius) {
     });
     dragScroll(strip);
     const note = photos.some(p => p.named) ? 'ছবি: উইকিমিডিয়া কমন্স' : 'আশপাশে তোলা ছবি · উইকিমিডিয়া কমন্স';
-    box.append(strip, el('div', 'cap', `${note} · ${num(photos.length)} টি — টেনে সরান, চাপ দিলে বড় হবে`));
+    box.append(strip, el('div', 'cap', note));
   });
   return box;
 }
@@ -1450,10 +1470,23 @@ function renderBusPane(km) {
     if (rule !== FARES.bus.intercity) pane.appendChild(el('div', 'empty', 'এই পথের বাসের নাম এখনো আমাদের কাছে নেই।'));
     return;
   }
-  pane.appendChild(fareTiles(rule, km, officialFare(a, b)));
-  const counter = counterFare(a, b);
-  if (counter) pane.appendChild(counter);
-  pane.append(el('div', 'label', `${a.bn} – ${b.bn} রুটের বাস`), operatorChips(a, b));
+  pane.append(...intercityRows(a, b, rule, km));
+  const ops = operatorsBetween(a, b);
+  if (ops.length) pane.append(el('div', 'label', 'যে কোম্পানির বাস চলে'), operatorChips(a, b));
+}
+// Long-distance bus fares, one line each as Google lists ways of going: non-AC at BRTA's fare (or the per-km rate), AC
+// as the range the companies charge; what the counters usually ask, when we know it, under each. Where they leave from
+// once, above.
+function intercityRows(a, b, rule, km) {
+  const official = officialFare(a, b), other = a.id === 'dhaka' ? b : b.id === 'dhaka' ? a : null, f = other && MARKET_FARES[other.id];
+  const base = official ? official.f51 : busFare(rule, km), [lo, hi] = FARES.bus.acRange;
+  const out = [];
+  if (official && official.terminal) out.push(el('div', 'label', `${official.terminal} থেকে ছাড়ে`));
+  // the price people pay at the counter large, when we know it; BRTA's set fare under it
+  const brta = official ? fareRange(official.f51, official.f40) : taka(base), acEst = `${taka(base * lo)}–${num(Math.ceil(base * hi))}`;
+  out.push(f ? item('bus', 'নন-এসি', `বিআরটিএ-র ভাড়া ${brta}`, fareRange(f[0], f[1])) : item('bus', 'নন-এসি', official ? 'বিআরটিএ-র ভাড়া' : 'সরকারি হারে', brta));
+  out.push(f && f.length > 2 ? item('bus', 'এসি', 'কাউন্টারে সাধারণত', fareRange(f[2], f[3])) : item('bus', 'এসি', 'কোম্পানি ভেদে', acEst));
+  return out;
 }
 
 // A small form: the fare someone really paid between two stops. It is saved on the server and, from then

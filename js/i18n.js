@@ -432,6 +432,7 @@ const EXACT = {
   'হেঁটে': 'Walk', 'ভাড়া লাগে না': 'no fare', 'এত কাছে হেঁটে যাওয়াই সবচেয়ে সহজ।': 'This close, walking is easiest.',
   'হাঁটার পথ ধরে — ফুটপাত আর গলিসহ।': 'Along the way on foot, footpaths and lanes included.', 'হাঁটা যায়, তবে লম্বা পথ — রিকশা বা বাসও দেখুন।': 'Walkable, but long — see rickshaws and buses too.',
   'হাঁটার পথ: OpenStreetMap (FOSSGIS)': 'Walking route: OpenStreetMap (FOSSGIS)', 'সময় আনুমানিক — ঘণ্টায় প্রায় সাড়ে ৪ কিমি হাঁটা ধরে': 'Time estimated at about 4.5 km an hour',
+  'কোম্পানি ভেদে': "Varies by company", 'সরকারি হারে': "At the government rate", 'যে কোম্পানির বাস চলে': "Bus companies on this route", 'ভাড়া আনুমানিক': "Fares are estimates", 'বিআরটিএ-র ভাড়া': "BRTA's fare",
   // the tour poster
   'ছবি': 'Photo',
   'দলের ছবি': 'Group photos', 'ছবি আপনার ফোনেই থাকে, কোথাও আপলোড হয় না।': 'Photos stay on your phone and are never uploaded.', 'ম্যাপে যাত্রার ভিডিও আর শেয়ার করার পোস্টার': 'A video of the journey on the map, and a poster to share', 'কার্ড আর ভিডিও বানান': 'Make the card and video', 'সদস্যদের নাম (কমা দিয়ে)': 'Names (separated by commas)',
@@ -624,6 +625,8 @@ const EXACT = {
 const N = '([\\d.,]+)';
 const P = (source, fn) => [new RegExp('^' + source + '$'), fn];
 const PATTERNS = [
+  P('(.+) থেকে ছাড়ে', a => `Leaves from ${tr(a)}`),
+  P('বিআরটিএ-র ভাড়া (৳.+)', a => `BRTA's fare ${a}`),
   P('সোজা (.+)', d => `${tr(d)} in a straight line`),
   P('রাস্তায় (.+)', d => `${tr(d)} by road`),
   P('গাড়িতে ~(.+)', d => `~${tr(d)} by car`),
