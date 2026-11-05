@@ -5,14 +5,30 @@ const CACHE = 'bdmap-v7';
 // Photos from Wikimedia and the web fonts: they never change at the same address, so the copy on the device is used
 // first and the network only once. Kept apart from the app's own files and trimmed to the newest 300.
 const MEDIA = 'bdmap-media-v1';
+// The map's own pieces: OpenFreeMap's street tiles (their addresses carry the map's build date, so a copy never
+// goes stale), its letters and sprites, and the terrain tiles. Kept apart, the newest 2,500, so opening the
+// map again draws it from the phone. Satellite photos are not kept (Esri's terms).
+const MAPS = 'bdmap-maps-v1';
 
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', event => event.waitUntil(
-  caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE && k !== MEDIA).map(k => caches.delete(k)))).then(() => self.clients.claim())));
+  caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE && k !== MEDIA && k !== MAPS).map(k => caches.delete(k)))).then(() => self.clients.claim())));
 
 self.addEventListener('fetch', event => {
   const req = event.request;
   const url = new URL(req.url);
+  // the tile list (/planet) and the style name no date, so they always come fresh; tiles, letters and sprites do
+  const ofm = url.hostname === 'tiles.openfreemap.org' && /^\/(planet\/\d|fonts\/|sprites\/)/.test(url.pathname);
+  if (req.method === 'GET' && (ofm || (url.hostname === 's3.amazonaws.com' && url.pathname.startsWith('/elevation-tiles-prod/')))) {
+    event.respondWith(caches.open(MAPS).then(c => c.match(req.url).then(hit => hit || fetch(req).then(res => {
+      if (res.ok && (res.type === 'cors' || res.type === 'basic')) {
+        res.clone().blob().then(body => c.put(req.url, new Response(body, { headers: { 'Content-Type': res.headers.get('Content-Type') || '', 'Access-Control-Allow-Origin': '*' } })))
+          .then(() => Math.random() < 0.05 ? c.keys().then(k => Promise.all(k.slice(0, Math.max(0, k.length - 2500)).map(x => c.delete(x)))) : null).catch(() => {});
+      }
+      return res;
+    }))));
+    return;
+  }
   if (req.method === 'GET' && /^(upload\.wikimedia\.org|thumb\.wikimedia\.org|fonts\.gstatic\.com|fonts\.googleapis\.com)$/.test(url.hostname)) {
     event.respondWith(caches.open(MEDIA).then(c => c.match(req.url).then(hit => hit || fetch(req).then(res => {
       // only answers the page may read (CORS); an opaque one would take far more room than it is worth

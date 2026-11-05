@@ -50,11 +50,9 @@ function goHere(p, src) {
   trip.from = null;                                   // from where you are now, not from an older trip
   setPlace('to', to);
   go('trip');
-  if (!navigator.geolocation) return;
-  navigator.geolocation.getCurrentPosition(pos => {
-    if (trip.to === to && !trip.from) setPlace('from', { lat: pos.coords.latitude, lon: pos.coords.longitude, label: 'আমার লোকেশন' });
-  }, () => { if (trip.to === to && !trip.from) exploreNote('কোথা থেকে যাবেন লিখুন — লোকেশনের অনুমতি পাওয়া যায়নি।'); },
-  { timeout: 10000, maximumAge: 300000 });
+  getLocation({ maxAge: 300_000 }).then(f => {
+    if (trip.to === to && !trip.from) setPlace('from', { lat: f.lat, lon: f.lon, label: 'আমার লোকেশন' });
+  }, () => { if (trip.to === to && !trip.from) exploreNote('কোথা থেকে যাবেন লিখুন — লোকেশন পাওয়া যায়নি।'); });
 }
 // the row on a post: the place's name, and the button
 function goHereRow(p, src, cls) {

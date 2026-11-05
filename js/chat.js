@@ -1148,9 +1148,8 @@ function openShare() {
   const rows = [];
   const add = (icon, title, sub, fn) => { rows.push(item(icon, title, sub, '', fn)); };
   add('locate', 'আমার এখনকার লোকেশন', 'একবার পাঠানো হবে, লাইভ নয়', () => {
-    if (!navigator.geolocation) { closeModal(); return; }
-    navigator.geolocation.getCurrentPosition(p => { closeModal(); sendMessage('place', { lat: p.coords.latitude, lon: p.coords.longitude, label: 'আমার লোকেশন' }); },
-      () => { closeModal(); chatToast(ME, 'লোকেশনের অনুমতি পাওয়া যায়নি।'); }, { enableHighAccuracy: true, timeout: 10000 });
+    getLocation({ maxAge: 30_000 }).then(f => { closeModal(); sendMessage('place', { lat: f.lat, lon: f.lon, label: 'আমার লোকেশন' }); },
+      e => { closeModal(); chatToast(ME, locationError(e)); });
   });
   for (const p of [trip.to, trip.from]) if (p) add('pin', p.label, 'ম্যাপে খোলা জায়গা', () => { closeModal(); sendMessage('place', { lat: p.lat, lon: p.lon, label: p.label }); });
   openModal('জায়গা পাঠান', '', rows);

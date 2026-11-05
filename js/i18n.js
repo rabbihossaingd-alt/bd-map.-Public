@@ -425,6 +425,10 @@ const EXACT = {
   'আপনার অ্যাকাউন্ট ভেরিফায়েড': 'Your account is verified',
   'মাসে $১ থেকে · শর্ত ও প্ল্যান': 'From $1 a month · rules and plans',
   'লাইসেন্স ও উৎস': 'Licences and sources', 'লাইসেন্স': 'Licences',
+  'আপনার অবস্থান নেওয়া হচ্ছে…': 'Getting your location…', 'লোকেশনের অনুমতি দেওয়া নেই — ব্রাউজার বা ফোনের সেটিংসে Manzeela-কে লোকেশনের অনুমতি দিন।': 'Location is not allowed — allow Manzeela to use your location in the browser or phone settings.',
+  'লোকেশন পাওয়া যায়নি — জিপিএস চালু করে খোলা জায়গায় আবার চেষ্টা করুন।': 'Could not get your location — turn on GPS and try again in the open.',
+  'লোকেশনের অনুমতি দেওয়া নেই — ব্রাউজার বা ফোনের সেটিংসে Manzeela-কে লোকেশনের অনুমতি দিন। অথবা কোথা থেকে যাবেন লিখুন।': 'Location is not allowed — allow it in settings, or type where you start.',
+  'লোকেশন পাওয়া যায়নি — জিপিএস চালু করে খোলা জায়গায় আবার চেষ্টা করুন। অথবা কোথা থেকে যাবেন লিখুন।': 'Could not get your location — turn on GPS, or type where you start.',
   // the tour poster
   'ছবি': 'Photo',
   'দলের ছবি': 'Group photos', 'ছবি আপনার ফোনেই থাকে, কোথাও আপলোড হয় না।': 'Photos stay on your phone and are never uploaded.', 'ম্যাপে যাত্রার ভিডিও আর শেয়ার করার পোস্টার': 'A video of the journey on the map, and a poster to share', 'কার্ড আর ভিডিও বানান': 'Make the card and video', 'সদস্যদের নাম (কমা দিয়ে)': 'Names (separated by commas)',
@@ -617,6 +621,11 @@ const EXACT = {
 const N = '([\\d.,]+)';
 const P = (source, fn) => [new RegExp('^' + source + '$'), fn];
 const PATTERNS = [
+  P('সোজা (.+)', d => `${tr(d)} in a straight line`),
+  P('রাস্তায় (.+)', d => `${tr(d)} by road`),
+  P('গাড়িতে ~(.+)', d => `~${tr(d)} by car`),
+  P('([^·]+) থেকে (রাস্তায় .+|সোজা .+)', (a, rest) => `${tr(rest)} from ${tr(a)}`),
+  P('দূরত্ব (.+) থেকে, নিজের অবস্থান থেকে দেখতে 📍 চাপুন', a => `distances from ${tr(a)} — tap 📍 for your own location`),
   P(N + ' ঘণ্টা ' + N + ' মিনিট', (h, m) => `${h} hr ${m} min`),
   P(N + ' ঘণ্টা', h => `${h} hr`), P(N + ' মিনিট', m => `${m} min`), P(N + ' মিটার', m => `${m} m`), P(N + ' কিমি', k => `${k} km`),
   P(N + ' টি', n => n), P(N + ' জন', n => `${n} ${n === '1' ? 'rating' : 'ratings'}`), P(N + ' শয্যা', n => `${n} beds`),

@@ -433,10 +433,9 @@ const coverStyle = (img, division) => {
     let pos = null;
     const locate = el('button', 'btn quiet gm-locate'); locate.type = 'button'; locate.append(ic('pin'), el('span', null, tl2('আমি এখন এখানে — অবস্থান দিন', 'I am here — add my location')));
     locate.addEventListener('click', () => {
-      if (!navigator.geolocation) return;
       locate.querySelector('span').textContent = tl2('অবস্থান নেওয়া হচ্ছে…', 'Getting your location…');
-      navigator.geolocation.getCurrentPosition(p => { pos = { lat: p.coords.latitude, lon: p.coords.longitude }; locate.classList.add('on'); locate.querySelector('span').textContent = tl2('অবস্থান যোগ হয়েছে ✓', 'Location added ✓'); },
-        () => { locate.querySelector('span').textContent = tl2('অবস্থান পাওয়া যায়নি — ঐচ্ছিক, বাদ দিতে পারেন', 'No location — it is optional'); }, { enableHighAccuracy: true, timeout: 12000 });
+      getLocation({ maxAge: 30_000 }).then(f => { pos = { lat: f.lat, lon: f.lon }; locate.classList.add('on'); locate.querySelector('span').textContent = tl2('অবস্থান যোগ হয়েছে ✓', 'Location added ✓'); },
+        () => { locate.querySelector('span').textContent = tl2('অবস্থান পাওয়া যায়নি — ঐচ্ছিক, বাদ দিতে পারেন', 'No location — it is optional'); });
     });
     const files = [];
     const shots = el('div', 'gm-shots');

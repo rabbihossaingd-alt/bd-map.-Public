@@ -620,7 +620,56 @@ async function reverseName(lat, lon) {
   } catch { return null; }
 }
 
-async function getRoute(pts) {
+// ---- Where you are: quick, and never waiting for ever ----
+// A recent fix is used at once (two minutes; it is also kept for the next visit). Otherwise the phone's quick
+// network fix (Wi-Fi and cell towers, usually under a second) is asked first, then GPS if that fails; each has a
+// time limit, so "finding your location" always ends. A refusal is not asked again.
+let LAST_FIX = null;
+try { LAST_FIX = JSON.parse(localStorage.getItem('bdmap.fix') || 'null'); } catch { /* storage off */ }
+function rememberFix(lat, lon, acc) {
+  LAST_FIX = { lat, lon, acc: Math.round(acc || 0), at: Date.now() };
+  try { localStorage.setItem('bdmap.fix', JSON.stringify(LAST_FIX)); } catch { /* storage off */ }
+}
+function getLocation({ maxAge = 120_000 } = {}) {
+  return new Promise((resolve, reject) => {
+    if (LAST_FIX && Date.now() - LAST_FIX.at < maxAge) return resolve(LAST_FIX);
+    if (!navigator.geolocation) return reject(Object.assign(new Error('none'), { code: 0 }));
+    let done = false;
+    const ok = p => { if (done) return; done = true; rememberFix(p.coords.latitude, p.coords.longitude, p.coords.accuracy); resolve(LAST_FIX); };
+    const fail = e => { if (done) return; done = true; reject(e); };
+    navigator.geolocation.getCurrentPosition(ok, e => {
+      if (e.code === 1) return fail(e);                                   // refused: do not ask again
+      navigator.geolocation.getCurrentPosition(ok, fail, { enableHighAccuracy: true, timeout: 15_000, maximumAge: 60_000 });
+    }, { enableHighAccuracy: false, timeout: 6_000, maximumAge: 300_000 });
+  });
+}
+// what to say when it fails
+const locationError = e => e && e.code === 1 ? 'লোকেশনের অনুমতি দেওয়া নেই — ব্রাউজার বা ফোনের সেটিংসে Manzeela-কে লোকেশনের অনুমতি দিন।'
+  : 'লোকেশন পাওয়া যায়নি — জিপিএস চালু করে খোলা জায়গায় আবার চেষ্টা করুন।';
+
+// The road distance (and driving time) from one point to many, in one request (OSRM's table, through our server
+// with its cache). Places it cannot reach keep their straight-line distance. Returns [{ km, min } | null].
+async function roadDistances(from, places) {
+  const pts = [from, ...places].map(p => `${p.lon},${p.lat}`).join(';');
+  const url = `https://router.project-osrm.org/table/v1/driving/${pts}?sources=0&annotations=distance,duration`;
+  const data = await geoJson('api/geo/table?c=' + encodeURIComponent(pts), url).catch(() => ({}));
+  if (data.code !== 'Ok' || !data.distances) return places.map(() => null);
+  const d = data.distances[0], t = (data.durations || [[]])[0];
+  return places.map((_, i) => d[i + 1] == null ? null : { km: d[i + 1] / 1000, min: t[i + 1] == null ? null : t[i + 1] / 60 });
+}
+
+// The same question in the last ten minutes gets the same answer at once: the trip page asks while the map is
+// still being made, and the route is then ready when the map is.
+const routeMemo = new Map();
+function getRoute(pts) {
+  const key = pts.map(p => `${(+p.lon).toFixed(5)},${(+p.lat).toFixed(5)}`).join(';'), hit = routeMemo.get(key);
+  if (hit && Date.now() - hit.at < 10 * 60_000) return hit.p;
+  const p = fetchRoute(pts).catch(e => { routeMemo.delete(key); throw e; });
+  routeMemo.set(key, { at: Date.now(), p });
+  if (routeMemo.size > 40) routeMemo.delete(routeMemo.keys().next().value);
+  return p;
+}
+async function fetchRoute(pts) {
   const coords = pts.map(p => `${p.lon},${p.lat}`).join(';');
   const url = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson`;
   const data = await geoJson('api/geo/route?c=' + encodeURIComponent(coords), url).catch(() => ({}));

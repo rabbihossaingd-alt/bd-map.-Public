@@ -123,9 +123,18 @@ function button(icon, text, onClick, quiet) {
 const asPlace = it => ({ lat: it.lat, lon: it.lon, label: it.bn || it.title });
 
 // Start a trip to a place: straight to the map, with or without a starting point.
+// From where you are: at once when the location is known from a moment ago, else as soon as the phone says;
+// the route is drawn the moment both ends are there.
 function goTo(place) {
+  const fresh = LAST_FIX && Date.now() - LAST_FIX.at < 5 * 60_000;
+  if (!trip.from && fresh) trip.from = { lat: LAST_FIX.lat, lon: LAST_FIX.lon, label: 'আমার লোকেশন' };
+  const ask = !trip.from;
   setPlace('to', place);
-  if (!trip.from) go('trip');
+  if (ask) {
+    go('trip');
+    getLocation({ maxAge: 5 * 60_000 }).then(f => { if (trip.to === place && !trip.from) setPlace('from', { lat: f.lat, lon: f.lon, label: 'আমার লোকেশন' }); },
+      e => { if (trip.to === place && !trip.from) setStatus(locationError(e) + ' অথবা কোথা থেকে যাবেন লিখুন।'); });
+  } else if (current !== 'trip') go('trip');
 }
 
 // A photo strip for a place. Starts empty and fills in if Wikimedia Commons has pictures taken nearby.
@@ -375,12 +384,8 @@ function createSearch(root) {
     setPlace('from', trip.from);
   });
   root.querySelector('[data-act=locate]').addEventListener('click', () => {
-    if (!navigator.geolocation) { setStatus('এই ডিভাইসে লোকেশন পাওয়া যাচ্ছে না।'); return; }
     setStatus('লোকেশন খোঁজা হচ্ছে…');
-    navigator.geolocation.getCurrentPosition(pos => {
-      setStatus('');
-      setPlace('from', { lat: pos.coords.latitude, lon: pos.coords.longitude, label: 'আমার লোকেশন' });
-    }, () => setStatus('লোকেশনের অনুমতি পাওয়া যায়নি।'));
+    getLocation({ maxAge: 60_000 }).then(f => { setStatus(''); setPlace('from', { lat: f.lat, lon: f.lon, label: 'আমার লোকেশন' }); }, e => setStatus(locationError(e)));
   });
 
   const api = {
@@ -1186,7 +1191,7 @@ async function createMap() {
 
   // Live location: a blue dot with an accuracy ring that follows the device. MapLibre's own control does the
   // tracking; its button is hidden because ours (in .map-tools) triggers it.
-  const geo = new maplibregl.GeolocateControl({ positionOptions: { enableHighAccuracy: true }, trackUserLocation: true,
+  const geo = new maplibregl.GeolocateControl({ positionOptions: { enableHighAccuracy: true, timeout: 15_000, maximumAge: 30_000 }, trackUserLocation: true,
                                                 showUserHeading: true, showAccuracyCircle: true, fitBoundsOptions: { maxZoom: 16 } });
   map.addControl(geo, 'bottom-right');
   geoCtl = geo;
@@ -1206,7 +1211,7 @@ async function createMap() {
   geo.on('error', () => { $('tool-me').classList.remove('on'); const quiet = quietLocate; quietLocate = false; approxLocate(quiet); });
   $('tool-me').addEventListener('click', () => { setStatus(''); geo.trigger(); });
   locateMe = () => { quietLocate = true; geo.trigger(); };       // on opening: no complaint if location is refused
-  geo.on('geolocate', e => { quietLocate = false; myLoc = { lat: e.coords.latitude, lon: e.coords.longitude }; });
+  geo.on('geolocate', e => { quietLocate = false; myLoc = { lat: e.coords.latitude, lon: e.coords.longitude }; rememberFix(e.coords.latitude, e.coords.longitude, e.coords.accuracy); });
 
   // Stop names: on hover with a mouse, on tap with a finger.
   stopPopup = new maplibregl.Popup({ closeButton: false, offset: 12, className: 'stop-popup' });
@@ -1537,7 +1542,7 @@ async function calculate() {
 
   const km = r.distance / 1000, min = r.duration / 60;
   saveRecent(trip.from, trip.to);
-  $('trip-km').textContent = `${num(km, 1)} কিমি`;
+  $('trip-km').textContent = km < 1 ? distText(km) : `${num(km, 1)} কিমি`;   // under a kilometre in metres ("৫০ মিটার", not "০ কিমি")
   // How long by each way of going, as Google lists them above a route. The road's length is the route's; walking,
   // rickshaw and bus speeds are the usual ones in Bangladesh, and the times are said to be rough.
   const WAY_ICONS = {
@@ -1602,6 +1607,7 @@ function clearTrip() {
 let locateMe = () => {}, locatedOnce = false, quietLocate = false;
 enter.trip = async () => {
   if (trip.from || trip.to || pendingPath) $('page-trip').classList.add('dir-on');
+  if (trip.from && trip.to) getRoute([trip.from, trip.to]).catch(() => {});      // the road, while the map is made
   try { await ensureMap(); } catch { return; }
   if (current !== 'trip') return;
   drawMarkers();
@@ -1902,6 +1908,10 @@ for (const b of $('seg').children) b.addEventListener('click', () => showPane(b.
 let nearbyAt = () => {};
 (function initNearby() {
   let center = null, cat = NEARBY_CATEGORIES[0], seq = 0, found = [], byRating = false;
+  const MINE = 'আমার লোকেশন';
+  const isMine = () => !!center && center.label === MINE;
+  // by road when the road distance came (OSRM), else the straight line, said as such
+  const howFar = p => p.road ? distText(p.km) : `সোজা ${distText(p.km)}`;
   const input = $('near-input'), note = $('near-note'), list = $('near-list');
 
   // Facts OpenStreetMap holds about a place, as short labels.
@@ -1935,7 +1945,7 @@ let nearbyAt = () => {};
     g.innerHTML = svg('pin');
     g.appendChild(document.createTextNode('Google Maps'));
     actions.push(g);
-    openModal(p.title, `${cat.bn} · ${distText(p.km)} দূরে`, body, actions);
+    openModal(p.title, `${cat.bn} · ${isMine() ? '' : tr(center.label) + ' থেকে '}${p.road ? 'রাস্তায় ' : ''}${howFar(p)}${p.road && p.road.min >= 1 ? ` · গাড়িতে ~${fmtMin(p.road.min)}` : ''}`, body, actions);
   }
 
   function draw() {
@@ -1947,7 +1957,7 @@ let nearbyAt = () => {};
       : found;
     for (const p of rows.slice(0, 48)) {
       const sub = [ratingText(placeKey(p)), p.sub, ...facts(p)].filter(Boolean).join(' · ');
-      list.appendChild(item(cat.icon, p.title, sub, distText(p.km), () => openPlace(p)));
+      list.appendChild(item(cat.icon, p.title, sub, howFar(p), () => openPlace(p)));
     }
     stagger(list);
   }
@@ -1973,7 +1983,15 @@ let nearbyAt = () => {};
     list.replaceChildren();
     $('near-sort').hidden = true;
     if (!found.length) { note.textContent = `${center.label}-এর ৩০ কিমির মধ্যে কোনো ${cat.bn} ম্যাপে পাওয়া যায়নি।`; return; }
-    note.textContent = `${center.label}-এর কাছে ${num(found.length)} টি ${cat.bn} · চাপ দিলে বিস্তারিত`;
+    const said = () => `${center.label}-এর কাছে ${num(found.length)} টি ${cat.bn}` + (isMine() ? '' : ` · দূরত্ব ${tr(center.label)} থেকে, নিজের অবস্থান থেকে দেখতে 📍 চাপুন`);
+    note.textContent = said();
+    draw();
+    const near = found.slice(0, 40), from = center;
+    const roads = await roadDistances(from, near);
+    if (mine !== seq) return;
+    near.forEach((p, i) => { if (roads[i]) { p.road = roads[i]; p.km = roads[i].km; } });
+    found.sort((a, b) => a.km - b.km);
+    note.textContent = said();
     draw();
   }
 
@@ -1996,15 +2014,22 @@ let nearbyAt = () => {};
   }
   wireSuggest(input, $('near-suggest'), setCenter);
   $('near-locate').addEventListener('click', () => {
-    if (!navigator.geolocation) { note.textContent = 'এই ডিভাইসে লোকেশন পাওয়া যাচ্ছে না।'; return; }
     note.textContent = 'লোকেশন খোঁজা হচ্ছে…';
-    navigator.geolocation.getCurrentPosition(
-      pos => setCenter({ lat: pos.coords.latitude, lon: pos.coords.longitude, label: 'আমার লোকেশন' }),
-      () => { note.textContent = 'লোকেশনের অনুমতি পাওয়া যায়নি।'; });
+    getLocation({ maxAge: 60_000 }).then(f => setCenter({ lat: f.lat, lon: f.lon, label: MINE }), e => { note.textContent = locationError(e); });
   });
 
-  // First visit: start from the trip's destination or start if there is one, otherwise Dhaka.
-  enter.nearby = () => { if (!center) setCenter(trip.to || trip.from || asPlace(districtById('dhaka'))); };
+  // First visit: around you, as Google's "nearby" is, when the location is already allowed (or known from a few
+  // minutes ago); otherwise from the trip's destination or start, or Dhaka, saying so.
+  enter.nearby = async () => {
+    if (center) return;
+    let allowed = !!(LAST_FIX && Date.now() - LAST_FIX.at < 15 * 60_000);
+    if (!allowed) try { allowed = (await navigator.permissions.query({ name: 'geolocation' })).state === 'granted'; } catch { /* not supported */ }
+    if (allowed) {
+      note.textContent = 'আপনার অবস্থান নেওয়া হচ্ছে…';
+      try { const f = await getLocation({ maxAge: 15 * 60_000 }); if (!center) setCenter({ lat: f.lat, lon: f.lon, label: MINE }); return; } catch { /* fall back below */ }
+    }
+    if (!center) setCenter(trip.to || trip.from || asPlace(districtById('dhaka')));
+  };
 })();
 
 // ---- Fares ----
@@ -2071,6 +2096,14 @@ for (const b of document.querySelectorAll('.lang-btn')) {
 startTranslating();
 route();
 setTimeout(() => getMapStyle().catch(() => {}), 1200);   // warm the map style while the user is still on Home
+// …and the map itself (its library and the place badges) once the page is idle, unless the line is slow or the
+// person asked to save data: then opening a route draws the map at once instead of first fetching 800 KB.
+setTimeout(() => {
+  const c = navigator.connection;
+  if (c && (c.saveData || /(^|-)2g$/.test(c.effectiveType || ''))) return;
+  const idle = window.requestIdleCallback ? f => requestIdleCallback(f, { timeout: 4000 }) : f => setTimeout(f, 800);
+  idle(() => { loadMapLib().catch(() => {}); poiImages().catch(() => {}); });
+}, 2500);
 // Shared ratings arrive after first paint; cards drawn earlier pick up the averages on their next draw.
 loadFareReports();
 loadRatings().then(() => { for (const box of document.querySelectorAll('#op-grid .rate')) box.dispatchEvent(new Event('refresh')); });
