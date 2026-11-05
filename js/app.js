@@ -1522,10 +1522,10 @@ function renderRidePane(km, min, jamMin = min) {
   const add = (icon, name, sub, price) => {
     pane.appendChild(item(icon, name, sub, Array.isArray(price) ? fareRange(Math.round(price[0] / 5) * 5, Math.round(price[1] / 5) * 5) : taka(price), node => { selectOnly(node); requestRide(name, Array.isArray(price) ? price[1] : price); }));
   };
-  if (km <= FARES.cng.maxKm) add('cng', 'সিএনজি', 'মিটারে · সরকারি হার', cngFare(km));
+  if (km <= FARES.cng.maxKm) add('cngF', 'সিএনজি', 'মিটারে · সরকারি হার', cngFare(km));
   for (const r of FARES.rides) if (km <= r.maxKm) {
     const lo = rideFare(r, km, min, trip.from), hi = rideFare(r, km, jamMin, trip.from);
-    add(r.id, r.name, r.sub, Math.round(hi) - Math.round(lo) >= 5 ? [lo, hi] : lo);
+    add(MODE_GLYPHS[r.id] ? r.id + 'F' : r.id, r.name, r.sub, Math.round(hi) - Math.round(lo) >= 5 ? [lo, hi] : lo);
   }
   const any = pane.children.length > 0;
   $('seg').hidden = !any;
@@ -1565,9 +1565,12 @@ const MODE_GLYPHS = {
   car: 'M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z',
   bus: 'M4 16c0 .88.39 1.67 1 2.22V20c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h8v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1.78c.61-.55 1-1.34 1-2.22V6c0-3.5-3.58-4-8-4s-8 .5-8 4v10zm3.5 1c-.83 0-1.5-.67-1.5-1.5S6.67 14 7.5 14s1.5.67 1.5 1.5S8.33 17 7.5 17zm9 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm1.5-6H6V6h12v5z',
   train: 'M12 2c-4 0-8 .5-8 4v9.5C4 17.43 5.57 19 7.5 19L6 20.5v.5h2.23l2-2H14l2 2h2v-.5L16.5 19c1.93 0 3.5-1.57 3.5-3.5V6c0-3.5-3.58-4-8-4zM7.5 17c-.83 0-1.5-.67-1.5-1.5S6.67 14 7.5 14s1.5.67 1.5 1.5S8.33 17 7.5 17zm3.5-7H6V6h5v4zm2 0V6h5v4h-5zm3.5 7c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z',
+  // a motorbike (Material's two_wheeler) and a CNG auto-rickshaw (our own: the cabin, its windows, three wheels)
+  bike: 'M20 11c-.18 0-.36.01-.53.03L17.41 9H20V6l-3.72 1.86L13.41 5H9v2h3.59l2 2H11l-4 2-2-2H0v2h4c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4l2 2h3l3.49-6.1 1.01 1.01c-.91.73-1.5 1.84-1.5 3.09 0 2.21 1.79 4 4 4s4-1.79 4-4-1.79-4-4-4zM4 17c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm16 0c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z',
+  cng: '<path fill-rule="evenodd" d="M3.5 15.5V10C3.5 6.1 6.3 3 10.2 3h3.6c3 0 5.2 2.1 5.8 5l1.1 5.2c.1.4.3.6.3 1v1.3zM6.6 9.6V9c0-2 1.5-3.4 3.4-3.4h1.6v4zm7.4-4h.2c1.6 0 2.8 1 3.1 2.5l.4 1.5H14z"/><circle cx="7.2" cy="18.2" r="2.5"/><circle cx="17.6" cy="18.2" r="2.3"/>',
   walk: 'M13.5 5.5c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zM9.8 8.9L7 23h2.1l1.8-8 2.1 2v6h2v-7.5l-2.1-2 .6-3C14.8 12 16.8 13 19 13v-2c-1.9 0-3.5-1-4.3-2.4l-1-1.6c-.4-.6-1-1-1.7-1-.3 0-.5.1-.8.1L6 8.3V13h2V9.6l1.8-.7'
 };
-const modeSvg = k => `<svg class="mg" viewBox="0 0 24 24" aria-hidden="true"><path d="${MODE_GLYPHS[k]}"/></svg>`;
+const modeSvg = k => `<svg class="mg" viewBox="0 0 24 24" aria-hidden="true">${MODE_GLYPHS[k][0] === '<' ? MODE_GLYPHS[k] : `<path d="${MODE_GLYPHS[k]}"/>`}</svg>`;
 // a list row's icon tile with the filled glyph
 function modeIc(k) { const s = el('span', 'ic mode'); s.innerHTML = modeSvg(k); return s; }
 // one way of going in the segmented row: the glyph above, the time under it; always car, bus, train, walk
