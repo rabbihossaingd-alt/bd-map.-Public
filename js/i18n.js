@@ -441,6 +441,7 @@ const EXACT = {
   'অফিসিয়াল সাইট · যাত্রার ১০ দিন আগে থেকে': "Official site · from 10 days before travel",
   'সরকারি হার': "Government rates", 'মিটারে': "By meter", 'সাধারণ সময়ে': "At normal times", 'বাস · নন-এসি': "Bus · non-AC", 'ঢাকা ও চট্টগ্রাম শহরে': "In Dhaka and Chattogram cities", 'শহরের মিনিবাস': "City minibus", 'ঢাকার আশপাশের জেলায়': "Districts around Dhaka", 'দূরপাল্লায়': "Long distance", 'শহরে সর্বনিম্ন ভাড়া': "Lowest city fare", 'যে ভাড়া দিয়েছেন': "A fare you paid", 'যাচাইয়ের পর সবাই দেখবে।': "Everyone sees it once it is checked.", 'ভাড়া (টাকা)': "Fare (taka)", 'এখনো কেউ নেই — প্রথম ভাড়াটি আপনিই জানান': "Nobody yet — be the first to report a fare",
   'ভাড়ার হার': "Fare rates",
+  'শুরুতে': "Base fare", 'প্রতি কিমি': "Per km", 'প্রতি মিনিট': "Per minute", 'সর্বনিম্ন ভাড়া': "Minimum fare", '৫ টাকার ধাপে, নিচের দিকে': "In ৳5 steps, rounded down", 'জ্যামে থেমে থাকলে মিনিটে': "Waiting in traffic, per minute", 'ভাড়া, না থেমে': "Fare, without stops",
   // the tour poster
   'ছবি': 'Photo',
   'দলের ছবি': 'Group photos', 'ছবি আপনার ফোনেই থাকে, কোথাও আপলোড হয় না।': 'Photos stay on your phone and are never uploaded.', 'ম্যাপে যাত্রার ভিডিও আর শেয়ার করার পোস্টার': 'A video of the journey on the map, and a poster to share', 'কার্ড আর ভিডিও বানান': 'Make the card and video', 'সদস্যদের নাম (কমা দিয়ে)': 'Names (separated by commas)',
@@ -633,6 +634,11 @@ const EXACT = {
 const N = '([\\d.,]+)';
 const P = (source, fn) => [new RegExp('^' + source + '$'), fn];
 const PATTERNS = [
+  P('প্রথম (.+) কিমি পর্যন্ত', a => `Up to the first ${a} km`),
+  P('(.+) · রাইড', a => `${tr(a)} · ride`),
+  P('প্রায় (.+) মিনিট × (.+)', (a, b) => `About ${a} min × ${b}`),
+  P('বাকি (.+) কিমি × (.+)', (a, b) => `The other ${a} km × ${b}`),
+  P('প্রথম (.+) কিমি', a => `First ${a} km`),
   P('ক্লাস (.+) · যাত্রার ১০ দিন আগে থেকে', a => `Class ${a} · from 10 days before travel`),
   P('(.+) \+(\d+)$', (a, n) => `${tr(a)} +${n}`),
   P('(.+) জ্যাম ছাড়া', a => `${tr(a)} without traffic`),

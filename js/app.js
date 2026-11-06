@@ -2271,23 +2271,45 @@ let nearbyAt = () => {};
   const posOf = km => Math.round(Math.log(km) / Math.log(500) * 1000);
   // a city bus charges in steps of ৳5, rounded down (FARES.bus.roundTo), as every bus fare in the app; never below the least
   const cityBus = km => Math.max(bus.metro.min, Math.floor(km * bus.metro.perKm / bus.roundTo) * bus.roundTo);
-  const row = (mode, name, price, note) => {
-    const r = el('div', 'fx-row');
+  // One way of going: its price, and under it, on a tap, how the price is made (every part with its rate)
+  const open = new Set();
+  const row = (mode, name, price, note, why) => {
+    const wrap = el('div', 'fx-item' + (open.has(name) ? ' open' : ''));
+    const r = el('button', 'fx-row');
+    r.type = 'button';
     r.innerHTML = modeSvg(mode);
     const t = el('div', 't'); t.appendChild(el('b', null, name)); if (note) t.appendChild(el('span', null, note));
-    r.append(t, el('div', 'p', price));
-    return r;
+    const chev = el('i', 'fx-chev'); chev.innerHTML = svg('chev');
+    r.append(t, el('div', 'p', price), chev);
+    const box = el('div', 'fx-why');
+    for (const [a, b, strong] of why) { const l = el('div', 'fx-line' + (strong ? ' sum' : '')); l.append(el('span', null, a), el('b', null, b)); box.appendChild(l); }
+    r.addEventListener('click', () => { const on = !wrap.classList.contains('open'); wrap.classList.toggle('open', on); if (on) open.add(name); else open.delete(name); });
+    wrap.append(r, box);
+    return wrap;
   };
+  const money = v => rateText(Math.round(v * 100) / 100);
   function update(km) {
-    const min = km / AVG_KMH * 60;
+    // whole minutes, the same in the working as in the fare, so the parts add up to what is shown
+    const min = Math.max(1, Math.round(km / AVG_KMH * 60));
     $('calc-km').textContent = num(km);
     for (const c of $('calc-presets').children) c.classList.toggle('on', +c.dataset.km === km);
     const rows = [];
     // the city bus and the CNG only inside a city (40 km); a long-distance bus from 40 km (BRTA's shortest chart route is 42)
-    if (km <= cng.maxKm) rows.push(row('bus', 'শহরের বাস', taka(cityBus(km))));
-    if (km >= 40) rows.push(row('bus', 'দূরপাল্লার বাস', taka(busFare(bus.intercity, km)), 'নন-এসি'));
-    if (km <= cng.maxKm) rows.push(row('cng', 'সিএনজি', taka(cngFare(km)), 'মিটারে'));
-    for (const r of rides) if (km <= r.maxKm) rows.push(row(r.id, r.name, taka(rideFare(r, km, min)), 'সাধারণ সময়ে'));
+    if (km <= cng.maxKm) {
+      const raw = km * bus.metro.perKm, fare = cityBus(km);
+      rows.push(row('bus', 'শহরের বাস', taka(fare), '', [[`${num(km)} কিমি × ${rateText(bus.metro.perKm)}`, money(raw)],
+        raw < bus.metro.min ? ['সর্বনিম্ন ভাড়া', taka(bus.metro.min)] : ['৫ টাকার ধাপে, নিচের দিকে', taka(fare)], ['ভাড়া', taka(fare), true]]));
+    }
+    if (km >= 40) rows.push(row('bus', 'দূরপাল্লার বাস', taka(busFare(bus.intercity, km)), 'নন-এসি',
+      [[`${num(km)} কিমি × ${rateText(bus.intercity.perKm)}`, money(km * bus.intercity.perKm)], ['ভাড়া', taka(busFare(bus.intercity, km)), true]]));
+    if (km <= cng.maxKm) rows.push(row('cng', 'সিএনজি', taka(cngFare(km)), 'মিটারে', [[`প্রথম ${num(cng.baseKm)} কিমি পর্যন্ত`, taka(cng.base)],
+      ...(km > cng.baseKm ? [[`বাকি ${num(km - cng.baseKm)} কিমি × ${taka(cng.perKm)}`, taka((km - cng.baseKm) * cng.perKm)]] : []),
+      ['জ্যামে থেমে থাকলে মিনিটে', taka(cng.waitPerMin)], ['ভাড়া, না থেমে', taka(cngFare(km)), true]]));
+    for (const r of rides) if (km <= r.maxKm) {
+      const sum = r.base + km * r.perKm + min * r.perMin, fare = rideFare(r, km, min);
+      rows.push(row(r.id, r.name, taka(fare), 'সাধারণ সময়ে', [['শুরুতে', taka(r.base)], [`${num(km)} কিমি × ${taka(r.perKm)}`, taka(km * r.perKm)],
+        [`প্রায় ${num(min)} মিনিট × ${rateText(r.perMin)}`, money(min * r.perMin)], ...(sum < r.min ? [['সর্বনিম্ন ভাড়া', taka(r.min)]] : []), ['ভাড়া', taka(fare), true]]));
+    }
     list.replaceChildren(...rows);
   }
   range.addEventListener('input', () => update(kmOf(+range.value)));
@@ -2315,7 +2337,7 @@ let nearbyAt = () => {};
       ['এরপর প্রতি কিমি', taka(cng.perKm)],
       ['অপেক্ষা, প্রতি মিনিট', taka(cng.waitPerMin)]
     ]],
-    ['car', 'রাইড', rides.map(r => [r.name, `${taka(r.base)} + ${rate(r.perKm)}`])]
+    ...rides.map(r => [r.id, `${r.name} · রাইড`, [['শুরুতে', taka(r.base)], ['প্রতি কিমি', taka(r.perKm)], ['প্রতি মিনিট', rateText(r.perMin)], ['সর্বনিম্ন ভাড়া', taka(r.min)]]])
   ];
   for (const [mode, title, rows] of groups) {
     const card = el('div', 'card fx-group');
@@ -2324,7 +2346,7 @@ let nearbyAt = () => {};
     for (const [a, b] of rows) { const r = el('div', 'fx-rate'); r.append(el('span', null, a), el('b', null, b)); card.appendChild(r); }
     $('rules').appendChild(card);
   }
-  $('rules-foot').textContent = `বিআরটিএ-র হার, ${FARES.effective} থেকে। এসি বাস আর রাইডের ভাড়া কোম্পানি ঠিক করে; রাইডের হার পাঠাও (২০২২) আর উবারের (২০১৭) প্রকাশিত তালিকা থেকে।`;
+  $('rules-foot').textContent = `বাস আর সিএনজি: সরকারি হার, ${FARES.effective} থেকে। রাইড: পাঠাও (২০২২) আর উবারের (২০১৭) প্রকাশিত হার; চাহিদা বাড়লে অ্যাপে ভাড়াও বাড়ে। রাইডের সময় ধরা হয়েছে ঘণ্টায় ${num(AVG_KMH)} কিমি — জ্যামে বেশি লাগবে।`;
 })();
 
 for (const b of document.querySelectorAll('.lang-btn')) {

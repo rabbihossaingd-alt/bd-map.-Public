@@ -2416,7 +2416,7 @@ body.studio-open .chat-toast { z-index: 3600; }
 
 /* Phones: the last thing on a page must scroll clear of the tab bar. */
 @media (max-width: 760px) {
-  main > .page:not(#page-chat):not(#page-trip) { padding-bottom: calc(var(--tab-h) + env(safe-area-inset-bottom) + 20px); }
+  main > .page:not(#page-chat):not(#page-trip) { padding-bottom: 12px;   /* main already keeps the tab bar's room below */ }
 }
 
 /* ================= Shapes as on Instagram, and the words-and-stickers editor ================= */
@@ -5608,3 +5608,16 @@ a.pd-row > span { color: #1a73e8; }
 /* the report form's choice of transport: the chosen one in the brand colour, as the switches above */
 #give-modes .chip { border: 0; background: color-mix(in srgb, var(--ink) 6%, transparent); color: var(--ink-2); }
 #give-modes .chip.on, #give-modes .chip[aria-pressed="true"] { background: var(--brand); color: var(--on-brand); }
+
+/* a fare's working, opened with a tap */
+.fx-item { border-top: 1px solid var(--line); }
+.fx-item .fx-row { width: 100%; border: 0; border-top: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.fx-chev { display: grid; place-items: center; width: 20px; color: var(--muted); transition: transform .25s; }
+.fx-chev svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; transform: rotate(90deg); }
+.fx-item.open .fx-chev { transform: rotate(180deg); }
+.fx-why { display: none; margin: -4px 0 12px 54px; padding: 10px 14px; border-radius: 14px; background: color-mix(in srgb, var(--ink) 5%, transparent); }
+.fx-item.open .fx-why { display: grid; gap: 6px; }
+.fx-line { display: flex; justify-content: space-between; gap: 12px; font-size: 13.5px; color: var(--ink-2); }
+.fx-line b { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.fx-line.sum { padding-top: 6px; border-top: 1px solid var(--line); color: var(--ink); font-weight: 600; }
+@media (min-width: 900px) { .fx-rates { grid-template-columns: repeat(2, 1fr); } }
