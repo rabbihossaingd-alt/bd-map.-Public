@@ -3155,7 +3155,7 @@ const server = http.createServer((req, res) => {
   // only when this file names the app and its signing keys: the upload key here, and Google's app-signing key
   // (Play Console → Setup → App signing) in ANDROID_SHA256 on the host, comma-separated. Fingerprints are public.
   if (pathname === '/.well-known/assetlinks.json') {
-    const keys = ['C4:33:08:A0:CC:11:E7:40:91:F7:05:C2:5B:DC:2E:B8:8D:1B:1E:FB:F7:68:A1:8D:3F:6A:64:4F:32:AB:E9:96',
+    const keys = ['A0:15:ED:B4:71:C5:E8:9B:06:94:04:27:70:3A:C8:2B:69:76:71:28:53:F9:E7:B5:31:C0:13:AB:40:B3:C4:D9',
       ...(process.env.ANDROID_SHA256 || '').split(',').map(k => k.trim().toUpperCase()).filter(k => /^([0-9A-F]{2}:){31}[0-9A-F]{2}$/.test(k))];
     const body = JSON.stringify([{ relation: ['delegate_permission/common.handle_all_urls'],
       target: { namespace: 'android_app', package_name: 'com.manzeela.twa', sha256_cert_fingerprints: [...new Set(keys)] } }]);
