@@ -5621,3 +5621,9 @@ a.pd-row > span { color: #1a73e8; }
 .fx-line b { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .fx-line.sum { padding-top: 6px; border-top: 1px solid var(--line); color: var(--ink); font-weight: 600; }
 @media (min-width: 900px) { .fx-rates { grid-template-columns: repeat(2, 1fr); } }
+/* Phones: a page's title sits right under its back button, as an iOS large title does (it had 32–148 px of nothing) */
+@media (max-width: 760px) {
+  .pg-back + .wrap, .pg-back + .help-hero, .pg-back + .help-hero > .in { padding-top: 12px; }
+  .pg-back + .wrap > :first-child, .pg-back + .wrap > :first-child > :first-child, .pg-back + .help-hero .in > :first-child { margin-top: 0; }
+  .fx-title { margin-top: 0; }
+}
