@@ -5744,3 +5744,7 @@ a.pd-row > span { color: #1a73e8; }
 .rt-bubble b { font-size: 12px; line-height: 1.25; }
 .rt-bubble span { display: none; }
 .rt-bubble:not(.on) { opacity: .92; }
+
+/* the logo: the "m" mark (icon.svg), the same drawing everywhere */
+.logo, .logo-dot { background: url(../icon.svg) center / cover no-repeat; border-radius: 22.3% !important; box-shadow: none; }
+.logo::after, .logo-dot::after { content: none; display: none; }

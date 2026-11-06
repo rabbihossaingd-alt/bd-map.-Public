@@ -1,7 +1,7 @@
 // Network first, cache as offline fallback — the app shell and data files keep working without a connection.
 // `no-cache` makes the browser revalidate each file, so an updated app shows up on a normal refresh.
 // Only good answers are kept: an error page (a 503 while the server restarts) must never become the offline copy.
-const CACHE = 'bdmap-v7';
+const CACHE = 'bdmap-v8';
 // Photos from Wikimedia and the web fonts: they never change at the same address, so the copy on the device is used
 // first and the network only once. Kept apart from the app's own files and trimmed to the newest 300.
 const MEDIA = 'bdmap-media-v1';

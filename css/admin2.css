@@ -399,3 +399,7 @@ input.range { width: 100%; accent-color: var(--brand); }
 .card.hcheck.danger { border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); } .card.hcheck.warn { border-color: color-mix(in srgb, var(--warn) 45%, var(--border)); }
 @media (max-width: 600px) { .card.kill { flex-direction: column; align-items: stretch; } .two-col { grid-template-columns: 1fr; } .page-head .row-acts { width: 100%; } }
 .tip[hidden] { display: none; }   /* the chart tooltip stays hidden until the pointer is over the chart */
+
+/* the logo: the "m" mark */
+.logo { background: url(../icon.svg) center / cover no-repeat; border-radius: 22.3%; }
+.logo.lg { border-radius: 22.3%; }
