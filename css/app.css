@@ -5627,3 +5627,12 @@ a.pd-row > span { color: #1a73e8; }
   .pg-back + .wrap > :first-child, .pg-back + .wrap > :first-child > :first-child, .pg-back + .help-hero .in > :first-child { margin-top: 0; }
   .fx-title { margin-top: 0; }
 }
+
+/* Home's foot: nothing on a phone (help and settings live in the menu); one quiet line of links on a computer */
+.site-foot { margin-top: 48px; padding: 18px 2px 4px; border-top: 1px solid var(--line); display: block; }
+.site-foot nav { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 18px; }
+.site-foot nav a, .site-foot nav span { font-size: 12.5px; font-weight: 500; color: var(--muted); text-decoration: none; }
+.site-foot nav a:hover { color: var(--ink); }
+@media (max-width: 760px) { .site-foot { display: none; } }
+.site-foot nav { align-items: center; }
+.site-foot nav a, .site-foot nav span { line-height: 20px; display: inline-flex; align-items: center; }

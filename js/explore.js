@@ -1404,6 +1404,7 @@ addEventListener('hashchange', () => { if (current !== 'explore') feedSeen.flush
 // ---- Home: the newest posts as a row of cards, and the faces of the people who share the most ----
 async function loadHomePosts() {
   const row = $('home-posts');
+  if (!row) return loadHomeFaces();
   let posts = [];
   try { posts = (await exploreApi('feed')).posts.slice(0, 12); } catch { /* the row stays hidden */ }
   row.replaceChildren();
@@ -1420,6 +1421,10 @@ async function loadHomePosts() {
     row.appendChild(card);
   }
   row.hidden = $('home-posts-head').hidden = !posts.length;
+  return loadHomeFaces();
+}
+// the faces of the people who report the most fares, on Home's "ভাড়া জানান" card
+async function loadHomeFaces() {
   let top = [];
   try { top = (await communityApi('top?n=50')).top; } catch { /* no faces */ }
   const faces = $('home-leaders');
@@ -1427,7 +1432,7 @@ async function loadHomePosts() {
   if (top.length) faces.appendChild(el('span', 'more', `${num(top.length)} জন অবদান রেখেছেন`));
 }
 (function hookHome() {
-  dragScroll($('home-posts'));
+  if ($('home-posts')) dragScroll($('home-posts'));
   const before = enter.home;
   enter.home = () => {
     if (before) before();

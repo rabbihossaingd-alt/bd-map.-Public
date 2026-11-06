@@ -442,6 +442,8 @@ const EXACT = {
   'সরকারি হার': "Government rates", 'মিটারে': "By meter", 'সাধারণ সময়ে': "At normal times", 'বাস · নন-এসি': "Bus · non-AC", 'ঢাকা ও চট্টগ্রাম শহরে': "In Dhaka and Chattogram cities", 'শহরের মিনিবাস': "City minibus", 'ঢাকার আশপাশের জেলায়': "Districts around Dhaka", 'দূরপাল্লায়': "Long distance", 'শহরে সর্বনিম্ন ভাড়া': "Lowest city fare", 'যে ভাড়া দিয়েছেন': "A fare you paid", 'যাচাইয়ের পর সবাই দেখবে।': "Everyone sees it once it is checked.", 'ভাড়া (টাকা)': "Fare (taka)", 'এখনো কেউ নেই — প্রথম ভাড়াটি আপনিই জানান': "Nobody yet — be the first to report a fare",
   'ভাড়ার হার': "Fare rates",
   'শুরুতে': "Base fare", 'প্রতি কিমি': "Per km", 'প্রতি মিনিট': "Per minute", 'সর্বনিম্ন ভাড়া': "Minimum fare", '৫ টাকার ধাপে, নিচের দিকে': "In ৳5 steps, rounded down", 'জ্যামে থেমে থাকলে মিনিটে': "Waiting in traffic, per minute", 'ভাড়া, না থেমে': "Fare, without stops",
+  'শর্তাবলি': "Terms",
+  'তথ্যসূত্র': "Sources",
   // the tour poster
   'ছবি': 'Photo',
   'দলের ছবি': 'Group photos', 'ছবি আপনার ফোনেই থাকে, কোথাও আপলোড হয় না।': 'Photos stay on your phone and are never uploaded.', 'ম্যাপে যাত্রার ভিডিও আর শেয়ার করার পোস্টার': 'A video of the journey on the map, and a poster to share', 'কার্ড আর ভিডিও বানান': 'Make the card and video', 'সদস্যদের নাম (কমা দিয়ে)': 'Names (separated by commas)',
