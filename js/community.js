@@ -41,8 +41,10 @@ async function loadLeaders() {
   try { data = await communityApi('top?n=3'); } catch { return; }
   const podium = $('podium');
   podium.replaceChildren();
+  podium.classList.toggle('empty', !data.top.length);
+  if (!data.top.length) podium.appendChild(el('p', 'podium-empty', 'এখনো কেউ নেই — প্রথম ভাড়াটি আপনিই জানান'));
   // Second, first, third: the winner stands in the middle, as on a real podium.
-  for (const i of [1, 0, 2]) {
+  for (const i of data.top.length ? [1, 0, 2] : []) {
     const p = data.top[i], step = el('div', 'step s' + (i + 1) + (p ? '' : ' none'));
     if (p) { step.classList.add('tap'); step.addEventListener('click', () => openProfilePage(p.id)); }
     if (p) step.append(avatar(p, 'lg'), Object.assign(el('b', 'no-tr'), { textContent: p.name }), el('span', null, `${num(p.points)} পয়েন্ট`));
@@ -51,7 +53,7 @@ async function loadLeaders() {
     podium.appendChild(step);
   }
   $('lead-more').hidden = data.total <= 3;
-  $('lead-stats').textContent = `${num(data.fares)} টি ভাড়া জানানো হয়েছে · ${num(data.total)} জন অবদান রেখেছেন`;
+  $('lead-stats').textContent = data.fares ? `${num(data.fares)} টি ভাড়া · ${num(data.total)} জন` : '';
   const mine = $('my-points');
   mine.hidden = !ME;
   if (ME && data.me) {

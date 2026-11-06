@@ -439,6 +439,8 @@ const EXACT = {
   'প্রথম ছবিটি দিন': "Add the first photo", 'ছবি দিতে লগইন করুন': "Sign in to add a photo", 'ধন্যবাদ! দেখে অনুমোদন দিলে ছবিটি সবাই দেখবে': "Thank you! Everyone will see it once it is approved", 'এই জায়গার ৩টি ছবি অপেক্ষায় আছে': "Three of your photos of this place are waiting", 'আজ অনেক ছবি পাঠিয়েছেন — কাল আবার চেষ্টা করুন': "You have sent many photos today — try tomorrow", 'পাঠানো গেল না — আবার চেষ্টা করুন': "Could not send — try again",
   'টিকিট কাটুন': "Buy tickets", 'যাত্রার ১০ দিন আগে থেকে': "from 10 days before travel",
   'অফিসিয়াল সাইট · যাত্রার ১০ দিন আগে থেকে': "Official site · from 10 days before travel",
+  'সরকারি হার': "Government rates", 'মিটারে': "By meter", 'সাধারণ সময়ে': "At normal times", 'বাস · নন-এসি': "Bus · non-AC", 'ঢাকা ও চট্টগ্রাম শহরে': "In Dhaka and Chattogram cities", 'শহরের মিনিবাস': "City minibus", 'ঢাকার আশপাশের জেলায়': "Districts around Dhaka", 'দূরপাল্লায়': "Long distance", 'শহরে সর্বনিম্ন ভাড়া': "Lowest city fare", 'যে ভাড়া দিয়েছেন': "A fare you paid", 'যাচাইয়ের পর সবাই দেখবে।': "Everyone sees it once it is checked.", 'ভাড়া (টাকা)': "Fare (taka)", 'এখনো কেউ নেই — প্রথম ভাড়াটি আপনিই জানান': "Nobody yet — be the first to report a fare",
+  'ভাড়ার হার': "Fare rates",
   // the tour poster
   'ছবি': 'Photo',
   'দলের ছবি': 'Group photos', 'ছবি আপনার ফোনেই থাকে, কোথাও আপলোড হয় না।': 'Photos stay on your phone and are never uploaded.', 'ম্যাপে যাত্রার ভিডিও আর শেয়ার করার পোস্টার': 'A video of the journey on the map, and a poster to share', 'কার্ড আর ভিডিও বানান': 'Make the card and video', 'সদস্যদের নাম (কমা দিয়ে)': 'Names (separated by commas)',

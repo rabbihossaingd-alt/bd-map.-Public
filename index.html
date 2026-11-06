@@ -641,34 +641,27 @@
   <!-- Fares -->
   <section class="page" id="page-fares">
     <button class="pg-back phone-only" type="button" aria-label="ফিরে যান" title="ফিরে যান"><i data-ic="back"></i></button>
-    <div class="wrap tx cx">
-      <div class="tx-hero">
-        <span class="tx-eyebrow"><i data-ic="tag"></i><span>ভাড়া</span></span>
-        <h2>ভাড়া কত?</h2>
-        <p>সরকারি হারে হিসাব করুন — আর যে ভাড়া আপনি নিজে দিয়েছেন, তা জানিয়ে অন্যদের ঠকা থেকে বাঁচান।</p>
-      </div>
-      <div class="tmode two" id="fx-seg" role="tablist" aria-label="ভাড়া">
-        <button role="tab" data-m="calc" class="m-city" aria-selected="true"><span class="mi2"><i data-ic="tag"></i></span><span class="mt"><b>ভাড়ার হিসাব</b><small>দূরত্ব দিন, সাথে সাথে ভাড়া</small></span></button>
-        <button role="tab" data-m="give" class="m-fare" aria-selected="false"><span class="mi2"><i data-ic="coin"></i></span><span class="mt"><b>ভাড়া জানান</b><small>অনুমোদন হলে +১০ পয়েন্ট · লিডারবোর্ড</small></span></button>
+    <div class="wrap tx cx fx">
+      <h2 class="fx-title">ভাড়া</h2>
+      <div class="fx-seg" id="fx-seg" role="tablist" aria-label="ভাড়া">
+        <button role="tab" data-m="calc" aria-selected="true">হিসাব করুন</button>
+        <button role="tab" data-m="give" aria-selected="false">ভাড়া জানান</button>
       </div>
       <div class="tx-pane" id="fx-calc" role="tabpanel">
-      <div class="card calc">
-        <div class="calc-km"><b id="calc-km">১০</b><span>কিমি</span></div>
-        <input type="range" id="calc-range" min="1" max="500" value="10" aria-label="দূরত্ব, কিলোমিটার">
-        <div class="tiles" id="calc-tiles"></div>
-      </div>
-      <div class="rules" id="rules"></div>
-      <div class="foot" id="rules-foot"></div>
+        <div class="card fx-calc">
+          <div class="fx-km"><b id="calc-km">১০</b><span>কিমি</span></div>
+          <input type="range" id="calc-range" min="0" max="1000" value="400" aria-label="দূরত্ব, কিলোমিটার">
+          <div class="fx-presets" id="calc-presets"></div>
+          <div class="fx-list" id="calc-tiles"></div>
+        </div>
+        <h3 class="fx-sec">ভাড়ার হার</h3>
+        <div class="fx-rates" id="rules"></div>
+        <p class="fx-foot" id="rules-foot"></p>
       </div>
       <div class="tx-pane give-wrap" id="fx-give" role="tabpanel" hidden>
-      <div class="lead-head">
-        <span class="eyebrow">সবাই মিলে</span>
-        <h2>আপনি জানেন,<br>অন্যরা জানে না।</h2>
-        <p>যে পথের ভাড়া আপনি জানেন, তা জানিয়ে দিন। একজন যাত্রী ঠকবে না — আর যাচাইয়ের পর আপনি পাবেন পয়েন্ট।</p>
-      </div>
       <div class="give-grid">
         <div class="card give-card" id="give-card">
-          <h3>ভাড়া জানান <em>অনুমোদন হলে +১০ পয়েন্ট</em></h3>
+          <h3>যে ভাড়া দিয়েছেন <em>+১০ পয়েন্ট</em></h3>
           <div class="od">
             <div class="dots"><i class="a"></i><i class="l"></i><i class="b"></i></div>
             <div class="inputs">
@@ -678,8 +671,8 @@
           </div>
           <div class="label">কীসে গিয়েছেন?</div>
           <div class="chips" id="give-modes"></div>
-          <label class="money"><span>ভাড়া কত দিয়েছেন? (টাকা)</span><input id="give-fare" type="number" inputmode="numeric" min="5" max="20000" placeholder="৳"></label>
-          <div class="form-note" id="give-note">শুধু নিজে দেওয়া আসল ভাড়াটি জানান। আমরা যাচাই করে অনুমোদন দিলে ১০ পয়েন্ট পাবেন; ভুল তথ্য সরিয়ে দেওয়া হয়।</div>
+          <label class="money"><span>ভাড়া (টাকা)</span><input id="give-fare" type="number" inputmode="numeric" min="5" max="20000" placeholder="৳"></label>
+          <div class="form-note" id="give-note">যাচাইয়ের পর সবাই দেখবে।</div>
           <button class="btn" id="give-send"><i data-ic="check"></i>জমা দিন</button>
         </div>
 
@@ -690,12 +683,6 @@
           <button class="btn quiet lead-more" id="lead-more" hidden>সেরা ৫০ জন দেখুন <i data-ic="arrow"></i></button>
           <div class="foot" id="lead-stats"></div>
         </div>
-      </div>
-
-      <div class="label">পয়েন্ট দিয়ে কী হবে?</div>
-      <div class="card points-info">
-        <i class="mi soft" data-ic="star"></i>
-        <span><b>এখন: সম্মান। সামনে: ছাড়।</b><em>Manzeela-তে রাইড বা টিকিট কাটার ব্যবস্থা চালু হলে জমানো পয়েন্ট দিয়ে ছাড় পাওয়া যাবে। সেটি এখনো চালু হয়নি — ততদিন পয়েন্ট জমতে থাকবে।</em></span>
       </div>
 
       <div class="label row-label"><span>সচেতন থাকুন</span><span class="arrows"><button class="icon-btn" id="tips-prev" aria-label="আগের"><i data-ic="back"></i></button><button class="icon-btn" id="tips-next" aria-label="পরের"><i data-ic="chev"></i></button></span></div>

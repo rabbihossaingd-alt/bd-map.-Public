@@ -5565,3 +5565,46 @@ a.pd-row > span { color: #1a73e8; }
 .tk-box .t span { font-size: 12.5px; color: var(--muted); }
 .tk-go { flex: none; height: 42px; padding: 0 16px; white-space: nowrap; text-decoration: none; }
 .tk-go svg { width: 18px; height: 18px; }
+
+/* ---- ভাড়া: a title, a segmented switch, the calculator as a list, the rates as inset groups ---- */
+.fx { max-width: 760px; }
+.fx-title { font-family: var(--font-head); font-size: clamp(34px, 6vw, 44px); font-weight: 700; letter-spacing: -.03em; margin: var(--space-4) 0 var(--space-4); }
+.fx-seg { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border-radius: 16px; background: color-mix(in srgb, var(--ink) 6%, transparent); margin-bottom: var(--space-5); max-width: 420px; }
+.fx-seg button { height: 40px; border: 0; border-radius: 12px; background: transparent; color: var(--muted); font: inherit; font-weight: 600; font-size: 15px; cursor: pointer; transition: background .25s, color .25s, box-shadow .25s; }
+.fx-seg button[aria-selected="true"] { background: var(--bg); color: var(--ink); box-shadow: 0 1px 2px rgb(0 0 0 / .08), 0 4px 12px -4px rgb(0 0 0 / .14); }
+:root[data-theme="dark"] .fx-seg button[aria-selected="true"] { background: color-mix(in srgb, var(--ink) 13%, transparent); box-shadow: none; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .fx-seg button[aria-selected="true"] { background: color-mix(in srgb, var(--ink) 13%, transparent); box-shadow: none; } }
+.fx-calc { padding: 22px 20px 10px; border-radius: 24px; }
+.fx-km { display: flex; align-items: baseline; gap: 8px; }
+.fx-km b { font-family: var(--font-head); font-size: 52px; font-weight: 700; letter-spacing: -.04em; line-height: 1; font-variant-numeric: tabular-nums; }
+.fx-km span { font-size: 18px; font-weight: 600; color: var(--muted); }
+#calc-range { width: 100%; margin: 18px 0 12px; accent-color: var(--brand); }
+.fx-presets { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding-bottom: 4px; }
+.fx-presets::-webkit-scrollbar { display: none; }
+.fx-chip { flex: none; height: 32px; padding: 0 12px; border: 0; border-radius: 999px; background: color-mix(in srgb, var(--ink) 6%, transparent); color: var(--ink-2); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.fx-chip.on { background: var(--brand); color: var(--on-brand); }
+.fx-list { margin-top: 10px; }
+.fx-row { display: flex; align-items: center; gap: 14px; padding: 12px 0; border-top: 1px solid var(--line); }
+.fx-row > svg { flex: none; width: 40px; height: 40px; padding: 9px; border-radius: 50%; background: rgb(var(--brand-rgb) / .12); color: var(--brand); fill: currentColor; }
+.fx-row .t { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.fx-row .t b { font-family: var(--font-head); font-size: 17px; font-weight: 600; }
+.fx-row .t span { font-size: 13px; color: var(--muted); }
+.fx-row .p { font-family: var(--font-head); font-size: 22px; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.fx-sec { font-family: var(--font-head); font-size: 20px; font-weight: 700; letter-spacing: -.01em; margin: 28px 2px 12px; }
+.fx-rates { display: grid; gap: 12px; }
+@media (min-width: 900px) { .fx { max-width: 1040px; } .fx-rates { grid-template-columns: repeat(3, 1fr); align-items: start; } }
+.fx-group { padding: 6px 18px 4px; border-radius: 20px; }
+.fx-gh { display: flex; align-items: center; gap: 10px; padding: 12px 0 8px; }
+.fx-gh svg { width: 22px; height: 22px; fill: var(--brand); }
+.fx-gh b { font-family: var(--font-head); font-size: 16px; font-weight: 700; }
+.fx-rate { display: flex; justify-content: space-between; gap: 12px; padding: 11px 0; border-top: 1px solid var(--line); font-size: 15px; }
+.fx-rate span { color: var(--ink-2); }
+.fx-rate b { font-family: var(--font-head); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.fx-foot { margin: 14px 2px 0; font-size: 12.5px; line-height: 1.6; color: var(--muted); }
+/* the report tab */
+#fx-give .give-grid { margin-top: 0; }
+.podium.empty { display: block; }
+.podium-empty { margin: 4px 0 8px; padding: 22px 12px; border-radius: 16px; text-align: center; color: var(--muted); font-size: 14px; background: color-mix(in srgb, var(--ink) 4%, transparent); }
+/* the report form's choice of transport: the chosen one in the brand colour, as the switches above */
+#give-modes .chip { border: 0; background: color-mix(in srgb, var(--ink) 6%, transparent); color: var(--ink-2); }
+#give-modes .chip.on, #give-modes .chip[aria-pressed="true"] { background: var(--brand); color: var(--on-brand); }

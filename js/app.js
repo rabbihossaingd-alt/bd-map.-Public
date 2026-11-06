@@ -2264,58 +2264,67 @@ let nearbyAt = () => {};
 // ---- Fares ----
 (function initFares() {
   const { bus, cng, rides } = FARES;
-  const range = $('calc-range'), tiles = $('calc-tiles');
+  const range = $('calc-range'), list = $('calc-tiles');
   const AVG_KMH = 25;   // assumed ride speed, only to estimate the per-minute part of a ride fare
-
-  function update() {
-    const km = +range.value, min = km / AVG_KMH * 60;
+  // The slider runs 1 to 500 km on a curve: most trips are short, so the first half of the bar is the first 25 km.
+  const kmOf = v => Math.max(1, Math.round(Math.exp(Math.log(500) * v / 1000)));
+  const posOf = km => Math.round(Math.log(km) / Math.log(500) * 1000);
+  // a city bus charges in steps of ৳5, rounded down (FARES.bus.roundTo), as every bus fare in the app; never below the least
+  const cityBus = km => Math.max(bus.metro.min, Math.floor(km * bus.metro.perKm / bus.roundTo) * bus.roundTo);
+  const row = (mode, name, price, note) => {
+    const r = el('div', 'fx-row');
+    r.innerHTML = modeSvg(mode);
+    const t = el('div', 't'); t.appendChild(el('b', null, name)); if (note) t.appendChild(el('span', null, note));
+    r.append(t, el('div', 'p', price));
+    return r;
+  };
+  function update(km) {
+    const min = km / AVG_KMH * 60;
     $('calc-km').textContent = num(km);
-    // A city bus trip longer than the metro area makes no sense, so it drops out past the CNG range too.
+    for (const c of $('calc-presets').children) c.classList.toggle('on', +c.dataset.km === km);
     const rows = [];
-    if (km <= cng.maxKm) rows.push(['bus', 'শহরের বাস', taka(busFare(bus.metro, km)), bus.metro.perKm]);
-    if (km >= 40) rows.push(['send', 'দূরপাল্লার বাস', taka(busFare(bus.intercity, km)), bus.intercity.perKm]);   // the shortest route in BRTA's charts is 42 km
-    if (km <= cng.maxKm) rows.push(['cng', 'সিএনজি', taka(cngFare(km)), cng.perKm]);
-    for (const r of rides) if (km <= r.maxKm) rows.push([r.id, r.name, taka(rideFare(r, km, min)), r.perKm]);
-    tiles.replaceChildren(...rows.map(([icon, label, value, rate], i) => {
-      const t = tile(i === 0 ? 'main' : '', label, value, perKmText(rate));
-      t.prepend(ic(icon));
-      return t;
-    }));
+    // the city bus and the CNG only inside a city (40 km); a long-distance bus from 40 km (BRTA's shortest chart route is 42)
+    if (km <= cng.maxKm) rows.push(row('bus', 'শহরের বাস', taka(cityBus(km))));
+    if (km >= 40) rows.push(row('bus', 'দূরপাল্লার বাস', taka(busFare(bus.intercity, km)), 'নন-এসি'));
+    if (km <= cng.maxKm) rows.push(row('cng', 'সিএনজি', taka(cngFare(km)), 'মিটারে'));
+    for (const r of rides) if (km <= r.maxKm) rows.push(row(r.id, r.name, taka(rideFare(r, km, min)), 'সাধারণ সময়ে'));
+    list.replaceChildren(...rows);
   }
-  range.addEventListener('input', update);
-  update();
+  range.addEventListener('input', () => update(kmOf(+range.value)));
+  for (const km of [3, 10, 25, 60, 150, 300]) {
+    const c = el('button', 'fx-chip', `${num(km)} কিমি`);
+    c.dataset.km = km;
+    c.addEventListener('click', () => { range.value = posOf(km); update(km); });
+    $('calc-presets').appendChild(c);
+  }
+  range.value = posOf(10);
+  update(10);
 
-  const perKm = r => `${rateText(r.perKm)}/কিমি`;
+  // the government's rates, as an inset list: each mode's own rows under its name
+  const rate = r => `${rateText(r)}/কিমি`;
   const groups = [
-    ['bus', 'বাস (নন-এসি)', [
-      ['ঢাকা ও চট্টগ্রাম শহর', perKm(bus.metro)],
-      ['ঢাকার আশপাশের জেলা', perKm(bus.dtca)],
-      ['সারা দেশ, দূরপাল্লা', perKm(bus.intercity)],
-      ['শহরে সর্বনিম্ন', taka(bus.metro.min)]
+    ['bus', 'বাস · নন-এসি', [
+      ['ঢাকা ও চট্টগ্রাম শহরে', rate(bus.metro.perKm)],
+      ['শহরের মিনিবাস', rate(bus.minibus.perKm)],
+      ['ঢাকার আশপাশের জেলায়', rate(bus.dtca.perKm)],
+      ['দূরপাল্লায়', rate(bus.intercity.perKm)],
+      ['শহরে সর্বনিম্ন ভাড়া', taka(bus.metro.min)]
     ]],
     ['cng', 'সিএনজি', [
       [`প্রথম ${num(cng.baseKm)} কিমি`, taka(cng.base)],
       ['এরপর প্রতি কিমি', taka(cng.perKm)],
       ['অপেক্ষা, প্রতি মিনিট', taka(cng.waitPerMin)]
     ]],
-    ['car', 'রাইড', rides.map(r => [r.name, `${taka(r.base)} + ${taka(r.perKm)}/কিমি`])]
+    ['car', 'রাইড', rides.map(r => [r.name, `${taka(r.base)} + ${rate(r.perKm)}`])]
   ];
-  for (const [icon, title, rows] of groups) {
-    const card = el('div', 'card rule-card');
-    const h = el('h4');
-    h.append(ic(icon), document.createTextNode(title));
+  for (const [mode, title, rows] of groups) {
+    const card = el('div', 'card fx-group');
+    const h = el('div', 'fx-gh'); h.innerHTML = modeSvg(mode); h.appendChild(el('b', null, title));
     card.appendChild(h);
-    for (const [a, b] of rows) {
-      const row = el('div', 'rule');
-      row.append(el('span', null, a), el('b', null, b));
-      card.appendChild(row);
-    }
+    for (const [a, b] of rows) { const r = el('div', 'fx-rate'); r.append(el('span', null, a), el('b', null, b)); card.appendChild(r); }
     $('rules').appendChild(card);
   }
-  stagger($('rules'));
-  $('rules').lastChild.appendChild(el('div', 'foot', FARES.rideSource));
-  $('rules-foot').textContent = `কিমি-প্রতি হার সরকার নির্ধারিত, ${FARES.effective} থেকে। অ্যাপের ভাড়া এই হার × আনুমানিক দূরত্ব — ` +
-    'বিআরটিএর রুটভিত্তিক তালিকার সাথে কিছু কমবেশি হতে পারে (সেতুর টোল ধরা নেই)। এসি বাসের ভাড়া কোম্পানি ঠিক করে।';
+  $('rules-foot').textContent = `বিআরটিএ-র হার, ${FARES.effective} থেকে। এসি বাস আর রাইডের ভাড়া কোম্পানি ঠিক করে; রাইডের হার পাঠাও (২০২২) আর উবারের (২০১৭) প্রকাশিত তালিকা থেকে।`;
 })();
 
 for (const b of document.querySelectorAll('.lang-btn')) {
