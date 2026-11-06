@@ -168,11 +168,10 @@ const DIVISION_OPERATORS = {
 // What people look for around a place. `tag` is an OpenStreetMap key:value used by the nearby search.
 const NEARBY_CATEGORIES = [
   ['cross', 'হাসপাতাল', 'amenity:hospital'], ['pill', 'ফার্মেসি', 'amenity:pharmacy'], ['shield', 'থানা', 'amenity:police'],
-  ['bus', 'বাস স্ট্যান্ড', 'amenity:bus_station'], ['train', 'রেলস্টেশন', 'railway:station'], ['fuel', 'পেট্রোল পাম্প', 'amenity:fuel'],
+  ['bus', 'বাস স্ট্যান্ড', 'amenity:bus_station'], ['fuel', 'পেট্রোল পাম্প', 'amenity:fuel'],
   ['card', 'এটিএম', 'amenity:atm'], ['bank', 'ব্যাংক', 'amenity:bank'], ['tree', 'পার্ক', 'leisure:park'],
-  ['star', 'দর্শনীয় স্থান', 'tourism:attraction'], ['bed', 'হোটেল', 'tourism:hotel'], ['fork', 'রেস্টুরেন্ট', 'amenity:restaurant'],
-  ['bag', 'মার্কেট', 'amenity:marketplace'], ['moon', 'মসজিদ', 'amenity:place_of_worship'], ['cap', 'স্কুল', 'amenity:school'],
-  ['cap', 'কলেজ', 'amenity:college'], ['cap', 'বিশ্ববিদ্যালয়', 'amenity:university'], ['flame', 'ফায়ার সার্ভিস', 'amenity:fire_station']
+  ['bed', 'হোটেল', 'tourism:hotel'], ['fork', 'রেস্টুরেন্ট', 'amenity:restaurant'],
+  ['bag', 'মার্কেট', 'amenity:marketplace'], ['moon', 'মসজিদ', 'amenity:place_of_worship'], ['flame', 'ফায়ার সার্ভিস', 'amenity:fire_station']
 ].map(([icon, bn, tag]) => ({ icon, bn, tag }));
 
 // National helplines.

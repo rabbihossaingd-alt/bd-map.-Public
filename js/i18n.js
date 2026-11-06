@@ -445,6 +445,8 @@ const EXACT = {
   'শর্তাবলি': "Terms",
   'তথ্যসূত্র': "Sources",
   'আপনার দেওয়া তথ্য যাত্রাকে করবে আরও সহজ ও সাশ্রয়ী।': "What you share makes travel easier and cheaper.",
+  'আপনার কাছে': "near you",
+  'খোলা': "Open",
   // the tour poster
   'ছবি': 'Photo',
   'দলের ছবি': 'Group photos', 'ছবি আপনার ফোনেই থাকে, কোথাও আপলোড হয় না।': 'Photos stay on your phone and are never uploaded.', 'ম্যাপে যাত্রার ভিডিও আর শেয়ার করার পোস্টার': 'A video of the journey on the map, and a poster to share', 'কার্ড আর ভিডিও বানান': 'Make the card and video', 'সদস্যদের নাম (কমা দিয়ে)': 'Names (separated by commas)',
@@ -637,6 +639,8 @@ const EXACT = {
 const N = '([\\d.,]+)';
 const P = (source, fn) => [new RegExp('^' + source + '$'), fn];
 const PATTERNS = [
+  P('(.+) থেকে দূরত্ব', a => `distance from ${tr(a)}`),
+  P('([\\d,]+)টি (.+)', (n, k) => `${n} ${tr(k)}`),
   P('প্রথম (.+) কিমি পর্যন্ত', a => `Up to the first ${a} km`),
   P('(.+) · রাইড', a => `${tr(a)} · ride`),
   P('প্রায় (.+) মিনিট × (.+)', (a, b) => `About ${a} min × ${b}`),

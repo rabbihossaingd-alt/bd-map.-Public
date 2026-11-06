@@ -535,13 +535,23 @@ function mergePlaces(lists) {
     // …and the same place under its Bangla and its English name a few metres apart (প্যান প্যাসিফিক হাসপাতাল / Pan Pacific
     // Hospital): one, shown in the app's language
     const bn = t => /[ঀ-৿]/.test(t || '');
-    const twin = out.find(o => (haversineKm(o, p) < 0.12 && o.title === p.title) || (haversineKm(o, p) < 0.06 && bn(o.title) !== bn(p.title) && sameStart(o.title, p.title)));
+    // and by the sound of the names (United Hospital Limited / ইউনাইটেড হাসপাতাল, 100 m apart): js/mapplus.js placeTwin
+    const twin = out.find(o => (haversineKm(o, p) < 0.12 && o.title === p.title) || (haversineKm(o, p) < 0.06 && bn(o.title) !== bn(p.title) && sameStart(o.title, p.title))
+      || (typeof placeTwin === 'function' && placeTwin({ lat: o.lat, lon: o.lon, name: o.title }, { lat: p.lat, lon: p.lon, name: p.title })));
     if (twin) { twin.x = { ...p.x, ...twin.x }; if (bn(p.title) !== bn(twin.title) && (LANG === 'en' ? !bn(p.title) : bn(p.title))) twin.title = p.title; }
     else out.push(p);
   }
   return out.slice(0, 80);
 }
+// "হাসপাতাল" is where someone goes when ill: OpenStreetMap's clinics come too, but not dentists, laboratories or
+// shops that sell medical things, which are mapped as clinics as well
+const NOT_A_HOSPITAL = /dental|dentist|tooth|teeth|orthodont|\blab\b|digilab|laborator|patholog|optic|pharma|supply chain|head office|corporate office|ডেন্টাল|দাঁত|ল্যাব|প্যাথলজি|প্রধান কার্যালয়/i;
 async function searchNearby(center, tag, onMore) {
+  const list = await nearbyRaw(center, tag, onMore && (more => onMore(nearbyKeep(tag, more))));
+  return nearbyKeep(tag, list);
+}
+const nearbyKeep = (tag, list) => tag === 'amenity:hospital' ? list.filter(p => !NOT_A_HOSPITAL.test(p.title)) : list;
+async function nearbyRaw(center, tag, onMore) {
   const kind = TAG_KIND[tag];
   if (kind) await loadIndex();            // the nationwide list, if it has not come yet
   let quick = kind ? OSM_INDEX.filter(p => p.kind === kind)
@@ -553,7 +563,7 @@ async function searchNearby(center, tag, onMore) {
       if (tag === 'amenity:place_of_worship') found = found.filter(p => MOSQUE.test(p.title));
       quick = mergePlaces([quick, found]);
     } catch { if (!quick.length && !onMore) throw new Error('nearby failed'); }
-  }
+  } else quick = mergePlaces([quick]);
   if (onMore) {
     overpassNear(center, tag, 3000).then(elements => {
       const live = elements.map(e => placeFromOsm(e, center, tag)).filter(Boolean);

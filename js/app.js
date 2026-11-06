@@ -2143,12 +2143,47 @@ let nearbyAt = () => {};
   const howFar = p => p.road ? distText(p.km) : `সোজা ${distText(p.km)}`;
   const input = $('near-input'), note = $('near-note'), list = $('near-list');
 
+  // open now, from the hours OpenStreetMap has (js/mapplus.js reads them)
+  const openState = p => (p.x.hours && typeof pdParse === 'function' && pdParse(p.x.hours)) ? pdState(pdParse(p.x.hours)) : null;
+  function nearRow(p) {
+    const r = el('div', 'nb-row');
+    const main = el('button', 'nb-main'); main.type = 'button';
+    const k = POI_KINDS.find(x => x[0] === NEAR_KIND[cat.tag]);
+    const badge = el('span', 'nb-ic'); badge.innerHTML = svg(cat.icon); if (k) badge.style.setProperty('--c', k[1]);
+    const t = el('span', 't');
+    t.appendChild(el('b', 'no-tr', p.title));
+    const st = openState(p);
+    const line = el('span', 'nb-sub');
+    line.appendChild(el('span', 'nb-km', howFar(p)));
+    if (st) line.appendChild(el('span', st.open ? 'pd-open' : 'pd-shut', st.open ? (p.x.hours === '24/7' ? '২৪ ঘণ্টা খোলা' : 'খোলা') : 'বন্ধ'));
+    // the rest of what is known, except what the row already says (the phone is its button, the hours its open/closed)
+    for (const f of [ratingText(placeKey(p)), ...facts(p).filter(f => f !== 'ফোন আছে' && f !== '২৪ ঘণ্টা খোলা')].filter(Boolean)) line.appendChild(el('span', null, f));
+    t.appendChild(line);
+    main.append(badge, t);
+    main.addEventListener('click', () => openPlace(p));
+    r.appendChild(main);
+    if (p.x.ph) {
+      const call = Object.assign(el('a', 'nb-call'), { href: 'tel:' + p.x.ph.replace(/[^+\d]/g, '') });
+      call.innerHTML = svg('phone'); call.title = call.ariaLabel = 'কল করুন · ' + p.x.ph;
+      r.appendChild(call);
+    }
+    return r;
+  }
+  // the map's colour for each kind, so a row's badge matches the place's badge on the map
+  const NEAR_KIND = { 'amenity:hospital': 'health', 'amenity:pharmacy': 'health', 'amenity:police': 'civic', 'amenity:bus_station': 'bus', 'railway:station': 'rail',
+    'amenity:fuel': 'fuel', 'amenity:atm': 'bank', 'amenity:bank': 'bank', 'leisure:park': 'green', 'tourism:attraction': 'sight', 'tourism:hotel': 'stay',
+    'amenity:restaurant': 'food', 'amenity:marketplace': 'shop', 'amenity:place_of_worship': 'worship', 'amenity:school': 'learn', 'amenity:college': 'learn',
+    'amenity:university': 'learn', 'amenity:fire_station': 'civic' };
   // Facts OpenStreetMap holds about a place, as short labels.
   const facts = p => [p.x.kind, p.x.em && 'জরুরি বিভাগ', p.x.gov && 'সরকারি', p.x.pvt && 'বেসরকারি', p.x.beds && `${num(p.x.beds)} শয্যা`,
                       p.x.hours === '24/7' && '২৪ ঘণ্টা খোলা', p.x.ph && 'ফোন আছে'].filter(Boolean);
 
   function openPlace(p) {
-    const body = [photoStrip({ lat: p.lat, lon: p.lon, label: p.title })];
+    const shots = el('div', 'pc-photos');
+    if (typeof pdPhotos === 'function') { const pl = { lat: p.lat, lon: p.lon, name: p.title }; pdPhotos(pl, pdFetch(pl).catch(() => null)).then(l => pdStrip(shots, l, pl)).catch(() => {}); }
+    const body = [shots];
+    const st = openState(p);
+    if (st) body.push(el('div', 'nb-open ' + (st.open ? 'pd-open' : 'pd-shut'), st.text));
     const f = facts(p);
     if (f.length || p.sub) {
       const chips = el('div', 'chips');
@@ -2156,9 +2191,9 @@ let nearbyAt = () => {};
       chips.append(...f.filter(t => t !== 'ফোন আছে').map(t => el('div', 'chip', t)));
       body.push(chips);
     }
-    if (p.x.hours && p.x.hours !== '24/7') body.push(el('div', 'label', 'খোলা থাকে'), el('div', 'empty no-tr', p.x.hours));
-    body.push(el('div', 'label', 'রেটিং দিন'), ratingStars(placeKey(p), draw),
-      el('div', 'empty', RATINGS_ONLINE ? 'আপনার রেটিং সবার রেটিংয়ের সাথে যোগ হয়।' : 'সার্ভার ছাড়া চলছে — রেটিং শুধু এই ডিভাইসে থাকছে।'));
+    if (p.x.hours && p.x.hours !== '24/7' && !st) body.push(el('div', 'label', 'খোলা থাকে'), el('div', 'empty no-tr', p.x.hours));
+    body.push(el('div', 'label', 'রেটিং দিন'), ratingStars(placeKey(p), draw));
+    if (!RATINGS_ONLINE) body.push(el('div', 'empty', 'সার্ভার ছাড়া চলছে — রেটিং শুধু এই ডিভাইসে থাকছে।'));
     const actions = [button('route', 'রুট দেখুন', () => { closeModal(); goTo({ lat: p.lat, lon: p.lon, label: p.title }); })];
     if (p.x.ph) {
       const call = el('a', 'btn quiet');
@@ -2184,10 +2219,7 @@ let nearbyAt = () => {};
     const rows = byRating && rated
       ? [...found].sort((a, b) => ratingScore(placeKey(b)) - ratingScore(placeKey(a)) || a.km - b.km)
       : found;
-    for (const p of rows.slice(0, 48)) {
-      const sub = [ratingText(placeKey(p)), p.sub, ...facts(p)].filter(Boolean).join(' · ');
-      list.appendChild(item(cat.icon, p.title, sub, howFar(p), () => openPlace(p)));
-    }
+    for (const p of rows.slice(0, 48)) list.appendChild(nearRow(p));
     stagger(list);
   }
   for (const b of $('near-sort').children) {
@@ -2202,7 +2234,7 @@ let nearbyAt = () => {};
     const mine = ++seq;
     list.replaceChildren(el('div', 'skeleton'));
     note.textContent = `${center.label}-এর কাছের ${cat.bn} খোঁজা হচ্ছে…`;
-    const count = () => { note.textContent = `${center.label}-এর কাছে ${num(found.length)} টি ${cat.bn} · চাপ দিলে বিস্তারিত`; };
+    const count = () => { note.textContent = `${num(found.length)}টি ${cat.bn}` + (isMine() ? ' · আপনার কাছে' : ` · ${tr(center.label)} থেকে দূরত্ব`); };
     try { found = await searchNearby(center, cat.tag, more => { if (mine === seq && more.length >= found.length) { found = more; count(); draw(); } }); }
     catch {
       if (mine === seq) { found = []; list.replaceChildren(); note.textContent = 'খোঁজা যায়নি। ইন্টারনেট সংযোগ দেখে আবার চেষ্টা করুন।'; }
@@ -2212,11 +2244,14 @@ let nearbyAt = () => {};
     list.replaceChildren();
     $('near-sort').hidden = true;
     if (!found.length) { note.textContent = `${center.label}-এর ৩০ কিমির মধ্যে কোনো ${cat.bn} ম্যাপে পাওয়া যায়নি।`; return; }
-    const said = () => `${center.label}-এর কাছে ${num(found.length)} টি ${cat.bn}` + (isMine() ? '' : ` · দূরত্ব ${tr(center.label)} থেকে, নিজের অবস্থান থেকে দেখতে 📍 চাপুন`);
+    const said = () => `${num(found.length)}টি ${cat.bn}` + (isMine() ? ' · আপনার কাছে' : ` · ${tr(center.label)} থেকে দূরত্ব`);
     note.textContent = said();
     draw();
-    const near = found.slice(0, 40), from = center;
-    const roads = await roadDistances(from, near);
+    // every place by road, forty at a time (the most the road server takes in one question): a place left with its
+    // straight-line distance would sort ahead of nearer ones whose road is longer than the line
+    const near = found.slice(0, 80), from = center, parts = [];
+    for (let i = 0; i < near.length; i += 40) parts.push(near.slice(i, i + 40));
+    const roads = (await Promise.all(parts.map(part => roadDistances(from, part)))).flat();
     if (mine !== seq) return;
     near.forEach((p, i) => { if (roads[i]) { p.road = roads[i]; p.km = roads[i].km; } });
     found.sort((a, b) => a.km - b.km);
