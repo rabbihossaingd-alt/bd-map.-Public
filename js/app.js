@@ -10,6 +10,7 @@ const searches = [];
 let current = null;
 
 const districtById = id => DISTRICTS.find(d => d.id === id);
+let opsRefresh = () => {};                       // the bus companies' list, drawn again when the ratings come
 const setStatus = msg => { for (const s of document.querySelectorAll('.status')) s.textContent = msg || ''; };
 
 function stagger(box) {
@@ -87,8 +88,7 @@ function operatorChips(a, b) {
   if (!list.length) return el('div', 'empty', 'এই রুটের বাস কোম্পানির নাম এখনো যোগ হয়নি।');
   const chips = el('div', 'chips');
   for (const o of list) {
-    const chip = el('div', 'chip', o.bn);
-    chip.dataset.i = [...o.bn][0];
+    const chip = el('div', 'chip op-chip', o.bn);
     if (!(o.ac && o.nonAc)) chip.appendChild(el('small', null, o.ac ? 'শুধু এসি' : 'নন-এসি'));
     chips.appendChild(chip);
   }
@@ -2015,14 +2015,24 @@ for (const b of $('seg').children) b.addEventListener('click', () => showPane(b.
     route.append(el('span', null, a.bn), Object.assign(el('i', 'rx-arrow'), { innerHTML: svg('arrow') }), el('span', null, b.bn));
     const facts = el('div', 'rx-facts');
     const fact = (icon, text) => { const f = el('span'); f.append(ic(icon), el('span', null, text)); return f; };
-    facts.append(fact('route', `${num(km, 1)} কিমি`), fact('clock', `গাড়িতে ফাঁকা রাস্তায় ${fmtMin(r.duration / 60)} · বাসে প্রায় ${fmtMin(km / 40 * 60)}`));
+    const way = (mode, label, time) => { const f = el('span', 'rx-way'); f.innerHTML = modeSvg(mode); f.title = label; f.appendChild(el('span', null, time)); return f; };
+    facts.append(fact('route', `${num(km, 1)} কিমি`), way('car', 'গাড়িতে, ফাঁকা রাস্তায়', fmtMin(r.duration / 60)), way('bus', 'বাসে, প্রায়', fmtMin(km / 40 * 60)));
     titles.append(route, facts);
     head.appendChild(titles);
-    const btn = button('route', 'ম্যাপে দেখুন', () => { trip.from = asPlace(a); setPlace('to', asPlace(b)); }, true);
+    const btn = button('route', 'ম্যাপে দেখুন', () => { trip.from = asPlace(a); setPlace('to', asPlace(b)); });
+    btn.classList.add('rx-go');
     const actions = el('div', 'actions');
     actions.appendChild(btn);
-    box.append(head, fareSummary(a, b, busRule(a, b), km));
-    box.append(el('div', 'label', 'এই রুটের বাস'), operatorChips(a, b), actions);
+    const fares = el('div', 'rx-fares');
+    fares.append(...intercityRows(a, b, busRule(a, b), km));
+    // where the buses leave from, with a pin, above the fares
+    const leaves = fares.querySelector('.label');
+    if (leaves) { leaves.classList.add('rx-from'); leaves.prepend(ic('pin')); }
+    const group = el('div', 'rx-group');
+    group.append(...[...fares.children].filter(n => n !== leaves));
+    fares.replaceChildren(...(leaves ? [leaves] : []), group);
+    box.append(head, fares);
+    box.append(el('div', 'label rx-label', 'এই রুটের বাস'), operatorChips(a, b), actions);
     stagger(box);
   }
 
@@ -2030,23 +2040,43 @@ for (const b of $('seg').children) b.addEventListener('click', () => showPane(b.
   to.addEventListener('change', update);
   $('ic-swap').addEventListener('click', () => { [from.value, to.value] = [to.value, from.value]; update(); });
 
-  const grid = $('op-grid');
-  for (const o of OPERATORS) {
-    const card = el('div', 'card op-card');
-    card.tabIndex = 0;
-    card.setAttribute('role', 'button');
-    const badges = el('div', 'chips');
-    if (o.ac) badges.appendChild(el('span', 'badge v', 'এসি'));
-    if (o.nonAc) badges.appendChild(el('span', 'badge', 'নন-এসি'));
-    card.append(el('b', null, o.bn), el('span', null, `ঢাকা থেকে ${num(o.districts.length - 1)} জেলায়`), badges,
-      ratingStars('bus:' + o.en));
-    card.addEventListener('click', () => {
-      const open = card.querySelector('.where');
-      if (open) { open.remove(); return; }
-      card.appendChild(el('div', 'where', o.districts.slice(1).map(id => districtById(id).bn).join(' · ')));
+  const grid = $('op-grid'), more = $('op-more'), filter = $('op-filter');
+  let showAll = false;
+  const opRow = o => {
+    const row = el('div', 'op-row');
+    const main = el('button', 'op-main'); main.type = 'button';
+    const badge = el('span', 'op-ic'); badge.innerHTML = modeSvg('bus');
+    const t = el('span', 't'), sub = el('span', 'op-sub');
+    t.append(el('b', null, o.bn), sub);
+    sub.appendChild(el('span', null, `ঢাকা থেকে ${num(o.districts.length - 1)} জেলায়`));
+    sub.appendChild(el('span', null, o.ac && o.nonAc ? 'এসি ও নন-এসি' : o.ac ? 'এসি' : 'নন-এসি'));
+    const score = ratingText('bus:' + o.en);
+    if (score) sub.appendChild(el('span', 'op-score', score));
+    const chev = el('i', 'op-chev'); chev.innerHTML = svg('chev');
+    main.append(badge, t, chev);
+    const detail = el('div', 'op-detail');
+    main.addEventListener('click', () => {
+      const open = row.classList.toggle('open');
+      if (open && !detail.children.length) detail.append(el('div', 'op-where', o.districts.slice(1).map(id => districtById(id).bn).join(' · ')), ratingStars('bus:' + o.en));
     });
-    grid.appendChild(card);
+    row.append(main, detail);
+    return row;
+  };
+  function drawOps() {
+    const q = filter.value.trim(), low = q.toLowerCase();
+    const list = OPERATORS.filter(o => !q || o.bn.includes(q) || (o.en || '').toLowerCase().includes(low) || o.districts.some(id => { const d = districtById(id); return d && (d.bn.includes(q) || d.en.toLowerCase().includes(low)); }))
+      .sort((x, y) => (ratingScore('bus:' + y.en) || 0) - (ratingScore('bus:' + x.en) || 0) || y.districts.length - x.districts.length);
+    const shown = q || showAll ? list : list.slice(0, 8);
+    grid.replaceChildren(...shown.map(opRow));
+    if (!list.length) grid.appendChild(el('div', 'empty', 'এই নামে কোনো কোম্পানি নেই।'));
+    more.hidden = !!q || showAll || list.length <= 8;
+    more.replaceChildren(el('span', null, `সব ${num(list.length)}টি কোম্পানি দেখুন`), Object.assign(el('i'), { innerHTML: svg('chev') }));
+    grid.appendChild(more);                        // the list's last row (hidden when everything is shown)
   }
+  filter.addEventListener('input', drawOps);
+  more.addEventListener('click', () => { showAll = true; drawOps(); });
+  opsRefresh = drawOps;
+  drawOps();
 
   const dhaka = districtById('dhaka');
 
@@ -2401,7 +2431,7 @@ setTimeout(() => {
 }, 2500);
 // Shared ratings arrive after first paint; cards drawn earlier pick up the averages on their next draw.
 loadFareReports();
-loadRatings().then(() => { for (const box of document.querySelectorAll('#op-grid .rate')) box.dispatchEvent(new Event('refresh')); });
+loadRatings().then(() => { for (const box of document.querySelectorAll('#op-grid .rate')) box.dispatchEvent(new Event('refresh')); opsRefresh(); });
 new Promise(done => {
   const go = () => done(loadIndex());
   const idle = window.requestIdleCallback ? f => requestIdleCallback(f, { timeout: 3000 }) : f => setTimeout(f, 1500);

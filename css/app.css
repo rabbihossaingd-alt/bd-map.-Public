@@ -5655,3 +5655,68 @@ a.pd-row > span { color: #1a73e8; }
 .nb-call { flex: none; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; color: var(--brand); background: rgb(var(--brand-rgb) / .12); }
 .nb-call svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .nb-open { font-weight: 600; margin: 4px 0 8px; }
+
+/* ---- বাস · ট্রেন · লঞ্চ: the page's name as its title, the fares as rows, the companies as a list to search ---- */
+.rx-facts .rx-way { display: inline-flex; align-items: center; gap: 6px; }
+.rx-facts .rx-way svg { width: 16px; height: 16px; fill: currentColor; opacity: .8; }
+.rx-fares { margin: 6px 0 4px; }
+.rx-fares .label { margin-top: 10px; }
+.rx-fares .item { border: 0; border-top: 1px solid var(--line); border-radius: 0; margin: 0; padding: 12px 0; background: none; }
+.chip.op-chip::before { display: none !important; content: none !important; }
+#page-train .tx-find { margin: 4px 0 8px; }
+.op-list { display: block; }
+.op-row { border-bottom: 1px solid var(--line); }
+.op-main { width: 100%; display: flex; align-items: center; gap: 14px; padding: 12px 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.op-ic { flex: none; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; color: var(--brand); background: rgb(var(--brand-rgb) / .12); }
+.op-ic svg { width: 20px; height: 20px; fill: currentColor; }
+.op-main .t { flex: 1; min-width: 0; display: grid; gap: 3px; }
+.op-main .t b { font-size: 16px; font-weight: 600; }
+.op-sub { display: flex; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
+.op-sub > span + span::before { content: '·'; margin: 0 6px; }
+.op-score { color: #f59e0b; font-weight: 600; }
+.op-chev { flex: none; color: var(--muted); transition: transform .25s; display: grid; }
+.op-chev svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; transform: rotate(90deg); }
+.op-row.open .op-chev { transform: rotate(180deg); }
+.op-detail { display: none; padding: 0 0 14px 54px; }
+.op-row.open .op-detail { display: grid; gap: 10px; }
+.op-where { font-size: 13.5px; line-height: 1.6; color: var(--ink-2); }
+.op-more { width: 100%; justify-content: center; margin-top: 12px; }
+@media (min-width: 900px) { .op-list { display: grid; grid-template-columns: 1fr 1fr; column-gap: 28px; } }
+@media (min-width: 900px) { #op-grid.op-list { grid-template-columns: 1fr 1fr !important; column-gap: 28px; } }
+@media (max-width: 899px) { #op-grid.op-list { display: block !important; } }
+
+/* ---- the bus tab, refined: the fare card as an inset group, the route's companies as a row of pills, the companies as one grouped list ---- */
+#ic-result { padding: 22px 20px 20px; border-radius: 26px; }
+#ic-result .rx-route { font-family: var(--font-head); font-size: clamp(26px, 5vw, 34px); font-weight: 700; letter-spacing: -.02em; }
+#ic-result .rx-facts { gap: 6px; }
+#ic-result .rx-facts > span { height: 30px; padding: 0 12px; border-radius: 999px; background: color-mix(in srgb, var(--ink) 6%, transparent); border: 0; font-size: 13px; font-weight: 600; color: var(--ink-2); display: inline-flex; align-items: center; gap: 6px; }
+.rx-from { display: flex; align-items: center; gap: 6px; margin: 16px 2px 8px !important; font-size: 13px; font-weight: 600; color: var(--ink-2); text-transform: none; letter-spacing: 0; }
+.rx-from .ic { width: auto; height: auto; background: none; font-size: 15px; color: var(--brand); }
+.rx-group { border-radius: 18px; background: color-mix(in srgb, var(--ink) 4%, transparent); padding: 0 14px; }
+.rx-group .item { border: 0 !important; border-top: 1px solid var(--line) !important; border-radius: 0; margin: 0; padding: 14px 0; background: none; }
+.rx-group .item:first-child { border-top: 0 !important; }
+.rx-group .item .ic.mode { width: 40px; height: 40px; border-radius: 12px; }
+.rx-group .item .t b { font-family: var(--font-head); font-size: 16.5px; font-weight: 600; }
+.rx-group .item .p { font-family: var(--font-head); font-size: 20px; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.rx-label { margin: 20px 2px 8px; font-size: 13px; font-weight: 600; color: var(--muted); text-transform: none; letter-spacing: 0; }
+#ic-result .chips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; gap: 6px; margin: 0 -20px; padding: 0 20px 2px; }
+#ic-result .chips::-webkit-scrollbar { display: none; }
+#ic-result .chip.op-chip { flex: none; height: 34px; padding: 0 14px; border: 0; border-radius: 999px; background: color-mix(in srgb, var(--ink) 6%, transparent); font-size: 13.5px; font-weight: 600; color: var(--ink); }
+#ic-result .chip.op-chip small { margin-left: 6px; font-size: 11px; color: var(--muted); font-weight: 500; }
+@media (min-width: 761px) { #ic-result .chips { flex-wrap: wrap; overflow: visible; margin: 0; padding: 0; } }
+#ic-result .actions { margin-top: 18px; }
+#ic-result .rx-go { width: 100%; height: 48px; justify-content: center; border-radius: 14px; font-weight: 700; }
+@media (min-width: 761px) { #ic-result .rx-go { width: auto; padding: 0 24px; } }
+/* the companies: one rounded group, inset separators, a tinted square badge; "see all" its last row */
+#op-grid.op-list { border-radius: 22px; background: var(--surface); border: 1px solid var(--line); padding: 0 16px; }
+#op-grid .op-row { border-bottom: 0; border-top: 1px solid var(--line); }
+#op-grid .op-row:first-child { border-top: 0; }
+#op-grid .op-ic { width: 42px; height: 42px; border-radius: 13px; }
+#op-grid .op-main { padding: 13px 0; }
+#op-grid .op-main .t b { font-family: var(--font-head); font-size: 16px; }
+#op-grid .op-more { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; width: 100%; height: 52px; margin: 0; padding: 0; border: 0; border-top: 1px solid var(--line); border-radius: 0; background: none; color: var(--brand); font: inherit; font-weight: 700; box-shadow: none; cursor: pointer; }
+#op-grid .op-more i { display: grid; color: var(--brand); }
+#op-grid .op-more svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+@media (min-width: 900px) { #op-grid.op-list { padding: 0 20px; } #op-grid .op-row:nth-child(2) { border-top: 0; } }
+#page-train .tx-find { margin: 4px 0 12px; }
+#op-grid .op-more[hidden] { display: none; }

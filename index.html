@@ -377,7 +377,7 @@
         <button role="tab" data-m="launch" class="m-launch" aria-selected="false"><span class="mi2"><i data-ic="launchBoat"></i></span><span class="mt"><b>লঞ্চ</b><small id="tx-c-launch"></small></span></button>
       </div>
       <div class="tx-pane" id="tx-bus" role="tabpanel">
-      <div class="tx-sub"><h3>জেলা থেকে জেলা</h3><p>যেকোনো দুটি জেলার মধ্যে দূরপাল্লার বাসের ভাড়া, আর কোন রুটে কোন বাস চলে।</p></div>
+      <div class="tx-sub"><h3>জেলা থেকে জেলা</h3></div>
       <div class="tx-plan">
         <span class="tp-line" aria-hidden="true"></span>
         <label class="tp-field"><span class="tp-dot a"></span><span class="tp-t"><small>কোথা থেকে</small><select id="ic-from" aria-label="কোন জেলা থেকে"></select></span><i class="tp-chev" data-ic="chev"></i></label>
@@ -386,8 +386,10 @@
       </div>
       <div class="card result" id="ic-result"></div>
 
-      <div class="tx-sub" style="margin-top: 44px"><h3>বাস কোম্পানি</h3><p>তারায় চাপ দিয়ে রেটিং দিন।</p></div>
-      <div class="grid" id="op-grid" style="margin-top: 0"></div>
+      <div class="tx-sub" style="margin-top: 40px"><h3>বাস কোম্পানি</h3></div>
+      <label class="filter tx-find"><i data-ic="search"></i><input id="op-filter" autocomplete="off" placeholder="কোম্পানি বা জেলা — যেমন: হানিফ, সিলেট" aria-label="বাস কোম্পানি খুঁজুন"></label>
+      <div class="op-list" id="op-grid"></div>
+      <button class="btn quiet op-more" id="op-more" type="button" hidden></button>
         <p class="tx-source" id="tx-bus-source"></p>
       </div>
       <div class="tx-pane" id="tx-train" role="tabpanel" hidden>
