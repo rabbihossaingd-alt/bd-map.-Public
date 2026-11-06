@@ -1243,8 +1243,21 @@ async function createMap() {
     } catch { if (!quiet) setStatus('লোকেশন পাওয়া যায়নি — ব্রাউজারে লোকেশনের অনুমতি দিন।'); }
   }
   geo.on('error', () => { $('tool-me').classList.remove('on'); const quiet = quietLocate; quietLocate = false; approxLocate(quiet); });
-  $('tool-me').addEventListener('click', () => { setStatus(''); geo.trigger(); });
-  locateMe = () => { quietLocate = true; geo.trigger(); };       // on opening: no complaint if location is refused
+  // MapLibre's control gets ready a moment after it is added (it first asks the browser whether location is there at
+  // all); a trigger before that is dropped with a warning, which is why opening the map never showed where you are.
+  // So it is asked again every 150 ms until the control takes it (for up to 6 s).
+  const triggerGeo = (tries = 40) => {
+    if (!geo._setup && tries > 0) { setTimeout(() => triggerGeo(tries - 1), 150); return; }   // not ready yet: no warning
+    if (geo.trigger() === false && tries > 0) setTimeout(() => triggerGeo(tries - 1), 150);
+  };
+  // A tap while the map is already following you brings the map back to you, as Google's button does; it does not
+  // switch your location off (MapLibre's own toggle would, and the blue dot would vanish).
+  $('tool-me').addEventListener('click', () => {
+    setStatus('');
+    if (geo._watchState === 'ACTIVE_LOCK' && myLoc) { map.easeTo({ center: [myLoc.lon, myLoc.lat], zoom: Math.max(map.getZoom(), 16), duration: 600 }, { geolocateSource: true }); return; }   // marked as the control's own move, so following stays on
+    triggerGeo();
+  });
+  locateMe = () => { quietLocate = true; triggerGeo(); };       // on opening: no complaint if location is refused
   geo.on('geolocate', e => { quietLocate = false; myLoc = { lat: e.coords.latitude, lon: e.coords.longitude }; rememberFix(e.coords.latitude, e.coords.longitude, e.coords.accuracy); });
 
   // Stop names: on hover with a mouse, on tap with a finger.
@@ -1299,7 +1312,7 @@ function stopFollowing() {
   geoCtl._watchState = 'BACKGROUND';
   const b = geoCtl._geolocateButton;
   if (b) { b.classList.add('maplibregl-ctrl-geolocate-background'); b.classList.remove('maplibregl-ctrl-geolocate-active'); }
-  geoCtl.fire(new maplibregl.Event('trackuserlocationend'));
+  geoCtl.fire('trackuserlocationend');           // by name: maplibregl.Event is not exported in 4.x, and the old line threw
 }
 // `points` are [lon, lat] pairs.
 function fit(points, animate = true) {
