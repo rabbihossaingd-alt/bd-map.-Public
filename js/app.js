@@ -1869,7 +1869,7 @@ function showPlace(pl) {
   const km = myLoc ? haversineKm(myLoc, pl) : null;
   const head = el('div', 'pc-head');
   const badge = el('span', 'pc-badge'); badge.style.background = k[1]; badge.innerHTML = k[3].raw ? `<svg viewBox="0 0 24 24">${k[3].raw}</svg>` : `<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">${k[3]}</svg>`;
-  const t = el('div', 'pc-t'); t.append(el('b', 'no-tr', pl.name || 'বাছাই করা জায়গা'), el('span', null, [KIND_BN[pl.kind] || '', pl.sub || ''].filter(Boolean).join(' · ')));
+  const t = el('div', 'pc-t'); t.append(el('b', 'no-tr', pl.name || 'বাছাই করা জায়গা'), el('span', null, [KIND_BN[pl.kind] || '', (KIND_BN[pl.kind] || '').includes(pl.sub || ' ') ? '' : pl.sub || ''].filter(Boolean).join(' · ')));
   const x = el('button', 'icon-btn pc-x'); x.innerHTML = svg('close'); x.setAttribute('aria-label', 'বন্ধ করুন'); x.addEventListener('click', hidePlace);
   head.append(badge, t, x);
   const dist = el('p', 'pc-dist');
@@ -1923,9 +1923,12 @@ function showPlace(pl) {
     // An area, a bus stop or a district that matches what was typed comes before shops and offices with the word in
     // their name (Jatrabari before 'Jatra Bangladesh Ltd'), as in Google Maps; then the rest.
     const top = local.filter(pl => pl.area && pl.score >= 2).slice(0, 3), rest = local.filter(pl => !top.includes(pl));
-    for (const pl of top) item({ lat: pl.lat, lon: pl.lon, name: pl.title, sub: pl.sub }, pl.icon);
+    // the app's own places say what they are in words ("হাসপাতাল"); the card's badge wants the kind
+    const kindOf = sub => (Object.entries({ health: /হাসপাতাল|ক্লিনিক|মেডিকেল/, learn: /বিশ্ববিদ্যালয়|কলেজ|স্কুল/, worship: /মসজিদ|মন্দির|গির্জা/, sight: /দর্শনীয়|জাদুঘর|স্মৃতি/, green: /পার্ক|উদ্যান/, rail: /স্টেশন|রেল/, shop: /মার্কেট|শপিং|বাজার/, stay: /হোটেল/ })
+      .find(([, re]) => re.test(sub || '')) || [])[0];
+    for (const pl of top) item({ lat: pl.lat, lon: pl.lon, name: pl.title, sub: pl.sub, kind: kindOf(pl.sub) }, pl.icon);
     for (const pl of ours) item({ ...pl, name: LANG !== 'en' && pl.bn ? pl.bn : pl.name }, 'pin');
-    for (const pl of rest.slice(0, Math.max(0, 4 - top.length))) item({ lat: pl.lat, lon: pl.lon, name: pl.title, sub: pl.sub }, pl.icon);
+    for (const pl of rest.slice(0, Math.max(0, 4 - top.length))) item({ lat: pl.lat, lon: pl.lon, name: pl.title, sub: pl.sub, kind: kindOf(pl.sub) }, pl.icon);
     sug.hidden = !sug.children.length;
     // places OpenStreetMap knows (areas, roads, landmarks) after a pause
     clearTimeout(timer);

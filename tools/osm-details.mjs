@@ -1,7 +1,7 @@
 // A place's details for the map's place card: opening hours, phone, website and address of every named place in
 // OpenStreetMap's Bangladesh extract that has any of them. Reads the .osm.pbf Planetiler downloads
 // (tools/build-tiles.mjs) with no extra packages and writes data/place-details.tsv.gz:
-//   lat  lon  name  name:bn  name:en  opening_hours  phone  website  address
+//   lat  lon  name  name:bn  name:en  opening_hours  phone  website  address  photo (a Commons file)  wikidata
 // Ways (buildings, campuses) are placed at the middle of their outline. Data © OpenStreetMap contributors, ODbL.
 //   node tools/osm-details.mjs [path/to/bangladesh.osm.pbf]
 import { openSync, readSync, fstatSync, writeFileSync } from 'node:fs';
@@ -57,12 +57,20 @@ function parseBlock(data) {
   return { strings, gran, latOff, lonOff, groups };
 }
 
-const WANT = ['opening_hours', 'phone', 'contact:phone', 'contact:mobile', 'website', 'contact:website'];
+const WANT = ['opening_hours', 'phone', 'contact:phone', 'contact:mobile', 'website', 'contact:website', 'wikidata', 'wikimedia_commons', 'image'];
 const useful = t => t.name && WANT.some(k => t[k]);
 const clean = s => String(s || '').replace(/[\t\n\r]+/g, ' ').trim();
+// a picture the mappers named: a Commons file (wikimedia_commons=File:…, or image= pointing at Commons)
+function photoOf(t) {
+  const c = clean(t.wikimedia_commons), i = clean(t.image);
+  if (/^File:/i.test(c)) return c.slice(5).slice(0, 200);
+  const m = i.match(/commons\.wikimedia\.org\/wiki\/File:([^?#]+)/i) || i.match(/^File:(.+)/i);
+  try { return m ? decodeURIComponent(m[1]).replace(/_/g, ' ').slice(0, 200) : ''; } catch { return ''; }
+}
 const row = (lat, lon, t) => [lat.toFixed(6), lon.toFixed(6), clean(t.name), clean(t['name:bn']), clean(t['name:en']), clean(t.opening_hours).slice(0, 200),
   clean(t.phone || t['contact:phone'] || t['contact:mobile']).split(/[;,]/)[0].trim(), clean(t.website || t['contact:website']).slice(0, 200),
-  [...new Set([[t['addr:housenumber'], t['addr:street']].filter(Boolean).join(' '), t['addr:suburb'] || t['addr:city']].filter(Boolean))].map(clean).join(', ').slice(0, 160)].join('\t');
+  [...new Set([[t['addr:housenumber'], t['addr:street']].filter(Boolean).join(' '), t['addr:suburb'] || t['addr:city']].filter(Boolean))].map(clean).join(', ').slice(0, 160),
+  photoOf(t), /^Q\d+$/.test(t.wikidata || '') ? t.wikidata : ''].join('\t');
 
 // pass 1: tagged nodes straight away; ways remembered with their node ids
 const out = [], ways = [], need = new Set();
@@ -115,6 +123,6 @@ for (const [ids, t] of ways) {
   if (!pts.length) continue;
   out.push(row(pts.reduce((s, p) => s + p[0], 0) / pts.length, pts.reduce((s, p) => s + p[1], 0) / pts.length, t));
 }
-const text = 'lat\tlon\tname\tname_bn\tname_en\thours\tphone\twebsite\taddress\n' + out.join('\n') + '\n';
+const text = 'lat\tlon\tname\tname_bn\tname_en\thours\tphone\twebsite\taddress\tphoto\twikidata\n' + out.join('\n') + '\n';
 writeFileSync(OUT, gzipSync(text, { level: 9 }));
 console.log(`${out.length} places with details → ${OUT} (${(gzipSync(text).length / 1024).toFixed(0)} KB)`);

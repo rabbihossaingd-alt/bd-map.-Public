@@ -2830,10 +2830,10 @@ try {
   rows.shift();
   for (const r of rows) {
     if (!r) continue;
-    const [la, lo, name, bn, en, hours, phone, web, addr] = r.split('\t');
+    const [la, lo, name, bn, en, hours, phone, web, addr, photo, wd] = r.split('\t');
     const key = Math.floor(+la * 100) + ':' + Math.floor(+lo * 100);
     if (!detailCells.has(key)) detailCells.set(key, []);
-    detailCells.get(key).push({ lat: +la, lon: +lo, names: [name, bn, en].map(detailNorm).filter(Boolean), hours, phone, web, addr });
+    detailCells.get(key).push({ lat: +la, lon: +lo, names: [name, bn, en].map(detailNorm).filter(Boolean), hours, phone, web, addr, photo: photo || '', wd: wd || '' });
   }
 } catch { /* no file: cards show no details */ }
 function poisDetail(res, lat, lon, name) {
@@ -2847,28 +2847,67 @@ function poisDetail(res, lat, lon, name) {
       if (km < bestKm && p.names.some(k => k === want || (k.length > 4 && want.length > 4 && (k.includes(want) || want.includes(k))))) { best = p; bestKm = km; }
     }
   res.setHeader('Cache-Control', 'public, max-age=86400');
-  json(res, 200, best ? { hours: best.hours, phone: best.phone, web: best.web, addr: best.addr } : {});
+  json(res, 200, best ? { hours: best.hours, phone: best.phone, web: best.web, addr: best.addr, photo: best.photo, wd: best.wd } : {});
 }
 // The same places for search: every name in lower case, Bangla and English, with its cell's place in the list.
 const poiAll = [...poiCells.values()].flat();
 const poiNames = poiAll.map(p => (p[3] + ' ' + p[4]).toLowerCase());
 const poiKm = (a, b, c, d) => { const r = Math.PI / 180, x = (d - b) * r * Math.cos((a + c) / 2 * r), y = (c - a) * r; return Math.hypot(x, y) * 6371; };
 const poiOut = (p, km) => ({ lat: p[0], lon: p[1], kind: p[2], name: p[3], bn: p[4], cat: p[5], km: km == null ? undefined : Math.round(km * 100) / 100 });
-// ?q=text[&lat=&lon=]: names holding every word typed; whole-word and start-of-name matches first, then the nearest
+// Most places here have only an English name, and people type Bangla: "পপুলার হাসপাতাল" is "Popular … Hospital".
+// A word is compared by its sound: Bangla letters to Latin consonants, English spelling folded the same way (vowels,
+// h, w and y dropped; ph=f, sh=s, c before e/i = s, ng = n), so পপুলার and Popular both become "plr". Words that
+// sound different in the two languages come from a short list.
+const BN_SOUND = { 'ক': 'k', 'খ': 'k', 'গ': 'g', 'ঘ': 'g', 'ঙ': 'n', 'চ': 'c', 'ছ': 'c', 'জ': 'j', 'ঝ': 'j', 'ঞ': 'n', 'ট': 't', 'ঠ': 't', 'ড': 'd', 'ঢ': 'd',
+  'ণ': 'n', 'ত': 't', 'থ': 't', 'দ': 'd', 'ধ': 'd', 'ন': 'n', 'প': 'p', 'ফ': 'f', 'ব': 'b', 'ভ': 'b', 'ম': 'm', 'য': 'j', 'র': 'r', 'ল': 'l', 'শ': 's', 'ষ': 's',
+  'স': 's', 'ড়': 'r', 'ঢ়': 'r', 'ৎ': 't', 'ং': 'n', 'ক্ষ': 'k' };
+const soundKey = w => w.replace(/ph/g, 'f').replace(/sh/g, 's').replace(/ch/g, 'C').replace(/kh/g, 'k').replace(/gh/g, 'g').replace(/th/g, 't').replace(/dh/g, 'd')
+  .replace(/bh/g, 'b').replace(/jh/g, 'j').replace(/ck/g, 'k').replace(/c(?=[eiy])/g, 's').replace(/g(?=[ei])/g, 'j').replace(/c/g, 'k').replace(/C/g, 'c').replace(/q/g, 'k')
+  .replace(/z/g, 'j').replace(/v/g, 'b').replace(/x/g, 'ks').replace(/[^a-z0-9]/g, '').replace(/[aeiouwyh]/g, '').replace(/ng/g, 'n').replace(/(.)\1+/g, '$1');
+// Bangla: the ya-phala (্য) and য় are not sounded as consonants here; ং is n
+// (NFC writes ড়, ঢ় and য় as the letter and a dot below, so those pairs are read first)
+const bnSound = w => soundKey(w.normalize('NFC').replace(/[ডঢ]়/g, 'র').replace(/য়/g, '').replace(/্য/g, '').replace(/য়/g, '').replace(/[ক-হড়ঢ়ৎং]/g, ch => BN_SOUND[ch] || '').replace(/[০-৯]/g, d => '০১২৩৪৫৬৭৮৯'.indexOf(d)));
+const BN_WORDS = { 'হাসপাতাল': ['hospital'], 'হসপিটাল': ['hospital'], 'বিশ্ববিদ্যালয়': ['university'], 'ইউনিভার্সিটি': ['university'], 'মসজিদ': ['mosque', 'masjid'],
+  'মন্দির': ['temple', 'mandir'], 'গির্জা': ['church'], 'থানা': ['police', 'thana'], 'বিদ্যালয়': ['school'], 'উচ্চ': ['high'], 'সরকারি': ['government', 'govt'],
+  'ঔষধ': ['pharmacy', 'medicine'], 'ওষুধ': ['pharmacy', 'medicine'], 'দোকান': ['shop', 'store'], 'রেস্তোরাঁ': ['restaurant'], 'খাবার': ['food', 'restaurant'],
+  'বিমানবন্দর': ['airport'], 'রেলস্টেশন': ['railway', 'station'], 'কেন্দ্র': ['centre', 'center'], 'সেন্টার': ['centre', 'center'], 'চিকিৎসা': ['medical'],
+  'মহাবিদ্যালয়': ['college'], 'পাঠাগার': ['library'], 'জাদুঘর': ['museum'], 'উদ্যান': ['park', 'garden'], 'বাগান': ['garden'], 'সেতু': ['bridge'] };
+// the sound of every word of every English name, filed by its first three letters: a typed word's sound is looked up,
+// not compared with all of them
+const soundIndex = new Map();
+poiAll.forEach((p, i) => { for (const k of new Set(String(p[3]).toLowerCase().split(/[^a-z0-9]+/).map(soundKey))) if (k.length >= 3) {
+  const f = k.slice(0, 3); if (!soundIndex.has(f)) soundIndex.set(f, []); soundIndex.get(f).push(i, k); } });
+// the places with a word sounding like this one (three sounds at least: fewer match too much)
+function soundHits(k) {
+  const out = new Set(), list = k.length >= 3 ? soundIndex.get(k.slice(0, 3)) || [] : [];
+  for (let n = 0; n < list.length; n += 2) if (list[n + 1].startsWith(k)) out.add(list[n]);
+  return out;
+}
+// for each typed word: how a place's name has it — 0 written so, 1 by its sound or the word list, -1 not at all
+function wordTest(w) {
+  const bn = /[ঀ-৿]/.test(w), sounds = soundHits(bn ? bnSound(w) : soundKey(w)), also = BN_WORDS[w] || [];
+  return i => poiNames[i].includes(w) ? 0 : sounds.has(i) || also.some(e => poiNames[i].includes(e)) ? 1 : -1;
+}
+// ?q=text[&lat=&lon=]: names holding every word typed (as written, or by sound); whole-word and start-of-name matches
+// first, then the nearest
 function poisSearch(res, q, lat, lon) {
   const words = q.toLowerCase().split(/\s+/).filter(w => w.length > 1).slice(0, 5);
   if (!words.length) return json(res, 200, { results: [] });
   const near = Number.isFinite(lat) && Number.isFinite(lon);
-  const hits = [];
+  const hits = [], tests = words.map(wordTest);
   for (let i = 0; i < poiAll.length && hits.length < 4000; i++) {
     const n = poiNames[i];
-    if (!words.every(w => n.includes(w))) continue;
+    let sound = 0, ok = true;
+    for (const t of tests) { const h = t(i); if (h < 0) { ok = false; break; } sound += h; }
+    if (!ok) continue;
     const p = poiAll[i], km = near ? poiKm(lat, lon, p[0], p[1]) : null;
     // 'jatra bari' is Jatrabari, not 'Jatra Bangladesh Ltd, Baridhara': the words written together beat words found
     // apart, and a word found at the start of a name word beats one found inside another word
     const together = words.length > 1 && n.replace(/[\s,.\-/]+/g, '').includes(words.join('')) ? 0 : 1;
     const inside = words.filter(w => !(n.startsWith(w) || new RegExp('[\\s,(/-]' + w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).test(n))).length;
-    const score = together * 80 + inside * 30 + (n.startsWith(words[0]) ? 0 : 10) + (near ? Math.min(km, 400) / 8 : 0);
+    // found by sound: a little behind the same name written out, well ahead of anything far away
+    // a place close by wins over the same name far away, as in Google Maps: a kilometre counts as much as a word found by sound
+    const score = (sound ? 4 * sound : together * 10 + inside * 8 + (n.startsWith(words[0]) ? 0 : 4)) + (near ? Math.min(km, 300) : 0);
     hits.push([score, p, km]);
   }
   hits.sort((a, b) => a[0] - b[0]);

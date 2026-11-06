@@ -5541,6 +5541,18 @@ a.pd-row > span { color: #1a73e8; }
 /* on a phone "from here" is its pin alone (its name is in its tooltip), so every button fits on the card */
 @media (max-width: 760px) {
   .pc-acts .btn.quiet:not(.pc-icon) { width: 48px; padding: 0; justify-content: center; }
-  .pc-acts .btn.quiet:not(.pc-icon) span { display: none; }
+  .pc-acts .btn.quiet:not(.pc-icon) > span:not(.ic) { display: none; }
   .pc-acts .btn.quiet:not(.pc-icon) svg { width: 20px; height: 20px; }
 }
+
+/* the place card's own pictures, with a tile to add one */
+.pc-photos:empty { display: none; }
+.pc-photos { margin-top: var(--space-3); }
+.pc-strip { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; }
+.pc-strip::-webkit-scrollbar { display: none; }
+.pc-strip > button { flex: none; width: 112px; height: 84px; padding: 0; border: 0; border-radius: 14px; overflow: hidden; background: var(--surface-2); cursor: pointer; }
+.pc-strip > button img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pc-strip > .pc-addphoto { display: grid; place-items: center; align-content: center; gap: 4px; color: var(--ink-2); font: inherit; font-size: 12px; font-weight: 600; border: 1.5px dashed var(--line); background: transparent; }
+.pc-strip > .pc-addphoto:only-child { width: 100%; height: 52px; display: flex; justify-content: center; align-items: center; gap: 8px; font-size: 13px; }
+.pc-addphoto svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.pc-photos .cap { font-size: 11px; color: var(--muted); margin-top: 6px; }

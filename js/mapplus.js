@@ -145,9 +145,9 @@ async function pdFetch(pl) {
   const r = await fetch(`api/pois/detail?lat=${(+pl.lat).toFixed(6)}&lon=${(+pl.lon).toFixed(6)}&name=${encodeURIComponent(pl.name)}`);
   if (!r.ok) return null;
   const d = await r.json();
-  if (!d.hours && !d.phone && !d.web && !d.addr) return null;
+  if (!d.hours && !d.phone && !d.web && !d.addr && !d.photo && !d.wd) return null;
   const web = String(d.web || '').trim();
-  return { hours: d.hours || '', phone: d.phone || '', web: /^https?:\/\//i.test(web) ? web : web ? 'https://' + web : '', addr: d.addr || '' };
+  return { hours: d.hours || '', phone: d.phone || '', web: /^https?:\/\//i.test(web) ? web : web ? 'https://' + web : '', addr: d.addr || '', photo: d.photo || '', wd: d.wd || '' };
 }
 // opening_hours as OpenStreetMap writes it ("Sa-Th 09:00-21:00; Fr off", "24/7", "10:00-14:00,16:00-22:00"):
 // each day's spans in minutes, or null when the text is something this does not read
@@ -241,13 +241,17 @@ function placeExtras(pl, card, acts) {
     copy.addEventListener('click', () => { navigator.clipboard && navigator.clipboard.writeText(at).then(() => mpToast('কপি হয়েছে'), () => {}); });
     r.appendChild(copy);
     info.appendChild(r);
-    const measure = el('button', 'btn quiet pc-icon'); measure.innerHTML = svg('route'); measure.title = measure.ariaLabel = 'দূরত্ব মাপুন';
+    const measure = el('button', 'btn quiet pc-icon'); measure.innerHTML = PD_RULER; measure.title = measure.ariaLabel = 'দূরত্ব মাপুন';
     measure.addEventListener('click', () => { hidePlace(); msStart(pl); });
     acts.insertBefore(measure, save);
     return;
   }
   if (!pl.name) return;
-  pdFetch(pl).then(d => {
+  const shots = el('div', 'pc-photos');
+  card.appendChild(shots);
+  const details = pdFetch(pl).catch(() => null);
+  pdPhotos(pl, details).then(list => { if (card.dataset.k === token) pdStrip(shots, list, pl); });
+  details.then(d => {
     if (!d || card.dataset.k !== token || card.hidden) return;
     const oh = d.hours && pdParse(d.hours);
     if (oh) { const st = pdState(oh), r = pdRow('clock', st.text, 'no-tr ' + (st.open ? 'pd-open' : 'pd-shut')); r.title = d.hours; info.appendChild(r); }
@@ -264,6 +268,71 @@ function placeExtras(pl, card, acts) {
       acts.insertBefore(call, save);
     }
   }).catch(() => {});
+}
+// a ruler, for measuring a distance
+const PD_RULER = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 16.5l13-13 4 4-13 13z"/><path d="M7.5 12.5l2 2M10.5 9.5l2 2M13.5 6.5l2 2"/></svg>';
+// The place's own pictures, never just what was photographed near by: those people sent us (once approved), the one
+// OpenStreetMap's mappers linked to it or its Wikidata entry names, and Wikimedia Commons files named after it.
+// The key under which people's photos are kept: the district, the name and the spot (about 100 m).
+const pdKey = pl => `${nearestDistrict(pl).id}|${String(pl.name).slice(0, 120)}@${(+pl.lat).toFixed(3)},${(+pl.lon).toFixed(3)}`;
+const pdCommons = file => ({ src: `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(file)}?width=480`,
+  big: `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(file)}?width=1280`, page: 'https://commons.wikimedia.org/wiki/File:' + encodeURIComponent(file.replace(/ /g, '_')),
+  name: file.replace(/\.\w+$/, ''), license: 'উইকিমিডিয়া কমন্স', commons: true });
+async function pdPhotos(pl, details) {
+  const out = [];
+  const ours = fetch('api/places/place?key=' + encodeURIComponent(pdKey(pl))).then(r => r.ok ? r.json() : { photos: [] }).then(j => (j.photos || []).map(p => ({
+    src: p.file, big: p.file, page: p.file, name: pl.name, license: 'ছবি: ' + p.by.name }))).catch(() => []);
+  const linked = details.then(async d => {
+    if (!d) return [];
+    if (d.photo) return [pdCommons(d.photo)];
+    if (!d.wd) return [];
+    const j = await (await fetch(`https://www.wikidata.org/w/api.php?action=wbgetclaims&entity=${d.wd}&property=P18&format=json&origin=*`)).json();
+    const f = (((j.claims || {}).P18 || [])[0] || {}).mainsnak;
+    return f && f.datavalue ? [pdCommons(f.datavalue.value)] : [];
+  }).catch(() => []);
+  const named = placePhotos({ lat: +pl.lat, lon: +pl.lon, label: pl.name }, 150).then(list => list.filter(p => p.named).map(p => ({ ...p, license: p.license || 'উইকিমিডিয়া কমন্স', commons: true }))).catch(() => []);
+  for (const part of await Promise.all([ours, linked, named])) for (const p of part) if (!out.some(x => x.big === p.big || x.name === p.name && p.commons && x.commons)) out.push(p);
+  return out.slice(0, 8);
+}
+// the strip: the pictures, then a tile to add one; with none yet, just the tile
+function pdStrip(box, list, pl) {
+  box.replaceChildren();
+  const strip = el('div', 'photos pc-strip');
+  list.forEach((p, i) => {
+    const b = el('button');
+    b.ariaLabel = p.name;
+    const img = Object.assign(el('img'), { src: p.src, alt: p.name, loading: 'lazy', draggable: false });
+    img.addEventListener('error', () => b.remove());
+    b.appendChild(img);
+    b.addEventListener('click', () => openLightbox(list, i));
+    strip.appendChild(b);
+  });
+  const add = el('button', 'pc-addphoto');
+  add.innerHTML = svg('camera');
+  add.appendChild(el('span', null, list.length ? 'ছবি যোগ করুন' : 'প্রথম ছবিটি দিন'));
+  const pick = Object.assign(el('input'), { type: 'file', accept: 'image/jpeg,image/png,image/webp', hidden: true });
+  add.addEventListener('click', () => { if (typeof ME === 'undefined' || !ME) { needLogin('ছবি দিতে লগইন করুন'); return; } pick.click(); });
+  pick.addEventListener('change', async () => {
+    const f = pick.files[0]; pick.value = '';
+    if (!f) return;
+    add.disabled = true;
+    const label = add.querySelector('span'), was = label.textContent;
+    try {
+      const blob = await shrinkPhoto(f);
+      const media = await uploadMedia(blob, blob.type || 'image/jpeg', p => { label.textContent = `${num(Math.round(p * 100))}%`; });
+      const r = await fetch('api/places/photo', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: pdKey(pl), name: pl.name, media }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || 'failed');
+      mpToast('ধন্যবাদ! দেখে অনুমোদন দিলে ছবিটি সবাই দেখবে');
+    } catch (e) {
+      mpToast(e.message === 'three' ? 'এই জায়গার ৩টি ছবি অপেক্ষায় আছে' : e.message === 'slow' ? 'আজ অনেক ছবি পাঠিয়েছেন — কাল আবার চেষ্টা করুন' : 'পাঠানো গেল না — আবার চেষ্টা করুন');
+    }
+    label.textContent = was; add.disabled = false;
+  });
+  strip.appendChild(add);
+  if (typeof dragScroll === 'function') dragScroll(strip);
+  box.append(strip, pick);
+  if (list.some(p => p.commons)) box.appendChild(el('div', 'cap', 'ছবি: উইকিমিডিয়া কমন্স'));
 }
 function pdRow(icon, text, cls) {
   const r = el('div', 'pd-row');
