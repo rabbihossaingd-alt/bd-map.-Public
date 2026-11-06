@@ -444,6 +444,7 @@ const EXACT = {
   'শুরুতে': "Base fare", 'প্রতি কিমি': "Per km", 'প্রতি মিনিট': "Per minute", 'সর্বনিম্ন ভাড়া': "Minimum fare", '৫ টাকার ধাপে, নিচের দিকে': "In ৳5 steps, rounded down", 'জ্যামে থেমে থাকলে মিনিটে': "Waiting in traffic, per minute", 'ভাড়া, না থেমে': "Fare, without stops",
   'শর্তাবলি': "Terms",
   'তথ্যসূত্র': "Sources",
+  'আপনার দেওয়া তথ্য যাত্রাকে করবে আরও সহজ ও সাশ্রয়ী।': "What you share makes travel easier and cheaper.",
   // the tour poster
   'ছবি': 'Photo',
   'দলের ছবি': 'Group photos', 'ছবি আপনার ফোনেই থাকে, কোথাও আপলোড হয় না।': 'Photos stay on your phone and are never uploaded.', 'ম্যাপে যাত্রার ভিডিও আর শেয়ার করার পোস্টার': 'A video of the journey on the map, and a poster to share', 'কার্ড আর ভিডিও বানান': 'Make the card and video', 'সদস্যদের নাম (কমা দিয়ে)': 'Names (separated by commas)',
