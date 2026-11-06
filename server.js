@@ -2946,14 +2946,18 @@ const CHIP_CATS = {
   food: c => /restaurant|cafe|coffee|tea_room|bakery|food_court|dessert|ice_cream|sweet/.test(c),
   bank: c => /^(bank_or_credit_union|bank|atm|credit_union)$/.test(c)
 };
-function poisNear(res, kind, lat, lon) {
+// cats: only places of these Overture categories (the nearby page's kinds: pharmacies, police stations…); n: how many
+function poisNear(res, kind, lat, lon, cats = [], n = 20) {
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) return json(res, 400, { error: 'where?' });
   const cy = Math.floor(lat * POI_CELL), cx = Math.floor(lon * POI_CELL), found = [];
-  for (let ring = 0; ring <= 12 && found.length < 20; ring++) {
+  const wanted = cats.length ? c => cats.includes(c) : c => !CHIP_CATS[kind] || CHIP_CATS[kind](c);
+  // a ring further out than the nearest n: the next ring can still hold places nearer than the far corner of this one
+  for (let ring = 0, enough = -1; ring <= 12 && (enough < 0 || ring <= enough + 1); ring++) {
     for (let y = cy - ring; y <= cy + ring; y++) for (let x = cx - ring; x <= cx + ring; x++) {
       if (Math.max(Math.abs(y - cy), Math.abs(x - cx)) !== ring) continue;
-      for (const p of poiCells.get(y + ':' + x) || []) if (p[2] === kind && (!CHIP_CATS[kind] || CHIP_CATS[kind](p[5]))) found.push([poiKm(lat, lon, p[0], p[1]), p]);
+      for (const p of poiCells.get(y + ':' + x) || []) if (p[2] === kind && wanted(p[5])) found.push([poiKm(lat, lon, p[0], p[1]), p]);
     }
+    if (enough < 0 && found.length >= n) enough = ring;
   }
   found.sort((a, b) => a[0] - b[0]);
   // The same place listed twice (one record named in Bangla, one in English, a few metres apart — OpenStreetMap's and
@@ -2965,7 +2969,7 @@ function poisNear(res, kind, lat, lon) {
       (isBn(q[3]) !== isBn(p[3]) || (latin(q[3]) && latin(q[3]) === latin(p[3]))));
     if (twin) { const q = twin[1]; if (!q[4] && isBn(p[3]) && !isBn(q[3])) twin[1] = [...q.slice(0, 4), p[3], q[5]]; continue; }
     kept.push([km, p]);
-    if (kept.length >= 20) break;
+    if (kept.length >= n) break;
   }
   json(res, 200, { results: kept.map(([km, p]) => poiOut(p, km)) });
 }
@@ -3188,7 +3192,8 @@ const server = http.createServer((req, res) => {
   if (pathname === '/api/pois') return poisApi(req, res, searchParams);
   if (pathname === '/api/pois/search') return poisSearch(res, (searchParams.get('q') || '').slice(0, 80), parseFloat(searchParams.get('lat')), parseFloat(searchParams.get('lon')));
   if (pathname === '/api/pois/detail') return poisDetail(res, parseFloat(searchParams.get('lat')), parseFloat(searchParams.get('lon')), (searchParams.get('name') || '').slice(0, 120));
-  if (pathname === '/api/pois/near') return poisNear(res, (searchParams.get('kind') || '').slice(0, 12), parseFloat(searchParams.get('lat')), parseFloat(searchParams.get('lon')));
+  if (pathname === '/api/pois/near') return poisNear(res, (searchParams.get('kind') || '').slice(0, 12), parseFloat(searchParams.get('lat')), parseFloat(searchParams.get('lon')),
+    (searchParams.get('cat') || '').slice(0, 300).split(',').filter(Boolean), Math.min(60, Math.max(1, parseInt(searchParams.get('n'), 10) || 20)));
   // The map's imagery key (ArcGIS Location Platform, Basemaps only). It travels to every browser anyway — tiles are
   // fetched there — so it is limited to basemaps; it lives in the environment (ESRI_KEY), not in the code.
   if (pathname === '/api/map-config') { const k = (process.env.ESRI_KEY || '').trim(); return json(res, 200, { esriKey: k.length >= 40 ? k : '' }); }   // a placeholder like '.env' is not a key

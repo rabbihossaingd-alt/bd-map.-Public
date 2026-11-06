@@ -1795,18 +1795,32 @@ function showAlts(on) {
   if (!on || list.length < 2) return;
   const sample = c => { const g = c.geometry.coordinates, n = Math.max(1, Math.floor(g.length / 60)); return g.filter((_, k) => k % n === 0); };
   const pts = list.map(sample);
+  // Each bubble goes where its road runs apart from the others, and far enough from the bubbles already placed:
+  // two roads that part for one short stretch had their bubbles on top of each other. "Far enough" is a share of the
+  // area all the roads cover (about 90 px once the map shows them), so it holds whatever the camera is doing now.
+  const all = pts.flat(), xs = all.map(p => p[0]), ys = all.map(p => p[1]);
+  const gap = 0.22 * Math.hypot(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
+  const placed = [], gapTo = p => placed.length ? Math.min(...placed.map(q => Math.hypot(q[0] - p[0], q[1] - p[1]))) : Infinity;
+  const spot = i => {
+    const mid = pts[i].slice(2, -2), cands = (mid.length ? mid : pts[i]).map(p => [p, Math.min(...pts.filter((_, j) => j !== i).map(o => Math.min(...o.map(q => Math.hypot(q[0] - p[0], q[1] - p[1])))))]);
+    cands.sort((x, y) => y[1] - x[1]);                                      // the most its own first
+    const own = cands.filter(([, d]) => d > 0);
+    const ok = (own.length ? own : cands).find(([p]) => gapTo(p) >= gap);
+    return ok ? ok[0] : cands.reduce((x, y) => (gapTo(y[0]) > gapTo(x[0]) ? y : x))[0];
+  };
+  // the road being shown takes its best place first
+  const order = list.map((_, i) => i).sort((x, y) => (y === at) - (x === at));
+  const where = [];
+  for (const i of order) { where[i] = spot(i); placed.push(where[i]); }
   list.forEach((c, i) => {
-    // the point of this road farthest from every other road
-    let best = pts[i][Math.floor(pts[i].length / 2)], far = -1;
-    for (const p of pts[i].slice(2, -2)) {
-      const d = Math.min(...pts.filter((_, j) => j !== i).map(o => Math.min(...o.map(q => Math.hypot(q[0] - p[0], q[1] - p[1])))));
-      if (d > far) { far = d; best = p; }
-    }
+    const best = where[i];
     // in Dhaka every road gets the same traffic range, so the length is what tells them apart there
     const [lo, hi] = carTime(c), len = c.distance < 1000 ? distText(c.distance / 1000) : `${num(c.distance / 1000, 1)} কিমি`, b = el('button', 'rt-bubble' + (i === at ? ' on' : '') + (walking ? ' walk' : ''));
-    if (walking) b.append(el('b', null, fmtMin(walkTime(c))), el('span', null, len));
-    else if (inDhakaCity(trip.from, trip.to)) b.append(el('b', null, len), el('span', null, `${fmtMin(c.duration / 60)} জ্যাম ছাড়া`));
-    else b.append(el('b', null, fmtSpan(lo, hi)), el('span', null, len));
+    // one short line, as Google's bubbles, so the map under them stays readable; the rest in the tooltip
+    const main = walking ? fmtMin(walkTime(c)) : inDhakaCity(trip.from, trip.to) ? len : fmtSpan(lo, hi);
+    const rest = walking ? len : inDhakaCity(trip.from, trip.to) ? `${fmtMin(c.duration / 60)} জ্যাম ছাড়া` : len;
+    b.append(el('b', null, main));
+    b.title = LANG === 'en' && typeof tr === 'function' ? tr(`${main} · ${rest}`) : `${main} · ${rest}`;
     b.addEventListener('click', e => { e.stopPropagation(); if (i !== at) (walking ? useWalk(i) : useRoute(i)); });
     altMarkers.push(new maplibregl.Marker({ element: b, anchor: 'bottom' }).setLngLat(best).addTo(map));
   });

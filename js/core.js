@@ -550,12 +550,30 @@ async function searchNearby(center, tag, onMore) {
   const list = await nearbyRaw(center, tag, onMore && (more => onMore(nearbyKeep(tag, more))));
   return nearbyKeep(tag, list);
 }
-const nearbyKeep = (tag, list) => tag === 'amenity:hospital' ? list.filter(p => !NOT_A_HOSPITAL.test(p.title)) : list;
+// and a pharmacy is a shop that sells medicine, not a drug company's office
+const NOT_A_PHARMACY = /pharmaceutical|laborator|head office|corporate|ফার্মাসিউটিক্যাল/i;
+const nearbyKeep = (tag, list) => tag === 'amenity:hospital' ? list.filter(p => !NOT_A_HOSPITAL.test(p.title))
+  : tag === 'amenity:pharmacy' ? list.filter(p => !NOT_A_PHARMACY.test(p.title)) : list;
+// The nearby page's kinds in our own server's places (Overture's, with OpenStreetMap's): kind and categories
+const NEAR_SERVER = { 'amenity:pharmacy': ['health', 'pharmacy'], 'amenity:police': ['civic', 'police_station'], 'amenity:bus_station': ['bus', 'bus_station'],
+  'amenity:fuel': ['fuel', 'gas_station'], 'amenity:atm': ['bank', 'atm,bank,bank_or_credit_union'], 'amenity:bank': ['bank', 'bank,bank_or_credit_union'],
+  'leisure:park': ['green', 'park,national_park,garden'], 'tourism:hotel': ['stay', 'hotel,resort,guest_house,motel,inn'],
+  'amenity:restaurant': ['food', 'restaurant,fast_food_restaurant,bangladeshi_restaurant,indian_restaurant,chinese_restaurant,cafe,coffee_shop,bakery,pizza_restaurant,burger_restaurant,tea_room,sweet_shop,dessert_shop,biryani_restaurant,asian_restaurant,thai_restaurant,kebab_restaurant'],
+  'amenity:marketplace': ['shop', 'market,supermarket,shopping_mall,shopping_center,department_store,farmers_market'],
+  'amenity:place_of_worship': ['worship', 'muslim_place_of_worship'], 'amenity:fire_station': ['civic', 'fire_station'] };
+async function serverNear(center, tag) {
+  const [kind, cat] = NEAR_SERVER[tag] || [];
+  if (!kind) return [];
+  const r = await fetch(`api/pois/near?kind=${kind}&cat=${encodeURIComponent(cat)}&n=60&lat=${center.lat}&lon=${center.lon}`);
+  if (!r.ok) return [];
+  return ((await r.json()).results || []).map(p => ({ title: LANG !== 'en' && p.bn ? p.bn : p.name, sub: '', lat: p.lat, lon: p.lon, x: {}, km: haversineKm(center, p) })).filter(p => p.km <= 30);
+}
 async function nearbyRaw(center, tag, onMore) {
   const kind = TAG_KIND[tag];
   if (kind) await loadIndex();            // the nationwide list, if it has not come yet
   let quick = kind ? OSM_INDEX.filter(p => p.kind === kind)
     .map(p => ({ title: p.bn, sub: '', lat: p.lat, lon: p.lon, x: p.x, km: haversineKm(center, p) })).filter(p => p.km <= 30).sort((a, b) => a.km - b.km).slice(0, 60) : [];
+  if (quick.length < 5) quick = mergePlaces([quick, await serverNear(center, tag).catch(() => [])]);
   if (quick.length < 5) {
     try {
       let found = await photonNear(center, tag, 8);

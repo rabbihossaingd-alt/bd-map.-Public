@@ -569,12 +569,26 @@ const ptSound = w => w.replace(/ph/g, 'f').replace(/sh/g, 's').replace(/ch/g, 'C
 const ptBn = w => ptSound(w.normalize('NFC').replace(/[ডঢ]\u09bc/g, 'র').replace(/য\u09bc/g, '').replace(/্য/g, '').replace(/য়/g, '').replace(/[ক-হড়ঢ়ৎং]/g, ch => PT_BN[ch] || ''));
 const ptWords = name => new Set(String(name || '').toLowerCase().split(/[\s,.()\-–/।·]+/).map(w => /[ঀ-৿]/.test(w) ? ptBn(w) : ptSound(w)).filter(k => k.length >= 2));
 // two search results that are one place: within 150 m, and most of the shorter name's words in the other
+// Words most places of a kind share (hospital, centre, limited…), in both languages: they say what a place is, not which
+const PT_COMMON = new Set(['hospital', 'hospitals', 'medical', 'college', 'centre', 'center', 'diagnostic', 'diagnostics', 'clinic', 'healthcare', 'health', 'care',
+  'general', 'specialized', 'specialised', 'limited', 'ltd', 'pvt', 'private', 'and', 'the', 'of', 'dhaka', 'bangladesh', 'bd', 'branch', 'atm', 'bank', 'pharmacy',
+  'mosque', 'masjid', 'jame', 'school', 'restaurant', 'hotel', 'road', 'house', 'trust', 'foundation', 'institute', 'service', 'services', 'consultation',
+  'হাসপাতাল', 'হসপিটাল', 'মেডিকেল', 'কলেজ', 'সেন্টার', 'ডায়াগনস্টিক', 'ক্লিনিক', 'জেনারেল', 'লিমিটেড', 'ঢাকা', 'বাংলাদেশ', 'শাখা', 'ব্যাংক', 'ফার্মেসি', 'মসজিদ', 'জামে']
+  .map(w => /[ঀ-৿]/.test(w) ? ptBn(w) : ptSound(w)).filter(k => k.length >= 2));
 function placeTwin(a, b) {
-  if (!(a && b) || haversineKm(a, b) > 0.15) return false;
+  if (!(a && b)) return false;
+  const km = haversineKm(a, b);
+  if (km > 0.15) return false;
   const x = ptWords(a.name), y = ptWords(b.name), [small, big] = x.size <= y.size ? [x, y] : [y, x];
   if (!small.size) return false;
-  let n = 0; for (const k of small) if (big.has(k) || (k.length >= 3 && [...big].some(b => b.length >= 3 && (b.startsWith(k) || k.startsWith(b))))) n++;   // hospital, hospitals
-  return n >= Math.max(1, Math.ceil(small.size * 0.75));
+  const same = (k, set) => set.has(k) || (k.length >= 3 && [...set].some(b => b.length >= 3 && (b.startsWith(k) || k.startsWith(b))));   // hospital, hospitals
+  let n = 0; for (const k of small) if (same(k, big)) n++;
+  if (n >= Math.max(1, Math.ceil(small.size * 0.75))) return true;
+  // or the names' own part is the same, the rest being words any place of the kind has: "Aalok Healthcare" and
+  // "Aalok Diagnostic Center" a few doors apart are one place
+  const own = set => [...set].filter(k => !PT_COMMON.has(k) && k.length >= 2);   // "Aalok" sounds as two letters, lk
+  const ox = own(x), oy = own(y);
+  return km <= 0.12 && ox.length > 0 && oy.length > 0 && ox.every(k => same(k, new Set(oy))) && oy.every(k => same(k, new Set(ox)));
 }
 
 // A short note at the bottom of the map that fades by itself.

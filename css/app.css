@@ -5720,3 +5720,27 @@ a.pd-row > span { color: #1a73e8; }
 @media (min-width: 900px) { #op-grid.op-list { padding: 0 20px; } #op-grid .op-row:nth-child(2) { border-top: 0; } }
 #page-train .tx-find { margin: 4px 0 12px; }
 #op-grid .op-more[hidden] { display: none; }
+/* the help centre's questions: the chevron is a span too, and took half the row from the question */
+.faq-q > .ic { flex: none; width: auto; height: auto; background: none; color: var(--muted); }
+/* the help topics' icons in the brand's tint; the "not solved yet?" icon in its own soft circle, beside its words */
+.help-topic > .ic { color: var(--brand) !important; background: rgb(var(--brand-rgb) / .12) !important; }
+.help-contact > .mi { width: 44px; height: 44px; border-radius: 50%; flex: none; display: grid; place-items: center; color: var(--brand) !important; background: rgb(var(--brand-rgb) / .14) !important; box-shadow: none !important; }
+.help-contact > .mi::before, .help-contact > .mi::after { display: none !important; }
+@media (max-width: 760px) { .help-contact { align-items: flex-start; } .help-contact > span { flex: 1 1 calc(100% - 64px); } }
+/* a train's trip time sits clear above its line, and the line is wide enough for "৫ ঘণ্টা ৫ মিনিট" */
+.tr-line { height: 42px; min-width: 104px; align-items: flex-end; padding-bottom: 7px; box-sizing: border-box; }
+.tr-line::before { top: auto; bottom: 10px; }
+.tr-line em { top: 3px; font-size: 11.5px; font-weight: 600; letter-spacing: 0; }
+@media (max-width: 760px) {
+  /* a train on a phone: its times across the whole card; under them its name on the left and its fare on the right */
+  .trow { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'times times' 'info fare'; row-gap: 10px; }
+  .tr-fare { align-self: end; }
+  .tr-fare small { white-space: nowrap; }
+}
+
+/* the route bubbles small: one line, a short tail, so the places under them stay readable */
+.rt-bubble { padding: 3px 8px; border-radius: 9px; transform: translateY(-4px); box-shadow: 0 1px 4px rgb(0 0 0 / .3); }
+.rt-bubble::after { width: 7px; height: 7px; bottom: -3px; }
+.rt-bubble b { font-size: 12px; line-height: 1.25; }
+.rt-bubble span { display: none; }
+.rt-bubble:not(.on) { opacity: .92; }
