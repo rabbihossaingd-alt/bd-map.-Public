@@ -498,7 +498,7 @@ function renderRecent() {
   fImg.src = fUrl(960);
   fImg.alt = fName;
   $('hm-feature-name').textContent = fName;
-  $('hm-feature-sub').textContent = `${districtById(fId).bn} জেলা · ${districtById(fId).division} বিভাগ`;
+  $('hm-feature-sub').textContent = LANG === 'en' ? `${districtById(fId).en} · ${tr(districtById(fId).division)} Division` : `${districtById(fId).bn} জেলা · ${districtById(fId).division} বিভাগ`;
   $('hm-feature').addEventListener('click', async () => {
     const g = typeof loadGuide === 'function' ? await loadGuide().catch(() => null) : null;
     const s = g && ((g[fId] || {}).sights || []).find(x => x.name === fSight);
@@ -1476,7 +1476,8 @@ function renderBusPane(km) {
     ways.slice(0, 5).forEach(({ t, also }, n) => {
       const first = t.legs[0], last = t.legs[t.legs.length - 1];
       const off = STOPS[last.seg[last.seg.length - 1]], walk = t.walkIn + t.walkOut;
-      const names = t.legs.map(l => l.r.bn).join(' → ') + (also.length ? ` +${num(also.length)}` : '');
+      const rName = r => (LANG === 'en' && r.en) || r.bn;           // the company's own English name in English
+      const names = t.legs.map(l => rName(l.r)).join(' → ') + (also.length ? ` +${num(also.length)}` : '');
       // where to get on and off, door to door, and the walking in all (the stops are in the detail)
       const card = item('busF', names, `${STOPS[first.seg[0]].bn} → ${off.bn} · ${fmtSpan(t.doorLo, t.doorHi)}` + (walk >= 0.15 ? ` · ${kmText(walk)} হাঁটা` : ''), taka(t.fare), node => {
         selectOnly(node);
@@ -1484,7 +1485,7 @@ function renderBusPane(km) {
         busAt = n;
         drawBusWay(t);
       });
-      if (also.length) card.title = [t, ...also].map(x => x.legs.map(l => l.r.bn).join(' → ')).join(', ');
+      if (also.length) card.title = [t, ...also].map(x => x.legs.map(l => rName(l.r)).join(' → ')).join(', ');
       if (n === busAt) card.classList.add('on');
       if (n === 0 && ways.length > 1) card.querySelector('.t').appendChild(el('span', 'badge g', 'সবচেয়ে ভালো'));
       if (t.legs.length > 1) card.querySelector('.t').appendChild(el('span', 'badge v', `${STOPS[last.seg[0]].bn}-এ বাস বদল`));
@@ -1619,7 +1620,8 @@ const MODE_ORDER = ['car', 'bus', 'train', 'walk'];
 function wayButton(k, label, time, pane) {
   const b = el('button', 'way');
   b.dataset.pane = pane; b.dataset.mode = k;
-  b.title = b.ariaLabel = time ? `${label} ${time}` : label;
+  const say = time ? `${label} ${time}` : label;
+  b.title = b.ariaLabel = LANG === 'en' && typeof tr === 'function' ? tr(say) : say;   // the train's comes after the page is translated
   b.innerHTML = modeSvg(k);
   b.appendChild(el('span', null, time || label));
   return b;
@@ -2207,7 +2209,7 @@ let nearbyAt = () => {};
     r.appendChild(main);
     if (p.x.ph) {
       const call = Object.assign(el('a', 'nb-call'), { href: 'tel:' + p.x.ph.replace(/[^+\d]/g, '') });
-      call.innerHTML = svg('phone'); call.title = call.ariaLabel = 'কল করুন · ' + p.x.ph;
+      call.innerHTML = svg('phone'); call.title = call.ariaLabel = (LANG === 'en' ? 'Call · ' : 'কল করুন · ') + p.x.ph;
       r.appendChild(call);
     }
     return r;
@@ -2424,7 +2426,7 @@ let nearbyAt = () => {};
     for (const [a, b] of rows) { const r = el('div', 'fx-rate'); r.append(el('span', null, a), el('b', null, b)); card.appendChild(r); }
     $('rules').appendChild(card);
   }
-  $('rules-foot').textContent = `বাস আর সিএনজি: সরকারি হার, ${FARES.effective} থেকে। রাইড: পাঠাও (২০২২) আর উবারের (২০১৭) প্রকাশিত হার; চাহিদা বাড়লে অ্যাপে ভাড়াও বাড়ে। রাইডের সময় ধরা হয়েছে ঘণ্টায় ${num(AVG_KMH)} কিমি — জ্যামে বেশি লাগবে।`;
+  $('rules-foot').textContent = LANG === 'en' ? `Bus and CNG: government rates, from ${FARES.effectiveEn || '22 September 2026'}. Rides: Pathao's (2022) and Uber's (2017) published rates; fares rise in the apps when demand does. Ride time assumes ${AVG_KMH} km/h — longer in traffic.` : `বাস আর সিএনজি: সরকারি হার, ${FARES.effective} থেকে। রাইড: পাঠাও (২০২২) আর উবারের (২০১৭) প্রকাশিত হার; চাহিদা বাড়লে অ্যাপে ভাড়াও বাড়ে। রাইডের সময় ধরা হয়েছে ঘণ্টায় ${num(AVG_KMH)} কিমি — জ্যামে বেশি লাগবে।`;
 })();
 
 for (const b of document.querySelectorAll('.lang-btn')) {

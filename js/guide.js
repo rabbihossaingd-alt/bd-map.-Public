@@ -73,7 +73,7 @@ const coverStyle = (img, division) => {
     const cover = el('span', 'dg-cover');
     photo(cover, coverOf(g), d.division, 500, 'pin');
     const meta = el('span', 'dg-meta');
-    meta.append(el('b', null, d.bn), el('small', null, [sights ? tl2(`${num(sights)}টি জায়গা`, `${sights} places`) : '', gi[0] ? gi[0].bn.replace(/^.+?র /, '') : ''].filter(Boolean).join(' · ') || tl2(`${d.division} বিভাগ`, d.division)));
+    meta.append(el('b', null, d.bn), el('small', null, [sights ? tl2(`${num(sights)}টি জায়গা`, `${sights} ${sights === 1 ? 'place' : 'places'}`) : '', gi[0] ? tl2(gi[0].bn.replace(/^.+?র /, ''), gi[0].en || gi[0].bn) : ''].filter(Boolean).join(' · ') || tl2(`${d.division} বিভাগ`, d.division)));
     c.append(cover, meta);
     if (visited().has(d.id)) c.appendChild(Object.assign(el('span', 'dg-been'), { innerHTML: svg('check'), title: tl2('গিয়েছেন', 'Been there') }));
     c.addEventListener('click', () => openGuide(d));

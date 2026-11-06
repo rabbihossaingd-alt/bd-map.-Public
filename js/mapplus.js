@@ -264,7 +264,7 @@ function placeExtras(pl, card, acts) {
     }
     if (d.phone) {
       const call = Object.assign(el('a', 'btn quiet pc-icon pc-call'), { href: 'tel:' + d.phone.replace(/[^\d+]/g, '') });
-      call.innerHTML = svg('phone'); call.title = call.ariaLabel = 'কল করুন · ' + d.phone;
+      call.innerHTML = svg('phone'); call.title = call.ariaLabel = (LANG === 'en' ? 'Call · ' : 'কল করুন · ') + d.phone;   // made after the page is translated
       acts.insertBefore(call, save);
     }
   }).catch(() => {});

@@ -363,7 +363,7 @@ function openChange(c) {
   for (const b of seg.querySelectorAll('button')) b.addEventListener('click', () => showMode(b.dataset.m));
   $('tx-c-bus').textContent = `${num(DISTRICTS.length)} জেলা · ${num(OPERATORS.length)} কোম্পানি`;
   $('tx-c-launch').textContent = L ? `${LAUNCHES.length} routes · Sadarghat` : `${num(LAUNCHES.length)}টি রুট · সদরঘাট`;
-  $('tx-bus-source').textContent = `ভাড়ার হার: বিআরটিএ, কার্যকর ${FARES.effective}। এসি বাসের ভাড়া সরকার ঠিক করে না — তাই আনুমানিক।`;
+  $('tx-bus-source').textContent = LANG === 'en' ? `Fare rates: BRTA, from ${FARES.effectiveEn || '22 September 2026'}. The government does not set AC bus fares — so they are estimates.` : `ভাড়ার হার: বিআরটিএ, কার্যকর ${FARES.effective}। এসি বাসের ভাড়া সরকার ঠিক করে না — তাই আনুমানিক।`;
   addEventListener('resize', placePill);
   let savedMode = 'bus';
   try { savedMode = localStorage.getItem('bdmap.tx') || 'bus'; } catch { /* storage off */ }

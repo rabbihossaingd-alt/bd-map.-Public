@@ -7,7 +7,7 @@
 //   Car:  Uber's Dhaka UberX rates (base ৳50, ৳21/km, ৳3/min), last published in 2017.
 
 const FARES = {
-  effective: '২২ সেপ্টেম্বর ২০২৬',
+  effective: '২২ সেপ্টেম্বর ২০২৬', effectiveEn: '22 September 2026',
   bus: {
     metro:     { perKm: 2.70, min: 10, label: 'মহানগর বাস (ঢাকা/চট্টগ্রাম)' },
     minibus:   { perKm: 2.60, min: 8,  label: 'মহানগর মিনিবাস' },
