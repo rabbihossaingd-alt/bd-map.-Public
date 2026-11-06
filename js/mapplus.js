@@ -559,6 +559,24 @@ function offRow(closeChooser) {
   return b;
 }
 
+// ---- One place once in the search list: the same sound rule as the server's (server.js: nameSounds) ----
+const PT_BN = { 'ক': 'k', 'খ': 'k', 'গ': 'g', 'ঘ': 'g', 'ঙ': 'n', 'চ': 'c', 'ছ': 'c', 'জ': 'j', 'ঝ': 'j', 'ঞ': 'n', 'ট': 't', 'ঠ': 't', 'ড': 'd', 'ঢ': 'd',
+  'ণ': 'n', 'ত': 't', 'থ': 't', 'দ': 'd', 'ধ': 'd', 'ন': 'n', 'প': 'p', 'ফ': 'f', 'ব': 'b', 'ভ': 'b', 'ম': 'm', 'য': 'j', 'র': 'r', 'ল': 'l', 'শ': 's', 'ষ': 's',
+  'স': 's', 'ড়': 'r', 'ঢ়': 'r', 'ৎ': 't', 'ং': 'n' };
+const ptSound = w => w.replace(/ph/g, 'f').replace(/sh/g, 's').replace(/ch/g, 'C').replace(/kh/g, 'k').replace(/gh/g, 'g').replace(/th/g, 't').replace(/dh/g, 'd')
+  .replace(/bh/g, 'b').replace(/jh/g, 'j').replace(/ck/g, 'k').replace(/c(?=[eiy])/g, 's').replace(/g(?=[ei])/g, 'j').replace(/c/g, 'k').replace(/C/g, 'c').replace(/q/g, 'k')
+  .replace(/z/g, 'j').replace(/v/g, 'b').replace(/x/g, 'ks').replace(/[^a-z0-9]/g, '').replace(/[aeiouwyh]/g, '').replace(/ng/g, 'n').replace(/(.)\1+/g, '$1');
+const ptBn = w => ptSound(w.normalize('NFC').replace(/[ডঢ]\u09bc/g, 'র').replace(/য\u09bc/g, '').replace(/্য/g, '').replace(/য়/g, '').replace(/[ক-হড়ঢ়ৎং]/g, ch => PT_BN[ch] || ''));
+const ptWords = name => new Set(String(name || '').toLowerCase().split(/[\s,.()\-–/।·]+/).map(w => /[ঀ-৿]/.test(w) ? ptBn(w) : ptSound(w)).filter(k => k.length >= 2));
+// two search results that are one place: within 150 m, and most of the shorter name's words in the other
+function placeTwin(a, b) {
+  if (!(a && b) || haversineKm(a, b) > 0.15) return false;
+  const x = ptWords(a.name), y = ptWords(b.name), [small, big] = x.size <= y.size ? [x, y] : [y, x];
+  if (!small.size) return false;
+  let n = 0; for (const k of small) if (big.has(k) || (k.length >= 3 && [...big].some(b => b.length >= 3 && (b.startsWith(k) || k.startsWith(b))))) n++;   // hospital, hospitals
+  return n >= Math.max(1, Math.ceil(small.size * 0.75));
+}
+
 // A short note at the bottom of the map that fades by itself.
 let mpToastTimer = null;
 function mpToast(text) {

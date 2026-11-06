@@ -160,8 +160,29 @@ function fareTilesOf(r) {
   return tiles;
 }
 
+// ---- Tickets: Bangladesh Railway's own e-ticket site, the one railway.gov.bd links to ----
+// It asks for a sign-in before its search opens and does not carry a search through the sign-in, so nothing can be
+// filled in from here: the button opens the site, and beside it are the stations and the classes as the site names them.
+const ETICKET_URL = 'https://eticket.railway.gov.bd/';
+const ETICKET_CLASS = { shovon: 'SHOVAN', shovon_chair: 'S_CHAIR', first_class: 'F_SEAT', snigdha: 'SNIGDHA', ac_seat: 'AC_S', ac_berth: 'AC_B' };
+const etStation = code => String(RAIL.stations[code][1] || '').replace(/\s*\(.*\)\s*$/, '');
+function ticketBox(from, to, classes = []) {
+  const box = el('div', 'tk-box');
+  const t = el('div', 't');
+  // the stations as the site spells them (its search wants those names); the classes there are its own codes, named in its list
+  const cls = CLASS_ORDER.filter(c => classes.includes(c)).map(c => ETICKET_CLASS[c]);
+  box.title = cls.length ? 'ক্লাস: ' + cls.join(', ') : '';
+  t.append(el('b', 'no-tr', `${etStation(from)} → ${etStation(to)}`), el('span', null, 'অফিসিয়াল সাইট · যাত্রার ১০ দিন আগে থেকে'));
+  const a = Object.assign(el('a', 'btn tk-go'), { href: ETICKET_URL, target: '_blank', rel: 'noopener' });
+  a.innerHTML = svg('card');
+  a.appendChild(el('span', null, 'টিকিট কাটুন'));
+  box.append(t, a);
+  return box;
+}
+
 function openTrain(r) {
   const t = r.train, body = [];
+  body.push(ticketBox(t.s[r.i][0], t.s[r.j][0], [...new Set([...Object.keys(r.fares), ...(t.cls || [])])]));
   if (Object.keys(r.fares).length) body.push(fareTilesOf(r));
   body.push(el('div', 'label', `${TRAIN_TYPES[t.t] || ''} · ${num(r.km, 0)} কিমি · ${offText(t)}`));
   const ul = el('ul', 'timeline times');
@@ -191,6 +212,7 @@ function openChange(c) {
     if (r === c.first) body.push(el('div', 'empty', `${stationName(c.junction)} স্টেশনে অপেক্ষা ${fmtMin(c.wait)}`));
   }
   body.push(el('div', 'form-note', 'দুটি ট্রেনের টিকিট আলাদা কাটতে হয়। প্রথম ট্রেন দেরি করলে পরেরটি ধরা নাও যেতে পারে।'));
+  for (const r of [c.first, c.second]) body.push(ticketBox(r.train.s[r.i][0], r.train.s[r.j][0], [...new Set([...Object.keys(r.fares), ...(r.train.cls || [])])]));
   openModal(`${stationName(c.first.train.s[c.first.i][0])} → ${stationName(c.second.train.s[c.second.j][0])}`, `এক বদলে · ${fmtMin(c.total)}`, body,
     [button('route', 'ম্যাপে দেখুন', () => { closeModal(); pendingPath = [pathOf(c.first), pathOf(c.second)]; go('trip'); })]);
 }
@@ -207,7 +229,7 @@ function openChange(c) {
     const found = trainsBetween([picked.from.code], [picked.to.code]);
     if (found.length) {
       note.textContent = `${num(found.length)} টি ট্রেন · চাপ দিলে সব স্টেশন ও ভাড়া`;
-      list.append(...found.map(trainCard));
+      list.append(ticketBox(picked.from.code, picked.to.code, [...new Set(found.flatMap(r => [...Object.keys(r.fares), ...(r.train.cls || [])]))]), ...found.map(trainCard));
     } else {
       const via = trainsWithChange(picked.from.code, picked.to.code);
       if (!via.length) { note.textContent = `${picked.from.bn} থেকে ${picked.to.bn} সরাসরি বা এক বদলে কোনো ট্রেন তালিকায় নেই।`; return; }
@@ -376,6 +398,7 @@ async function renderTrainPane() {
   if (!found.length) return;
   pane.appendChild(el('div', 'label', `${stationName(found[0].train.s[found[0].i][0])} স্টেশন থেকে · ${num(found.length)} টি ট্রেন`));
   pane.append(...found.slice(0, 8).map(trainCard));
+  pane.appendChild(ticketBox(found[0].train.s[found[0].i][0], found[0].train.s[found[0].j][0], [...new Set(found.flatMap(r => [...Object.keys(r.fares), ...(r.train.cls || [])]))]));
   tab.hidden = false;
   $('seg').hidden = false;
   if (typeof addTrainChip === 'function') addTrainChip(Math.min(...found.map(r => r.mins)));

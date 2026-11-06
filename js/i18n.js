@@ -437,6 +437,8 @@ const EXACT = {
   'বাসা': "Home", 'অফিস': "Work", 'সেভ করা জায়গা': "Saved places", 'ঠিকানা যোগ করুন': "Add an address", 'বদলান': "Change", 'সাম্প্রতিক': "Recent", 'বাসার ঠিকানা': "Home address", 'অফিসের ঠিকানা': "Work address", 'বাসার ঠিকানা খুঁজুন': "Search for your home address", 'অফিসের ঠিকানা খুঁজুন': "Search for your work address", 'বাসা সেভ হয়েছে': "Home saved", 'অফিস সেভ হয়েছে': "Work saved", 'হয়েছে': "Done", 'কপি হয়েছে': "Copied", 'দূরত্ব মাপুন': "Measure distance", 'বাছাই করা জায়গা': "Dropped pin", 'মোট দূরত্ব': "Total distance", 'পরের জায়গায় চাপ দিন': "Tap the next point", 'শেষেরটা মুছুন': "Undo last point", 'শেষ': "Done", 'অফলাইন ম্যাপ': "Offline maps", 'ম্যাপে যে এলাকা দেখছেন': "The area on screen", 'অনেক বড় — একটু কাছে যান': "Too big — zoom in a little", 'ডাউনলোড': "Download", 'ইন্টারনেট না থাকলেও এই এলাকার রাস্তা আর নাম দেখা যাবে।': "Its streets and names will show even without internet.", 'এখন ডাউনলোড করা যাচ্ছে না।': "Downloading is not possible right now.", 'ফোনে রাখা এলাকা': "Areas on this phone", 'এলাকাটা অনেক বড় — ম্যাপে একটু কাছে গিয়ে আবার চেষ্টা করুন।': "The area is too big — zoom in a little and try again.", 'ডাউনলোড শেষ হয়নি — ইন্টারনেট সংযোগ দেখে আবার চেষ্টা করুন।': "The download did not finish — check the connection and try again.", 'ম্যাপের এলাকা': "Map area", 'কল করুন': "Call",
   'সবচেয়ে ভালো': "Best",
   'প্রথম ছবিটি দিন': "Add the first photo", 'ছবি দিতে লগইন করুন': "Sign in to add a photo", 'ধন্যবাদ! দেখে অনুমোদন দিলে ছবিটি সবাই দেখবে': "Thank you! Everyone will see it once it is approved", 'এই জায়গার ৩টি ছবি অপেক্ষায় আছে': "Three of your photos of this place are waiting", 'আজ অনেক ছবি পাঠিয়েছেন — কাল আবার চেষ্টা করুন': "You have sent many photos today — try tomorrow", 'পাঠানো গেল না — আবার চেষ্টা করুন': "Could not send — try again",
+  'টিকিট কাটুন': "Buy tickets", 'যাত্রার ১০ দিন আগে থেকে': "from 10 days before travel",
+  'অফিসিয়াল সাইট · যাত্রার ১০ দিন আগে থেকে': "Official site · from 10 days before travel",
   // the tour poster
   'ছবি': 'Photo',
   'দলের ছবি': 'Group photos', 'ছবি আপনার ফোনেই থাকে, কোথাও আপলোড হয় না।': 'Photos stay on your phone and are never uploaded.', 'ম্যাপে যাত্রার ভিডিও আর শেয়ার করার পোস্টার': 'A video of the journey on the map, and a poster to share', 'কার্ড আর ভিডিও বানান': 'Make the card and video', 'সদস্যদের নাম (কমা দিয়ে)': 'Names (separated by commas)',
@@ -629,6 +631,7 @@ const EXACT = {
 const N = '([\\d.,]+)';
 const P = (source, fn) => [new RegExp('^' + source + '$'), fn];
 const PATTERNS = [
+  P('ক্লাস (.+) · যাত্রার ১০ দিন আগে থেকে', a => `Class ${a} · from 10 days before travel`),
   P('(.+) \+(\d+)$', (a, n) => `${tr(a)} +${n}`),
   P('(.+) জ্যাম ছাড়া', a => `${tr(a)} without traffic`),
   P('সেভ হয়েছে · (.+)', a => `Saved · ${a}`),

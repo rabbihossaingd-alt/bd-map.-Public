@@ -1900,7 +1900,10 @@ function showPlace(pl) {
   // where to look first: you, or the part of the map you are looking at; with the whole country on screen (or no map yet),
   // Dhaka — where most searches are — rather than the middle of the country
   const here = () => myLoc || (map && map.getZoom() >= 9 ? { lat: map.getCenter().lat, lon: map.getCenter().lng } : { lat: 23.81, lon: 90.41 });
+  const shown = [];
   const item = (pl, icon) => {
+    if (typeof placeTwin === 'function' && shown.some(s => placeTwin(s, pl))) return;     // the same place from another source (js/mapplus.js)
+    shown.push(pl);
     const k = POI_KINDS.find(x => x[0] === pl.kind);
     const row = el('div', 'sug');
     const t = el('div', 't'); t.append(el('b', 'no-tr', pl.name), el('span', null, [pl.km != null ? kmText(pl.km) : '', KIND_BN[pl.kind] || pl.sub || ''].filter(Boolean).join(' · ')));
@@ -1919,7 +1922,7 @@ function showPlace(pl) {
       Promise.resolve(searchLocal(q))
     ]);
     if (mine !== seq) return;
-    sug.replaceChildren();
+    sug.replaceChildren(); shown.length = 0;
     // An area, a bus stop or a district that matches what was typed comes before shops and offices with the word in
     // their name (Jatrabari before 'Jatra Bangladesh Ltd'), as in Google Maps; then the rest.
     const top = local.filter(pl => pl.area && pl.score >= 2).slice(0, 3), rest = local.filter(pl => !top.includes(pl));
@@ -1959,7 +1962,7 @@ function showPlace(pl) {
     c.addEventListener('click', async () => {
       const h = here();
       const res = await fetch(`api/pois/near?kind=${kind}&lat=${h.lat}&lon=${h.lon}`).then(r => r.json()).then(j => j.results).catch(() => []);
-      sug.replaceChildren(el('div', 'sug-head', `কাছের ${label}`));
+      sug.replaceChildren(el('div', 'sug-head', `কাছের ${label}`)); shown.length = 0;
       for (const pl of res) item({ ...pl, name: LANG !== 'en' && pl.bn ? pl.bn : pl.name }, 'pin');
       if (!res.length) sug.appendChild(el('div', 'empty', 'কাছে কিছু পাওয়া যায়নি।'));
       sug.hidden = false;

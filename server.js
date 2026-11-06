@@ -2883,6 +2883,29 @@ function soundHits(k) {
   for (let n = 0; n < list.length; n += 2) if (list[n + 1].startsWith(k)) out.add(list[n]);
   return out;
 }
+// A place's name as the sounds of its words, Bangla and English alike ("পপুলার হাসপাতাল" and "Popular Hospital" both
+// plr, sptl), so its records from different sources can be recognised as one place.
+const nameSounds = name => new Set(String(name).toLowerCase().split(/[\s,.()\-–/।]+/).map(w => /[ঀ-৿]/.test(w) ? bnSound(w) : soundKey(w)).filter(k => k.length >= 2));
+// the same place: within 150 m, and the shorter name's words (most of them) are in the longer one —
+// "Nutrition and Dietetics Centre, Popular Medical College Hospital" is part of Popular Medical College Hospital
+function samePlace(a, b) {
+  if (poiKm(a[0], a[1], b[0], b[1]) > 0.15) return false;
+  const x = nameSounds(a[3] + ' ' + a[4]), y = nameSounds(b[3] + ' ' + b[4]), [small, big] = x.size <= y.size ? [x, y] : [y, x];
+  if (!small.size) return false;
+  let n = 0; for (const k of small) if (big.has(k) || (k.length >= 3 && [...big].some(b => b.length >= 3 && (b.startsWith(k) || k.startsWith(b))))) n++;   // hospital, hospitals
+  return n >= Math.max(1, Math.ceil(small.size * 0.75));
+}
+// a list (best first) with each place once: where two records are one place, the first's place in the list, under the
+// plainer (shorter) of the two names
+function onePerPlace(list, max) {
+  const out = [];
+  for (const hit of list) {
+    const twin = out.find(o => samePlace(o[1], hit[1]));
+    if (!twin) { out.push(hit); if (out.length >= max) break; continue; }
+    if (String(hit[1][3]).length < String(twin[1][3]).length) twin[1] = hit[1];
+  }
+  return out;
+}
 // for each typed word: how a place's name has it — 0 written so, 1 by its sound or the word list, -1 not at all
 function wordTest(w) {
   const bn = /[ঀ-৿]/.test(w), sounds = soundHits(bn ? bnSound(w) : soundKey(w)), also = BN_WORDS[w] || [];
@@ -2911,7 +2934,7 @@ function poisSearch(res, q, lat, lon) {
     hits.push([score, p, km]);
   }
   hits.sort((a, b) => a[0] - b[0]);
-  json(res, 200, { results: hits.slice(0, 8).map(([, p, km]) => poiOut(p, km)) });
+  json(res, 200, { results: onePerPlace(hits.slice(0, 40), 8).map(([, p, km]) => poiOut(p, km)) });
 }
 // ?kind=food&lat=&lon=: the nearest places of one kind, from the cells around the point outwards
 // What each map chip means: "হাসপাতাল" is hospitals (not pharmacies, dentists, labs or a medical-device company), "স্কুল"
